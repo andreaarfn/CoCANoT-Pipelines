@@ -2,41 +2,15 @@ name: CoCANoT-Pipelines
 version: "0.1.0"
 
 installer_type: pkg
+installer_filename: CoCANoT-Pipelines-0.1.0-macOS-arm64.pkg
 
-environment_file: ../../environment.yaml
+environment_file: ../../environment/environment-macos.yaml
 
 company: CoCANoT
 reverse_domain_identifier: org.cocanot.pipelines
 
 pkg_name: CoCANoT-Pipelines
 default_location_pkg: /Library
-
-welcome_text: |
-  Welcome to the CoCANoT Pipelines installer.
-
-  This installer installs both the Imaging and Electrophysiology
-  de-identification pipelines together with all required dependencies.
-
-readme_text: |
-  This installer includes:
-
-    • Imaging Pipeline
-    • Electrophysiology Pipeline
-    • Python runtime
-    • dcm2niix
-    • FSL / FLIRT
-    • PyDeface
-    • All required Python packages
-
-  No separate installation of Python, Conda, Homebrew, or FSL is required.
-
-conclusion_text: |
-  Installation completed successfully.
-
-  You can now launch:
-
-    • CoCANoT Imaging
-    • CoCANoT Electrophysiology
 
 initialize_conda: false
 keep_pkgs: false

@@ -2,8 +2,9 @@ name: CoCANoT-Pipelines
 version: "0.1.0"
 
 installer_type: sh
+installer_filename: CoCANoT-Pipelines-0.1.0-Linux-x86_64.sh
 
-environment_file: ../../environment-linux.yaml
+environment_file: ../../environment/environment-linux.yaml
 
 initialize_conda: false
 keep_pkgs: false

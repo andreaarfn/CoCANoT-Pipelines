@@ -2,13 +2,40 @@ name: CoCANoT-Pipelines
 version: "0.1.0"
 
 installer_type: exe
+installer_filename: CoCANoT-Pipelines-0.1.0-Windows-x86_64.exe
 
-environment_file: ../../environment-windows.yaml
+environment_file: ../../environment/environment-windows.yaml
 
 company: CoCANoT
 
 initialize_conda: false
 keep_pkgs: false
+
+welcome_text: |
+  Welcome to the CoCANoT Pipelines installer.
+
+  This installer provides the CoCANoT Imaging and Electrophysiology
+  pipelines together with their required Windows dependencies.
+
+readme_text: |
+  This installer includes:
+
+    - CoCANoT Imaging
+    - CoCANoT Electrophysiology
+    - Python runtime
+    - dcm2niix
+    - Required Python packages
+
+  No separate installation of Python or Conda is required.
+
+  The Imaging defacing workflow requires FSL. On Windows,
+  FSL support will be provided through Windows Subsystem for Linux (WSL).
+
+conclusion_text: |
+  Installation completed successfully.
+
+  CoCANoT Imaging and CoCANoT Electrophysiology
+  are available from the Windows Start Menu.
 
 extra_files:
   - ../../../pipeline_config.py: app/pipeline_config.py
