@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+env/
+
+# macOS
+.DS_Store
+
+# Constructor output
+*.pkg
+*.exe
+*.sh
+
+# Build directories
+dist/
+
+# Temporary
+*.log
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# Conda
+conda-bld/

@@ -1,0 +1,23 @@
+name: cocanot-pipelines
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.12
+  - tk
+  - pip
+
+  # Imaging
+  - numpy
+  - nibabel
+  - matplotlib
+  - dcm2niix
+
+  # Electrophysiology
+  - pyedflib
+  - flask
+
+  # PyDeface package
+  - pip:
+      - pydeface

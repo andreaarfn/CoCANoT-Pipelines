@@ -1,0 +1,26 @@
+name: CoCANoT-Pipelines
+version: "0.1.0"
+
+installer_type: sh
+
+environment_file: ../../environment-linux.yaml
+
+initialize_conda: false
+keep_pkgs: false
+
+extra_files:
+  - ../../../pipeline_config.py: app/pipeline_config.py
+  - ../../../pipeline_settings.json: app/pipeline_settings.json
+
+  - ../../../ImagingPipeline/dashboard.py: app/ImagingPipeline/dashboard.py
+  - ../../../ImagingPipeline/scripts/dicom_to_nifti.py: app/ImagingPipeline/scripts/dicom_to_nifti.py
+  - ../../../ImagingPipeline/scripts/scrub_nifti_header.py: app/ImagingPipeline/scripts/scrub_nifti_header.py
+  - ../../../ImagingPipeline/scripts/deface_nifti_with_pydeface.py: app/ImagingPipeline/scripts/deface_nifti_with_pydeface.py
+  - ../../../ImagingPipeline/scripts/nifti_to_bids.py: app/ImagingPipeline/scripts/nifti_to_bids.py
+
+  - ../../../ElectrophysiologyPipeline/dashboard.py: app/ElectrophysiologyPipeline/dashboard.py
+  - ../../../ElectrophysiologyPipeline/scripts/scrub_edf_metadata.py: app/ElectrophysiologyPipeline/scripts/scrub_edf_metadata.py
+  - ../../../ElectrophysiologyPipeline/scripts/compare_raw_and_scrubbed_edf.py: app/ElectrophysiologyPipeline/scripts/compare_raw_and_scrubbed_edf.py
+  - ../../../ElectrophysiologyPipeline/scripts/convert_edf_to_bids.py: app/ElectrophysiologyPipeline/scripts/convert_edf_to_bids.py
+
+post_install: ../../scripts/post_install_linux.sh
