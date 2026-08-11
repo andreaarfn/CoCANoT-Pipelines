@@ -12,9 +12,8 @@ env/
 .DS_Store
 
 # Constructor output
-*.pkg
-*.exe
-*.sh
+CoCANoT-Pipelines-0.1.0-MacOSX-arm64.pkg
+CoCANoT-Pipelines-0.1.0-MacOSX-arm64.sh
 
 # Build directories
 dist/
