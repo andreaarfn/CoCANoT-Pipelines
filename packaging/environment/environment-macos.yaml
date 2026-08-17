@@ -5,7 +5,6 @@ channels:
   - conda-forge
 
 dependencies:
-  # Shared
   - python=3.12
   - tk
   - pip
@@ -21,6 +20,6 @@ dependencies:
   - pyedflib
   - flask
 
-  # pip packages
+  # PyDeface
   - pip:
-      - pydeface
+      - pydeface==2.1.0

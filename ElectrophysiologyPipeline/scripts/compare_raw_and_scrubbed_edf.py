@@ -254,11 +254,15 @@ def rewrite_scrubbed_edf(
             writer.setSignalHeaders(signal_headers)
             writer.setHeader(header)
 
-            # Preserve the original record duration where possible.
-            # PyEDFlib's low-level setter expects units of 10 microseconds.
-            duration_units = int(round(datarecord_duration * 100000))
-            if 100 <= duration_units <= 6_000_000:
-                writer.setDatarecordDuration(duration_units)
+            # Preserve the original EDF data-record duration.
+            # PyEDFlib expects this value in seconds and accepts 0.001 to 60 seconds.
+            if 0.001 <= datarecord_duration <= 60:
+                writer.setDatarecordDuration(datarecord_duration)
+            else:
+                raise ValueError(
+                    "Invalid EDF data-record duration "
+                    f"{datarecord_duration!r} seconds; expected 0.001 to 60 seconds."
+                )
 
             writer.writeSamples(signals, digital=True)
             for row in annotations:

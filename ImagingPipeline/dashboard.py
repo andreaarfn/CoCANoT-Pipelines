@@ -880,359 +880,938 @@ class ImagingReviewWindow(tk.Toplevel):
             self._load_item(index + 1)
 
 
+
+class CollapsibleSection(ttk.Frame):
+    """Simple expand/collapse section for optional metadata."""
+
+    def __init__(self, parent: tk.Widget, title: str, *, expanded: bool = False) -> None:
+        super().__init__(parent)
+        self.title_text = title
+        self.expanded = expanded
+
+        self.columnconfigure(0, weight=1)
+
+        self.toggle_button = ttk.Button(
+            self,
+            command=self.toggle,
+        )
+        self.toggle_button.grid(row=0, column=0, sticky="ew")
+
+        self.body = ttk.Frame(self, padding=(10, 8, 10, 4))
+        self.body.columnconfigure(1, weight=1)
+        self.body.columnconfigure(3, weight=1)
+
+        self._refresh()
+
+    def _refresh(self) -> None:
+        marker = "▼" if self.expanded else "▶"
+        self.toggle_button.configure(text=f"{marker} {self.title_text}")
+        if self.expanded:
+            self.body.grid(row=1, column=0, sticky="ew")
+        else:
+            self.body.grid_remove()
+
+    def toggle(self) -> None:
+        self.expanded = not self.expanded
+        self._refresh()
+
+
 class BIDSMetadataWindow(tk.Toplevel):
-    """Collect clear required metadata and datatype-specific optional BIDS details."""
+    """
+    Collect CoCANoT-required imaging metadata and MRI/CT organization metadata.
 
-    ENTITY_FIELDS = tuple(BIDS_FIELD_LABELS)
+    Scope of this version:
+    - MRI: T1, T2, FLAIR, DWI, SWI
+    - CT: CoCANoT extension (CT is not a core BIDS raw datatype in BIDS 1.11.1)
 
-    def __init__(self, parent: "ImagingDashboard", accepted_files: list[Path], output_dir: Path, overwrite: bool) -> None:
+    Legend:
+      ** = required by CoCANoT
+       * = required for BIDS organization / the selected BIDS file type
+      no marker = optional / recommended
+    """
+
+    IMAGING_MODALITIES = ("MRI", "CT")
+
+    MRI_SEQUENCE_MAP = {
+        "T1": ("anat", "T1w"),
+        "T2": ("anat", "T2w"),
+        "FLAIR": ("anat", "FLAIR"),
+        "DWI": ("dwi", "dwi"),
+        # Core BIDS 1.11.1 has no dedicated SWI suffix. CoCANoT stores an
+        # SWI acquisition as a T2*-weighted anatomical image and identifies
+        # the acquisition with acq-swi.
+        "SWI": ("anat", "T2starw"),
+    }
+
+    MRI_OPTIONAL_FIELDS = (
+        ("acq", "Acquisition label", "entry"),
+        ("rec", "Reconstruction label", "entry"),
+        ("run", "Run", "entry"),
+        ("part", "Part", "combo", ("", "mag", "phase", "real", "imag")),
+        ("manufacturer", "Manufacturer", "entry"),
+        ("model_name", "Manufacturer's Model Name", "entry"),
+        ("software_versions", "Software Versions", "entry"),
+        ("magnetic_field_strength", "Magnetic Field Strength (T)", "entry"),
+        ("receive_coil_name", "Receive Coil Name", "entry"),
+        ("sequence_name", "Sequence Name", "entry"),
+        ("pulse_sequence_details", "Pulse Sequence Details", "entry"),
+        ("echo_time", "Echo Time (seconds)", "entry"),
+        ("repetition_time_excitation", "Repetition Time Excitation (seconds)", "entry"),
+        ("inversion_time", "Inversion Time (seconds)", "entry"),
+        ("flip_angle", "Flip Angle (degrees)", "entry"),
+        ("phase_encoding_direction", "Phase Encoding Direction", "entry"),
+        ("effective_echo_spacing", "Effective Echo Spacing (seconds)", "entry"),
+        ("total_readout_time", "Total Readout Time (seconds)", "entry"),
+    )
+
+    CT_OPTIONAL_FIELDS = (
+        ("acq", "Acquisition label", "entry"),
+        ("rec", "Reconstruction label", "entry"),
+        ("run", "Run", "entry"),
+        ("manufacturer", "Manufacturer", "entry"),
+        ("model_name", "Manufacturer's Model Name", "entry"),
+        ("software_versions", "Software Versions", "entry"),
+        ("kvp", "KVP", "entry"),
+        ("slice_thickness", "Slice Thickness (mm)", "entry"),
+        ("convolution_kernel", "Convolution Kernel", "entry"),
+        ("pixel_spacing", "Pixel Spacing (mm; JSON array)", "entry"),
+        ("reconstruction_diameter", "Reconstruction Diameter (mm)", "entry"),
+    )
+
+    def __init__(
+        self,
+        parent: "ImagingDashboard",
+        accepted_files: list[Path],
+        output_dir: Path,
+        overwrite: bool,
+    ) -> None:
         super().__init__(parent)
         self.parent_dashboard = parent
         self.accepted_files = accepted_files
         self.output_dir = output_dir
         self.overwrite = overwrite
-        self.records: Dict[str, Dict[str, str]] = {}
-        self.optional_visible = True
+        self.records: Dict[str, Dict[str, object]] = {}
+        self.optional_vars: Dict[str, tk.StringVar] = {}
 
-        self.title("Imaging BIDS Metadata Entry")
-        self.geometry("1580x980")
-        self.minsize(1200, 720)
+        self.title("Imaging BIDS / CoCANoT Metadata Entry")
+        self.geometry("1600x1000")
+        self.minsize(1200, 760)
         self.transient(parent)
 
+        # CoCANoT metadata.
+        self.cocanot_patient_id_var = tk.StringVar()
+        self.surgery_id_var = tk.StringVar()
+        self.image_id_var = tk.StringVar()
+        self.imaging_modality_var = tk.StringVar(value="MRI")
+        self.mri_sequence_var = tk.StringVar(value="T1")
+        self.surgery_timing_var = tk.StringVar(value="Unknown")
+        self.comments_var = tk.StringVar()
+
+        # BIDS / dataset organization.
         self.project_var = tk.StringVar()
         self.participant_var = tk.StringVar()
         self.session_var = tk.StringVar()
-        self.modality_var = tk.StringVar(value="MRI")
-        self.datatype_var = tk.StringVar(value="anat")
-        self.suffix_var = tk.StringVar(value="T1w")
-        self.surgery_timing_var = tk.StringVar(value="Unknown")
-        self.entity_vars = {field: tk.StringVar() for field in self.ENTITY_FIELDS}
-        self.entity_widgets: dict[str, tuple[ttk.Label, tk.Widget]] = {}
 
         self._build_interface()
         self._load_files()
         self._modality_changed()
 
+    # ------------------------------------------------------------------
+    # UI helpers
+    # ------------------------------------------------------------------
+
+    def _optional_var(self, key: str, default: str = "") -> tk.StringVar:
+        if key not in self.optional_vars:
+            self.optional_vars[key] = tk.StringVar(value=default)
+        return self.optional_vars[key]
+
+    @staticmethod
+    def _add_entry(
+        parent: tk.Widget,
+        row: int,
+        column: int,
+        label: str,
+        variable: tk.StringVar,
+        *,
+        columnspan: int = 1,
+        readonly: bool = False,
+    ) -> ttk.Entry:
+        ttk.Label(parent, text=label).grid(
+            row=row, column=column, sticky="w", pady=(4, 2)
+        )
+        widget = ttk.Entry(
+            parent,
+            textvariable=variable,
+            state="readonly" if readonly else "normal",
+        )
+        widget.grid(
+            row=row,
+            column=column + 1,
+            columnspan=columnspan,
+            sticky="ew",
+            padx=(6, 14),
+            pady=(4, 2),
+        )
+        return widget
+
+    @staticmethod
+    def _add_combo(
+        parent: tk.Widget,
+        row: int,
+        column: int,
+        label: str,
+        variable: tk.StringVar,
+        values: tuple[str, ...],
+    ) -> ttk.Combobox:
+        ttk.Label(parent, text=label).grid(
+            row=row, column=column, sticky="w", pady=(4, 2)
+        )
+        widget = ttk.Combobox(
+            parent,
+            textvariable=variable,
+            values=values,
+            state="readonly",
+        )
+        widget.grid(
+            row=row,
+            column=column + 1,
+            sticky="ew",
+            padx=(6, 14),
+            pady=(4, 2),
+        )
+        return widget
+
+    @staticmethod
+    def _selected_values(listbox: tk.Listbox) -> list[str]:
+        return [str(listbox.get(index)) for index in listbox.curselection()]
+
+    def _clear_frame(self, frame: tk.Widget) -> None:
+        for child in frame.winfo_children():
+            child.destroy()
+
     def _build_interface(self) -> None:
-        root = ttk.Frame(self, padding=16)
+        root = ttk.Frame(self, padding=14)
         root.pack(fill="both", expand=True)
         root.columnconfigure(0, weight=1)
-        root.rowconfigure(1, weight=1)
+        root.rowconfigure(2, weight=1)
 
         ttk.Label(
             root,
-            text=("* are required fields according to BIDS. ** are required fields for CoCANoT Metadata"),
-            wraplength=1500,
+            text="Imaging BIDS / CoCANoT Metadata Review",
+            font=("", 18, "bold"),
         ).grid(row=0, column=0, sticky="w")
 
+        ttk.Label(
+            root,
+            text=(
+                "** Required by CoCANoT     * Required for BIDS organization / "
+                "the selected BIDS file type     Fields without a marker are optional "
+                "or recommended. Comments are optional."
+            ),
+            wraplength=1500,
+        ).grid(row=1, column=0, sticky="w", pady=(4, 10))
+
+        # --------------------------------------------------------------
+        # File table
+        # --------------------------------------------------------------
+
         table = ttk.Frame(root)
-        table.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        table.grid(row=2, column=0, sticky="nsew")
         table.columnconfigure(0, weight=1)
         table.rowconfigure(0, weight=1)
 
-        columns = ("include", "file", "project", "participant", "session", "modality", "datatype", "details", "status")
-        self.tree = ttk.Treeview(table, columns=columns, show="headings", selectmode="extended")
+        columns = (
+            "include",
+            "file",
+            "project",
+            "participant",
+            "cocanot_patient",
+            "surgery",
+            "image_id",
+            "modality",
+            "sequence",
+            "datatype",
+            "status",
+        )
+        self.tree = ttk.Treeview(
+            table,
+            columns=columns,
+            show="headings",
+            selectmode="extended",
+            height=8,
+        )
         headings = {
-            "include": "Include", "file": "Accepted NIfTI", "project": "Project*",
-            "participant": "Subject ID*", "session": "Session ID", "modality": "Modality*",
-            "datatype": "Data Type*", "details": "Filename details", "status": "Status",
+            "include": "Include",
+            "file": "Accepted NIfTI",
+            "project": "Project*",
+            "participant": "Subject ID*",
+            "cocanot_patient": "CoCANoT Patient ID**",
+            "surgery": "Surgery ID**",
+            "image_id": "Image ID**",
+            "modality": "Imaging Modality**",
+            "sequence": "MRI Sequence**",
+            "datatype": "Output Data Type",
+            "status": "Status",
         }
-        widths = {"include": 65, "file": 390, "project": 150, "participant": 110, "session": 105,
-                  "modality": 95, "datatype": 85, "details": 360, "status": 180}
+        widths = {
+            "include": 60,
+            "file": 300,
+            "project": 120,
+            "participant": 110,
+            "cocanot_patient": 140,
+            "surgery": 110,
+            "image_id": 110,
+            "modality": 100,
+            "sequence": 100,
+            "datatype": 100,
+            "status": 190,
+        }
         for column in columns:
             self.tree.heading(column, text=headings[column])
             self.tree.column(column, width=widths[column], anchor="w")
+
         self.tree.grid(row=0, column=0, sticky="nsew")
         self.tree.bind("<Double-1>", self._toggle_at_pointer)
+        y_scroll = ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        x_scroll = ttk.Scrollbar(table, orient="horizontal", command=self.tree.xview)
+        x_scroll.grid(row=1, column=0, sticky="ew")
         self.tree.configure(
-            yscrollcommand=(ys := ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)).set,
-            xscrollcommand=(xs := ttk.Scrollbar(table, orient="horizontal", command=self.tree.xview)).set,
+            yscrollcommand=y_scroll.set,
+            xscrollcommand=x_scroll.set,
         )
-        ys.grid(row=0, column=1, sticky="ns")
-        xs.grid(row=1, column=0, sticky="ew")
         self.selection = ExtendedSelectionController(self.tree)
 
-        required = ttk.LabelFrame(root, text="Basic information", padding=10)
-        required.grid(row=2, column=0, sticky="ew", pady=(10, 0))
-        for column in range(10):
-            required.columnconfigure(column, weight=1 if column % 2 else 0)
+        # --------------------------------------------------------------
+        # Scrollable metadata body
+        # --------------------------------------------------------------
 
-        fields = (
-            ("Project*", self.project_var), ("Subject ID*", self.participant_var), ("Session ID", self.session_var),
+        shell = ttk.Frame(root)
+        shell.grid(row=3, column=0, sticky="nsew", pady=(10, 0))
+        shell.columnconfigure(0, weight=1)
+        shell.rowconfigure(0, weight=1)
+
+        self.metadata_canvas = tk.Canvas(shell, height=510, highlightthickness=0)
+        self.metadata_canvas.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(
+            shell,
+            orient="vertical",
+            command=self.metadata_canvas.yview,
         )
-        for index, (label, variable) in enumerate(fields):
-            ttk.Label(required, text=label).grid(row=0, column=index * 2, sticky="w")
-            ttk.Entry(required, textvariable=variable).grid(row=0, column=index * 2 + 1, sticky="ew", padx=(6, 12))
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.metadata_canvas.configure(yscrollcommand=scroll.set)
 
-        ttk.Label(required, text="Modality*").grid(row=1, column=0, sticky="w", pady=(8, 0))
-        modality = ttk.Combobox(required, textvariable=self.modality_var, values=tuple(BIDS_MODALITY_DATATYPES), state="readonly")
-        modality.grid(row=1, column=1, sticky="ew", padx=(6, 12), pady=(8, 0))
-        modality.bind("<<ComboboxSelected>>", self._modality_changed)
+        self.metadata_body = ttk.Frame(self.metadata_canvas)
+        self.metadata_window_id = self.metadata_canvas.create_window(
+            (0, 0),
+            window=self.metadata_body,
+            anchor="nw",
+        )
+        self.metadata_body.bind(
+            "<Configure>",
+            lambda _event: self.metadata_canvas.configure(
+                scrollregion=self.metadata_canvas.bbox("all")
+            ),
+        )
+        self.metadata_canvas.bind(
+            "<Configure>",
+            lambda event: self.metadata_canvas.itemconfigure(
+                self.metadata_window_id,
+                width=event.width,
+            ),
+        )
+        self.metadata_body.columnconfigure(0, weight=1)
 
-        ttk.Label(required, text="Data Type*").grid(row=1, column=2, sticky="w", pady=(8, 0))
-        self.datatype_combo = ttk.Combobox(required, textvariable=self.datatype_var, state="readonly")
-        self.datatype_combo.grid(row=1, column=3, sticky="ew", padx=(6, 12), pady=(8, 0))
-        self.datatype_combo.bind("<<ComboboxSelected>>", self._datatype_changed)
+        # --------------------------------------------------------------
+        # CoCANoT required metadata
+        # --------------------------------------------------------------
 
-        self.image_type_label = ttk.Label(required, text="Image Type*")
-        self.suffix_combo = ttk.Combobox(required, textvariable=self.suffix_var, state="readonly")
-        self.image_type_label.grid(row=1, column=4, sticky="w", pady=(8, 0))
-        self.suffix_combo.grid(row=1, column=5, sticky="ew", padx=(6, 12), pady=(8, 0))
-        self.suffix_combo.bind("<<ComboboxSelected>>", self._datatype_changed)
+        cocanot = ttk.LabelFrame(
+            self.metadata_body,
+            text="CoCANoT Metadata — fields marked ** are required",
+            padding=12,
+        )
+        cocanot.grid(row=0, column=0, sticky="ew")
+        cocanot.columnconfigure(1, weight=1)
+        cocanot.columnconfigure(3, weight=1)
 
-        self.required_dynamic_frame = ttk.Frame(required)
-        self.required_dynamic_frame.grid(row=2, column=0, columnspan=10, sticky="ew", pady=(8, 0))
+        self._add_entry(
+            cocanot, 0, 0, "CoCANoT Patient ID**", self.cocanot_patient_id_var
+        )
+        self._add_entry(
+            cocanot, 0, 2, "Surgery ID**", self.surgery_id_var
+        )
+        self._add_entry(
+            cocanot, 1, 0, "Image ID**", self.image_id_var
+        )
 
-        context = ttk.LabelFrame(root, text="Imaging context", padding=10)
-        context.grid(row=3, column=0, sticky="ew", pady=(10, 0))
-        context.columnconfigure(0, weight=1)
-        context.columnconfigure(1, weight=1)
+        modality_combo = self._add_combo(
+            cocanot,
+            1,
+            2,
+            "Imaging Modality**",
+            self.imaging_modality_var,
+            self.IMAGING_MODALITIES,
+        )
+        modality_combo.bind("<<ComboboxSelected>>", self._modality_changed)
 
-        purpose_frame = ttk.Frame(context)
-        purpose_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
-        ttk.Label(purpose_frame, text="Purpose of Imaging** (select one or more)").pack(anchor="w")
+        ttk.Label(cocanot, text="MRI Sequence**").grid(
+            row=2, column=0, sticky="w", pady=(4, 2)
+        )
+        self.mri_sequence_combo = ttk.Combobox(
+            cocanot,
+            textvariable=self.mri_sequence_var,
+            values=tuple(self.MRI_SEQUENCE_MAP),
+            state="readonly",
+        )
+        self.mri_sequence_combo.grid(
+            row=2, column=1, sticky="ew", padx=(6, 14), pady=(4, 2)
+        )
+        self.mri_sequence_combo.bind(
+            "<<ComboboxSelected>>",
+            self._sequence_changed,
+        )
+
+        ttk.Label(
+            cocanot,
+            text="Purpose of Imaging** (select one or more)",
+        ).grid(row=3, column=0, sticky="nw", pady=(8, 2))
+        purpose_frame = ttk.Frame(cocanot)
+        purpose_frame.grid(
+            row=3,
+            column=1,
+            sticky="nsew",
+            padx=(6, 14),
+            pady=(8, 2),
+        )
+        purpose_frame.columnconfigure(0, weight=1)
         self.purpose_list = tk.Listbox(
             purpose_frame,
-            height=len(IMAGING_PURPOSE_OPTIONS),
             selectmode="extended",
             exportselection=False,
+            height=6,
         )
-        self.purpose_list.pack(fill="x", pady=(4, 0))
+        self.purpose_list.grid(row=0, column=0, sticky="ew")
         for option in IMAGING_PURPOSE_OPTIONS:
             self.purpose_list.insert("end", option)
+        purpose_scroll = ttk.Scrollbar(
+            purpose_frame,
+            orient="vertical",
+            command=self.purpose_list.yview,
+        )
+        purpose_scroll.grid(row=0, column=1, sticky="ns")
+        self.purpose_list.configure(yscrollcommand=purpose_scroll.set)
         self.purpose_selection = ExtendedSelectionController(self.purpose_list)
 
-        timing_frame = ttk.Frame(context)
-        timing_frame.grid(row=0, column=1, sticky="new")
-        ttk.Label(timing_frame, text="Timing Relative to Surgery**").pack(anchor="w")
+        ttk.Label(cocanot, text="Timing Relative to Surgery**").grid(
+            row=3, column=2, sticky="nw", pady=(8, 2)
+        )
         ttk.Combobox(
-            timing_frame,
+            cocanot,
             textvariable=self.surgery_timing_var,
             values=SURGERY_TIMING_OPTIONS,
             state="readonly",
-        ).pack(fill="x", pady=(4, 0))
+        ).grid(
+            row=3,
+            column=3,
+            sticky="ew",
+            padx=(6, 14),
+            pady=(8, 2),
+        )
+
+        ttk.Label(cocanot, text="Comments").grid(
+            row=4, column=0, sticky="w", pady=(8, 2)
+        )
+        ttk.Entry(
+            cocanot,
+            textvariable=self.comments_var,
+        ).grid(
+            row=4,
+            column=1,
+            columnspan=3,
+            sticky="ew",
+            padx=(6, 14),
+            pady=(8, 2),
+        )
         ttk.Label(
-            timing_frame,
-            text="Choose Unknown when timing is not available or not applicable.",
-            wraplength=420,
-        ).pack(anchor="w", pady=(6, 0))
+            cocanot,
+            text="Optional. Do not include protected health information (PHI).",
+        ).grid(row=5, column=1, columnspan=3, sticky="w", padx=(6, 14))
 
-        optional_header = ttk.Frame(root)
-        optional_header.grid(row=4, column=0, sticky="ew", pady=(8, 0))
-        self.optional_button = ttk.Button(optional_header, text="Hide Optional BIDS Details", command=self._toggle_optional)
-        self.optional_button.pack(side="left")
-        ttk.Label(optional_header, text="Only fields relevant to the selected data type are shown.").pack(side="left", padx=(10, 0))
+        # --------------------------------------------------------------
+        # BIDS / organization required fields
+        # --------------------------------------------------------------
 
-        self.optional_frame = ttk.LabelFrame(root, text="Optional BIDS details", padding=10)
-        self.optional_frame.grid(row=5, column=0, sticky="ew", pady=(4, 0))
-        for column in range(8):
-            self.optional_frame.columnconfigure(column, weight=1 if column % 2 else 0)
-        for field in self.ENTITY_FIELDS:
-            label = ttk.Label(self.optional_frame, text=BIDS_FIELD_LABELS[field])
-            if field == "part":
-                widget: tk.Widget = ttk.Combobox(self.optional_frame, textvariable=self.entity_vars[field], values=("", "mag", "phase", "real", "imag"), state="readonly")
-            elif field == "mt":
-                widget = ttk.Combobox(self.optional_frame, textvariable=self.entity_vars[field], values=("", "on", "off"), state="readonly")
-            else:
-                widget = ttk.Entry(self.optional_frame, textvariable=self.entity_vars[field])
-            self.entity_widgets[field] = (label, widget)
+        required = ttk.LabelFrame(
+            self.metadata_body,
+            text="BIDS Required Metadata / Dataset Organization",
+            padding=12,
+        )
+        required.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        required.columnconfigure(1, weight=1)
+        required.columnconfigure(3, weight=1)
+
+        self._add_entry(required, 0, 0, "Project*", self.project_var)
+        self._add_entry(required, 0, 2, "Subject ID*", self.participant_var)
+        self._add_entry(required, 1, 0, "Session ID", self.session_var)
+
+        self.output_profile_var = tk.StringVar()
+        self._add_entry(
+            required,
+            1,
+            2,
+            "Output profile",
+            self.output_profile_var,
+            readonly=True,
+        )
+
+        self.required_note_var = tk.StringVar()
+        ttk.Label(
+            required,
+            textvariable=self.required_note_var,
+            wraplength=1450,
+        ).grid(
+            row=2,
+            column=0,
+            columnspan=4,
+            sticky="w",
+            pady=(8, 0),
+        )
+
+        # --------------------------------------------------------------
+        # Optional metadata
+        # --------------------------------------------------------------
+
+        self.optional_section = CollapsibleSection(
+            self.metadata_body,
+            "BIDS Optional / Recommended Metadata",
+            expanded=False,
+        )
+        self.optional_section.grid(
+            row=2, column=0, sticky="ew", pady=(10, 0)
+        )
+        self.optional_body = self.optional_section.body
+
+        self.ct_optional_section = CollapsibleSection(
+            self.metadata_body,
+            "CoCANoT CT Extension Metadata (optional; not core BIDS)",
+            expanded=False,
+        )
+        self.ct_optional_section.grid(
+            row=3, column=0, sticky="ew", pady=(10, 0)
+        )
+        self.ct_optional_body = self.ct_optional_section.body
+
+        # --------------------------------------------------------------
+        # Actions
+        # --------------------------------------------------------------
 
         actions = ttk.Frame(root)
-        actions.grid(row=6, column=0, sticky="ew", pady=(10, 0))
-        ttk.Button(actions, text="Apply to Selected", command=self._apply_to_selected).pack(side="left")
-        ttk.Button(actions, text="Include Selected", command=lambda: self._set_included(True)).pack(side="left", padx=(8, 0))
-        ttk.Button(actions, text="Exclude Selected", command=lambda: self._set_included(False)).pack(side="left", padx=(8, 0))
-        ttk.Button(actions, text="Convert Included Files", command=self._convert).pack(side="right")
+        actions.grid(row=4, column=0, sticky="ew", pady=(10, 0))
 
-    def _toggle_optional(self) -> None:
-        self.optional_visible = not self.optional_visible
-        if self.optional_visible:
-            self.optional_frame.grid(row=5, column=0, sticky="ew", pady=(4, 0))
-            self.optional_button.configure(text="Hide Optional BIDS Details")
+        ttk.Button(
+            actions,
+            text="Include Selected",
+            command=lambda: self._set_included(True),
+        ).pack(side="left")
+
+        ttk.Button(
+            actions,
+            text="Exclude Selected",
+            command=lambda: self._set_included(False),
+        ).pack(side="left", padx=(6, 0))
+
+        ttk.Button(
+            actions,
+            text="Apply to Selected",
+            command=self._apply_to_selected,
+        ).pack(side="left", padx=(18, 0))
+
+        ttk.Button(
+            actions,
+            text="Convert Included Files",
+            command=self._convert,
+        ).pack(side="right")
+
+    def _add_optional_fields(
+        self,
+        parent: tk.Widget,
+        configs: tuple[tuple, ...],
+    ) -> None:
+        self._clear_frame(parent)
+        parent.columnconfigure(1, weight=1)
+        parent.columnconfigure(3, weight=1)
+
+        for index, config in enumerate(configs):
+            key, label, field_type, *rest = config
+            row, pair = divmod(index, 2)
+            column = pair * 2
+            variable = self._optional_var(key)
+
+            if field_type == "combo":
+                values = tuple(rest[0])
+                self._add_combo(
+                    parent,
+                    row,
+                    column,
+                    label,
+                    variable,
+                    values,
+                )
+            else:
+                self._add_entry(
+                    parent,
+                    row,
+                    column,
+                    label,
+                    variable,
+                )
+
+    # ------------------------------------------------------------------
+    # Modality / sequence behavior
+    # ------------------------------------------------------------------
+
+    def _modality_changed(self, _event: Optional[tk.Event] = None) -> None:
+        modality = self.imaging_modality_var.get().strip()
+
+        if modality == "MRI":
+            self.mri_sequence_combo.configure(state="readonly")
+            if self.mri_sequence_var.get() not in self.MRI_SEQUENCE_MAP:
+                self.mri_sequence_var.set("T1")
+
+            self.optional_section.grid()
+            self.ct_optional_section.grid_remove()
+            self._add_optional_fields(
+                self.optional_body,
+                self.MRI_OPTIONAL_FIELDS,
+            )
+            self._sequence_changed()
         else:
-            self.optional_frame.grid_remove()
-            self.optional_button.configure(text="Show Optional BIDS Details")
+            self.mri_sequence_combo.configure(state="disabled")
+            self.mri_sequence_var.set("")
+
+            self.optional_section.grid_remove()
+            self.ct_optional_section.grid()
+            self._add_optional_fields(
+                self.ct_optional_body,
+                self.CT_OPTIONAL_FIELDS,
+            )
+            self.output_profile_var.set("ct / *_ct (CoCANoT extension)")
+            self.required_note_var.set(
+                "CT is intentionally stored as a CoCANoT extension because BIDS 1.11.1 "
+                "does not define a core raw CT datatype. It is not mislabeled as MRI."
+            )
+
+    def _sequence_changed(self, _event: Optional[tk.Event] = None) -> None:
+        sequence = self.mri_sequence_var.get().strip()
+        profile = self.MRI_SEQUENCE_MAP.get(sequence)
+        if profile is None:
+            self.output_profile_var.set("")
+            return
+
+        datatype, suffix = profile
+        if sequence == "SWI":
+            self._optional_var("acq").set(
+                self._optional_var("acq").get() or "swi"
+            )
+            self.output_profile_var.set(
+                f"{datatype} / acq-swi_{suffix}"
+            )
+            self.required_note_var.set(
+                "Core BIDS 1.11.1 has no dedicated SWI suffix. CoCANoT maps SWI "
+                "to a T2*-weighted anatomical image with the acquisition label 'swi'. "
+                "Use this only for an SWI image appropriately represented as T2starw."
+            )
+        elif sequence == "DWI":
+            self.output_profile_var.set("dwi / *_dwi")
+            self.required_note_var.set(
+                "DWI conversion requires matching .bval and .bvec gradient files. "
+                "The converter will stop rather than create an incomplete DWI dataset."
+            )
+        else:
+            self.output_profile_var.set(f"{datatype} / *_{suffix}")
+            self.required_note_var.set(
+                "T1, T2, and FLAIR structural MRI do not require additional "
+                "modality-specific JSON fields solely to name the raw BIDS image. "
+                "Recommended scanner/acquisition metadata are available below."
+            )
+
+    # ------------------------------------------------------------------
+    # Records
+    # ------------------------------------------------------------------
 
     def _load_files(self) -> None:
         for index, path in enumerate(self.accepted_files, start=1):
             item_id = f"image-{index}"
-            record = {field: "" for field in self.ENTITY_FIELDS}
-            record.update({"nifti_path": str(path.resolve()), "source_label": path.name, "include": "Yes",
-                           "project": "", "participant_id": "", "session_id": "", "modality": "",
-                           "datatype": "", "suffix": "", "imaging_purpose": [],
-                           "timing_relative_to_surgery": "", "status": "Missing required metadata"})
-            self.records[item_id] = record
+            self.records[item_id] = {
+                "nifti_path": str(path.resolve()),
+                "source_label": path.name,
+                "include": "Yes",
+                "project": "",
+                "participant_id": "",
+                "session_id": "",
+                "cocanot_patient_id": "",
+                "surgery_id": "",
+                "image_id": "",
+                "imaging_modality": "",
+                "mri_sequence": "",
+                "datatype": "",
+                "suffix": "",
+                "imaging_purpose": [],
+                "timing_relative_to_surgery": "",
+                "comments": "",
+                "optional_metadata": {},
+                "status": "Missing required metadata",
+            }
             self._refresh_row(item_id)
+
         if self.records:
             first = next(iter(self.records))
             self.tree.selection_set(first)
             self.tree.focus(first)
             self.selection.anchor = first
 
-    @staticmethod
-    def _record_details(record: Dict[str, str]) -> str:
-        details = []
-        if record.get("suffix"):
-            details.append(record["suffix"])
-        for field in BIDS_REQUIRED_FIELDS.get(record.get("datatype", ""), ()):
-            if record.get(field):
-                details.append(f"{field}-{record[field]}")
-        if record.get("task"):
-            details.append(f"task-{record['task']}")
-        for field in BIDS_OPTIONAL_FIELDS.get(record.get("datatype", ""), ()):
-            if field != "task" and record.get(field):
-                details.append(f"{field}-{record[field]}")
-        purposes = record.get("imaging_purpose", [])
-        if purposes:
-            details.append("purpose=" + "; ".join(purposes))
-        if record.get("timing_relative_to_surgery"):
-            details.append("timing=" + record["timing_relative_to_surgery"])
-        return ", ".join(details)
-
     def _refresh_row(self, item_id: str) -> None:
         record = self.records[item_id]
-        values = (record["include"], record["source_label"], record["project"], record["participant_id"],
-                  record["session_id"], record["modality"], record["datatype"], self._record_details(record), record["status"])
-        if self.tree.exists(item_id): self.tree.item(item_id, values=values)
-        else: self.tree.insert("", "end", iid=item_id, values=values)
-
-    def _modality_changed(self, _event: Optional[tk.Event] = None) -> None:
-        datatypes = BIDS_MODALITY_DATATYPES.get(self.modality_var.get(), ())
-        self.datatype_combo.configure(values=datatypes)
-        if datatypes and self.datatype_var.get() not in datatypes:
-            self.datatype_var.set(datatypes[0])
-        self._datatype_changed()
-
-    def _datatype_changed(self, _event: Optional[tk.Event] = None) -> None:
-        datatype = self.datatype_var.get()
-        suffixes = BIDS_DATATYPE_SUFFIXES.get(datatype, ())
-        self.suffix_combo.configure(values=suffixes)
-        if suffixes and self.suffix_var.get() not in suffixes:
-            self.suffix_var.set(suffixes[0])
-
-        if len(suffixes) > 1:
-            self.image_type_label.grid()
-            self.suffix_combo.grid()
+        self.tree_values = (
+            record["include"],
+            record["source_label"],
+            record["project"],
+            record["participant_id"],
+            record["cocanot_patient_id"],
+            record["surgery_id"],
+            record["image_id"],
+            record["imaging_modality"],
+            record["mri_sequence"],
+            record["datatype"],
+            record["status"],
+        )
+        if self.tree.exists(item_id):
+            self.tree.item(item_id, values=self.tree_values)
         else:
-            self.image_type_label.grid_remove()
-            self.suffix_combo.grid_remove()
+            self.tree.insert("", "end", iid=item_id, values=self.tree_values)
 
-        for child in self.required_dynamic_frame.winfo_children():
-            child.destroy()
+    def _current_values(self) -> Dict[str, object]:
+        modality = self.imaging_modality_var.get().strip()
+        sequence = (
+            self.mri_sequence_var.get().strip()
+            if modality == "MRI"
+            else ""
+        )
 
-        required_fields: list[str] = []
-        if datatype in BIDS_REQUIRED_TASK_DATATYPES:
-            required_fields.append("task")
-        required_fields.extend(BIDS_REQUIRED_FIELDS.get(datatype, ()))
+        if modality == "MRI":
+            datatype, suffix = self.MRI_SEQUENCE_MAP.get(
+                sequence,
+                ("", ""),
+            )
+            allowed_optional = {
+                config[0] for config in self.MRI_OPTIONAL_FIELDS
+            }
+        else:
+            datatype, suffix = "ct", "ct"
+            allowed_optional = {
+                config[0] for config in self.CT_OPTIONAL_FIELDS
+            }
 
-        for index, field in enumerate(required_fields):
-            ttk.Label(
-                self.required_dynamic_frame,
-                text=f"{BIDS_FIELD_LABELS[field]}*",
-            ).grid(row=0, column=index * 2, sticky="w")
-            ttk.Entry(
-                self.required_dynamic_frame,
-                textvariable=self.entity_vars[field],
-            ).grid(row=0, column=index * 2 + 1, sticky="ew", padx=(6, 14))
-            self.required_dynamic_frame.columnconfigure(index * 2 + 1, weight=1)
+        optional_metadata = {
+            key: variable.get().strip()
+            for key, variable in self.optional_vars.items()
+            if key in allowed_optional and variable.get().strip()
+        }
 
-        applicable_optional = set(BIDS_OPTIONAL_FIELDS.get(datatype, ()))
-        required_set = set(required_fields)
+        if modality == "MRI" and sequence == "SWI":
+            optional_metadata.setdefault("acq", "swi")
 
-        # Keep one stable visual grid. Applicable optional fields are editable;
-        # required fields are completed above; non-applicable fields are gray,
-        # disabled, and cleared so stale values cannot leak into another datatype.
-        for index, field in enumerate(self.ENTITY_FIELDS):
-            row, pair = divmod(index, 4)
-            label, widget = self.entity_widgets[field]
-            label.grid(row=row, column=pair * 2, sticky="w", pady=3)
-            widget.grid(row=row, column=pair * 2 + 1, sticky="ew", padx=(6, 14), pady=3)
-
-            if field in applicable_optional and field not in required_set:
-                label.configure(state="normal")
-                if isinstance(widget, ttk.Combobox):
-                    widget.configure(state="readonly")
-                else:
-                    widget.configure(state="normal")
-            else:
-                self.entity_vars[field].set("")
-                label.configure(state="disabled")
-                widget.configure(state="disabled")
+        return {
+            "project": self.project_var.get().strip(),
+            "participant_id": self.participant_var.get().strip(),
+            "session_id": self.session_var.get().strip(),
+            "cocanot_patient_id": self.cocanot_patient_id_var.get().strip(),
+            "surgery_id": self.surgery_id_var.get().strip(),
+            "image_id": self.image_id_var.get().strip(),
+            "imaging_modality": modality,
+            "mri_sequence": sequence,
+            "datatype": datatype,
+            "suffix": suffix,
+            "imaging_purpose": self._selected_values(self.purpose_list),
+            "timing_relative_to_surgery": self.surgery_timing_var.get().strip(),
+            "comments": self.comments_var.get().strip(),
+            "optional_metadata": optional_metadata,
+        }
 
     @staticmethod
-    def _validate_record(record: Dict[str, str]) -> str:
-        if record["include"] != "Yes": return "Excluded"
-        for key, label in (("project", "project"), ("participant_id", "subject ID"), ("modality", "modality"), ("datatype", "data type"), ("suffix", "image type")):
-            if not record.get(key): return f"Missing {label}"
-        if record["datatype"] not in BIDS_MODALITY_DATATYPES.get(record["modality"], ()): return "Data type does not match modality"
-        if record["suffix"] not in BIDS_DATATYPE_SUFFIXES.get(record["datatype"], ()): return "Invalid image type"
-        if record["datatype"] in BIDS_REQUIRED_TASK_DATATYPES and not record.get("task"): return "Missing task"
-        for field in BIDS_REQUIRED_FIELDS.get(record["datatype"], ()):
-            if not record.get(field): return f"Missing {BIDS_FIELD_LABELS[field].lower()}"
+    def _record_status(record: Dict[str, object]) -> str:
+        if record.get("include") != "Yes":
+            return "Excluded"
+
+        for key, label in (
+            ("project", "project"),
+            ("participant_id", "subject ID"),
+            ("cocanot_patient_id", "CoCANoT Patient ID"),
+            ("surgery_id", "Surgery ID"),
+            ("image_id", "Image ID"),
+            ("imaging_modality", "imaging modality"),
+        ):
+            if not str(record.get(key, "")).strip():
+                return f"Missing {label}"
+
         if not record.get("imaging_purpose"):
             return "Missing purpose of imaging"
+
         if record.get("timing_relative_to_surgery") not in SURGERY_TIMING_OPTIONS:
             return "Missing timing relative to surgery"
+
+        if record.get("imaging_modality") == "MRI":
+            if record.get("mri_sequence") not in BIDSMetadataWindow.MRI_SEQUENCE_MAP:
+                return "Missing MRI sequence"
+
         return "Ready"
 
     def _apply_to_selected(self) -> None:
         selected = list(self.tree.selection())
         if not selected:
-            messagebox.showinfo("No selection", "Select one or more images first.", parent=self); return
-        selected_purposes = [
-            self.purpose_list.get(index) for index in self.purpose_list.curselection()
-        ]
-        values = {"project": self.project_var.get().strip(), "participant_id": self.participant_var.get().strip(),
-                  "session_id": self.session_var.get().strip(), "modality": self.modality_var.get().strip(),
-                  "datatype": self.datatype_var.get().strip(), "suffix": self.suffix_var.get().strip(),
-                  "imaging_purpose": selected_purposes,
-                  "timing_relative_to_surgery": self.surgery_timing_var.get().strip()}
-        values.update({field: variable.get().strip() for field, variable in self.entity_vars.items()})
-        test = {"include": "Yes", **values}
-        status = self._validate_record(test)
+            messagebox.showinfo(
+                "No selection",
+                "Select one or more images first.",
+                parent=self,
+            )
+            return
+
+        values = self._current_values()
+        test_record = {"include": "Yes", **values}
+        status = self._record_status(test_record)
         if status != "Ready":
-            messagebox.showerror("Incomplete metadata", status, parent=self); return
+            messagebox.showerror(
+                "Incomplete metadata",
+                status,
+                parent=self,
+            )
+            return
+
         for item_id in selected:
             record = self.records[item_id]
-            for field in self.ENTITY_FIELDS:
-                record[field] = values[field] if field in set(BIDS_OPTIONAL_FIELDS.get(values["datatype"], ())) | set(BIDS_REQUIRED_FIELDS.get(values["datatype"], ())) | ({"task"} if values["datatype"] in BIDS_REQUIRED_TASK_DATATYPES else set()) else ""
-            for key in ("project", "participant_id", "session_id", "modality", "datatype", "suffix",
-                        "imaging_purpose", "timing_relative_to_surgery"):
-                record[key] = values[key]
-            record["status"] = self._validate_record(record)
+            record.update(values)
+            record["status"] = self._record_status(record)
             self._refresh_row(item_id)
 
     def _set_included(self, included: bool) -> None:
-        for item_id in self.tree.selection():
+        selected = list(self.tree.selection())
+        if not selected:
+            messagebox.showinfo(
+                "No selection",
+                "Select one or more images first.",
+                parent=self,
+            )
+            return
+
+        for item_id in selected:
             self.records[item_id]["include"] = "Yes" if included else "No"
-            self.records[item_id]["status"] = self._validate_record(self.records[item_id])
+            self.records[item_id]["status"] = self._record_status(
+                self.records[item_id]
+            )
             self._refresh_row(item_id)
 
     def _toggle_at_pointer(self, event: tk.Event) -> None:
         item_id = self.tree.identify_row(event.y)
-        if item_id:
-            self.records[item_id]["include"] = "No" if self.records[item_id]["include"] == "Yes" else "Yes"
-            self.records[item_id]["status"] = self._validate_record(self.records[item_id])
-            self._refresh_row(item_id)
+        if not item_id:
+            return
+        current = self.records[item_id]["include"]
+        self.records[item_id]["include"] = (
+            "No" if current == "Yes" else "Yes"
+        )
+        self.records[item_id]["status"] = self._record_status(
+            self.records[item_id]
+        )
+        self._refresh_row(item_id)
+
+    # ------------------------------------------------------------------
+    # Conversion
+    # ------------------------------------------------------------------
 
     def _convert(self) -> None:
-        included = [record for record in self.records.values() if record["include"] == "Yes"]
+        included = [
+            record
+            for record in self.records.values()
+            if record["include"] == "Yes"
+        ]
         if not included:
-            messagebox.showerror("Nothing included", "Include at least one image.", parent=self); return
-        problems = []
+            messagebox.showerror(
+                "Nothing included",
+                "Include at least one image.",
+                parent=self,
+            )
+            return
+
+        problems: list[str] = []
         for record in included:
-            record["status"] = self._validate_record(record)
-            if record["status"] != "Ready": problems.append(f"{record['source_label']}: {record['status']}")
+            record["status"] = self._record_status(record)
+            if record["status"] != "Ready":
+                problems.append(
+                    f"{record['source_label']}: {record['status']}"
+                )
+
         if problems:
-            messagebox.showerror("Incomplete metadata", "\n".join(problems[:20]), parent=self); return
-        manifest_path = Path(included[0]["nifti_path"]).parent.parent / "nifti_bids_manifest.json"
-        keys = ("nifti_path", "project", "participant_id", "session_id", "modality", "datatype", "suffix",
-                "imaging_purpose", "timing_relative_to_surgery") + self.ENTITY_FIELDS
-        manifest = {"bids_version": "1.11.1", "records": [{key: record.get(key, "") for key in keys} for record in included]}
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        command = [sys.executable, "-u", str(BIDS_CONVERTER_SCRIPT), "--manifest", str(manifest_path), "--output-dir", str(self.output_dir)]
-        if self.overwrite: command.append("--overwrite")
-        self.parent_dashboard.run_command(command, "Imaging BIDS conversion", on_success=self.destroy)
+            messagebox.showerror(
+                "Incomplete metadata",
+                "\n".join(problems[:20]),
+                parent=self,
+            )
+            return
+
+        manifest_path = (
+            Path(str(included[0]["nifti_path"])).parent.parent
+            / "nifti_bids_manifest.json"
+        )
+
+        manifest = {
+            "bids_version": "1.11.1",
+            "records": [
+                {
+                    "nifti_path": record["nifti_path"],
+                    "project": record["project"],
+                    "participant_id": record["participant_id"],
+                    "session_id": record["session_id"],
+                    "cocanot_patient_id": record["cocanot_patient_id"],
+                    "surgery_id": record["surgery_id"],
+                    "image_id": record["image_id"],
+                    "imaging_modality": record["imaging_modality"],
+                    "mri_sequence": record["mri_sequence"],
+                    "datatype": record["datatype"],
+                    "suffix": record["suffix"],
+                    "imaging_purpose": record["imaging_purpose"],
+                    "timing_relative_to_surgery": record[
+                        "timing_relative_to_surgery"
+                    ],
+                    "comments": record["comments"],
+                    "optional_metadata": record["optional_metadata"],
+                }
+                for record in included
+            ],
+        }
+
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        command = [
+            sys.executable,
+            "-u",
+            str(BIDS_CONVERTER_SCRIPT),
+            "--manifest",
+            str(manifest_path),
+            "--output-dir",
+            str(self.output_dir),
+        ]
+        if self.overwrite:
+            command.append("--overwrite")
+
+        self.parent_dashboard.run_command(
+            command,
+            "Imaging BIDS / CoCANoT conversion",
+            on_success=self.destroy,
+        )
+
 
 
 class ImagingDashboard(tk.Tk):
@@ -1288,7 +1867,7 @@ class ImagingDashboard(tk.Tk):
         root.columnconfigure(0, weight=1)
         root.rowconfigure(3, weight=1)
 
-        ttk.Label(root, text="Imaging Pipeline", font=("", 22, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(root, text="Imaging DeID Dashboard", font=("", 22, "bold")).grid(row=0, column=0, sticky="w")
         ttk.Label(
             root,
             text=(

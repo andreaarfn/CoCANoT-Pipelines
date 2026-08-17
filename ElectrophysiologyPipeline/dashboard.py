@@ -805,8 +805,151 @@ class EDFReviewWindow(tk.Toplevel):
             messagebox.showerror("Could not save scrubbed EDF", str(exc), parent=self)
 
 
+
+
+class CollapsibleSection(ttk.Frame):
+    """Simple expand/collapse section used for optional BIDS metadata."""
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        title: str,
+        *,
+        expanded: bool = False,
+    ) -> None:
+        super().__init__(parent)
+        self.title = title
+        self.expanded = expanded
+
+        self.columnconfigure(0, weight=1)
+
+        self.toggle_button = ttk.Button(
+            self,
+            text="",
+            command=self.toggle,
+        )
+        self.toggle_button.grid(row=0, column=0, sticky="ew")
+
+        self.body = ttk.Frame(self, padding=(10, 8, 10, 4))
+        self.body.columnconfigure(1, weight=1)
+        self.body.columnconfigure(3, weight=1)
+
+        self._refresh()
+
+    def _refresh(self) -> None:
+        arrow = "▼" if self.expanded else "▶"
+        self.toggle_button.configure(text=f"{arrow} {self.title}")
+        if self.expanded:
+            self.body.grid(row=1, column=0, sticky="ew")
+        else:
+            self.body.grid_remove()
+
+    def toggle(self) -> None:
+        self.expanded = not self.expanded
+        self._refresh()
+
+
 class BIDSMetadataWindow(tk.Toplevel):
-    """Review scrubbed recordings and assign explicit dataset and recording metadata."""
+    """
+    Review scrubbed EDF recordings and assign CoCANoT + BIDS metadata.
+
+    Legend:
+      ** = required by CoCANoT
+       * = required by BIDS
+      no marker = BIDS recommended / optional
+    """
+
+    RECORDING_MODALITY_TO_DATATYPE = {
+        "Scalp EEG": "eeg",
+        "Stereo EEG (SEEG)": "ieeg",
+        "Subdural Grid/Strip EEG (ECoG)": "ieeg",
+        "Magnetoencephalography (MEG)": "meg",
+    }
+
+    PURPOSE_OPTIONS = (
+        "Diagnostic evaluation",
+        "Presurgical evaluation",
+        "Neuromodulation Planning",
+        "Seizure Localization",
+        "Postoperative Evaluation (<30 days)",
+        "Follow-up Evaluation (>30 days after surgery)",
+        "Other",
+        "Unknown",
+    )
+
+    TIMING_OPTIONS = (
+        "Preoperative",
+        "Intraoperative",
+        "Immediate Postoperative (<30 days after surgery)",
+        "Follow-up (>30 days after surgery)",
+        "Unknown",
+    )
+
+    LOCALIZATION_OPTIONS = (
+        "Medial temporal",
+        "Temporal neocortical",
+        "Frontal",
+        "Parietal",
+        "Occipital",
+        "Insula",
+        "Thalamus: Anterior nucleus",
+        "Thalamus: Centromedian",
+        "Thalamus: Pulvinar",
+        "Vagus Nerve",
+        "Other",
+        "N/A",
+    )
+
+    COMMON_OPTIONAL_FIELDS = (
+        ("project_description", "Project Description", "entry"),
+        ("session", "Session ID", "entry"),
+        ("task_description", "Task Description", "entry"),
+        ("instructions", "Instructions", "entry"),
+        ("cog_atlas_id", "CogAtlasID", "entry"),
+        ("cog_po_id", "CogPOID", "entry"),
+        ("manufacturer", "Manufacturer", "entry"),
+        ("model_name", "Manufacturer's Model Name", "entry"),
+        ("software_versions", "Software Versions", "entry"),
+        ("device_serial_number", "Device Serial Number / pseudonym", "entry"),
+        ("institution_name", "Institution Name", "entry"),
+        ("institution_address", "Institution Address", "entry"),
+        ("institutional_department_name", "Institutional Department Name", "entry"),
+        ("recording_type", "Recording Type", "combo", ("", "continuous", "epoched", "discontinuous")),
+        ("epoch_length", "Epoch Length (seconds)", "entry"),
+        ("hardware_filters", "Hardware Filters (JSON or n/a)", "entry"),
+        ("subject_artefact_description", "Subject Artefact Description", "entry"),
+        ("electrical_stimulation", "Electrical Stimulation", "combo", ("", "true", "false")),
+        ("electrical_stimulation_parameters", "Electrical Stimulation Parameters", "entry"),
+    )
+
+    EEG_OPTIONAL_FIELDS = (
+        ("cap_manufacturer", "Cap Manufacturer", "entry"),
+        ("cap_model_name", "Cap Manufacturer's Model Name", "entry"),
+        ("eeg_ground", "EEG Ground", "entry"),
+        ("head_circumference", "Head Circumference (cm)", "entry"),
+        ("eeg_placement_scheme", "EEG Placement Scheme", "entry"),
+        ("eeg_electrodes_tsv_path", "Electrodes TSV (optional)", "file"),
+        ("eeg_coordsystem_json_path", "Coordinate System JSON (required if electrodes TSV is supplied)", "file"),
+    )
+
+    IEEG_OPTIONAL_FIELDS = (
+        ("electrode_manufacturer", "Electrode Manufacturer", "entry"),
+        ("electrode_model_name", "Electrode Manufacturer's Model Name", "entry"),
+        ("ieeg_ground", "iEEG Ground", "entry"),
+        ("ieeg_placement_scheme", "iEEG Placement Scheme", "entry"),
+        ("ieeg_electrode_groups", "iEEG Electrode Groups", "entry"),
+    )
+
+    MEG_OPTIONAL_FIELDS = (
+        ("continuous_head_localization", "Continuous Head Localization", "combo", ("", "true", "false")),
+        ("head_coil_frequency", "Head Coil Frequency (number or JSON array)", "entry"),
+        ("max_movement", "Maximum Head Movement (mm)", "entry"),
+        ("associated_empty_room", "Associated Empty Room (BIDS URI or JSON array)", "entry"),
+        ("eeg_placement_scheme", "EEG Placement Scheme (if EEG recorded with MEG)", "entry"),
+        ("cap_manufacturer", "Cap Manufacturer (if EEG recorded with MEG)", "entry"),
+        ("cap_model_name", "Cap Manufacturer's Model Name (if EEG recorded with MEG)", "entry"),
+        ("eeg_reference", "EEG Reference (if EEG recorded with MEG)", "entry"),
+    )
 
     def __init__(
         self,
@@ -820,44 +963,167 @@ class BIDSMetadataWindow(tk.Toplevel):
         self.scrubbed_dir = scrubbed_dir
         self.output_dir = output_dir
         self.overwrite = overwrite
-        self.records: Dict[str, Dict[str, str]] = {}
+        self.records: Dict[str, Dict[str, object]] = {}
+        self.field_vars: Dict[str, tk.StringVar] = {}
 
-        self.title("BIDS Metadata Review")
-        self.geometry("1500x850")
-        self.minsize(1120, 680)
+        self.title("Electrophysiology BIDS Metadata Review")
+        self.geometry("1600x1000")
+        self.minsize(1180, 760)
         self.transient(parent)
 
-        self.dataset_name_var = tk.StringVar()
-        self.dataset_description_var = tk.StringVar()
-        self.site_var = tk.StringVar()
-        self.task_var = tk.StringVar(value="monitoring")
-        self.task_description_var = tk.StringVar()
-        self.datatype_var = tk.StringVar(value="eeg")
-        self.manufacturer_var = tk.StringVar()
-        self.model_name_var = tk.StringVar()
-        self.channel_type_description_var = tk.StringVar()
-        self.next_subject_number = 1
+        # CoCANoT metadata.
+        self.cocanot_patient_id_var = tk.StringVar()
+        self.surgery_id_var = tk.StringVar()
+        self.recording_id_var = tk.StringVar()
+        self.recording_modality_var = tk.StringVar(value="Scalp EEG")
+        self.timing_var = tk.StringVar(value="Unknown")
+        self.thalamus_recorded_var = tk.StringVar()
+        self.thalamus_stimulated_var = tk.StringVar()
+        self.seizure_count_var = tk.StringVar(value="0")
+        self.comments_var = tk.StringVar(value="N/A")
+
+        # BIDS workflow / sidecar metadata.
+        self.project_var = tk.StringVar()
+        self.task_name_var = tk.StringVar(value="monitoring")
 
         self.build_interface()
         self.load_scrubbed_files()
+        self._seizure_count_changed()
+        self._modality_changed()
+
+    # ------------------------------------------------------------------
+    # UI helpers
+    # ------------------------------------------------------------------
+
+    def _var(self, key: str, default: str = "") -> tk.StringVar:
+        if key not in self.field_vars:
+            self.field_vars[key] = tk.StringVar(value=default)
+        return self.field_vars[key]
+
+    @staticmethod
+    def _add_labeled_entry(
+        parent: tk.Widget,
+        row: int,
+        column: int,
+        label: str,
+        variable: tk.StringVar,
+        *,
+        width: int = 28,
+        columnspan: int = 1,
+        readonly: bool = False,
+    ) -> ttk.Entry:
+        ttk.Label(parent, text=label).grid(
+            row=row,
+            column=column,
+            sticky="w",
+            pady=(4, 2),
+        )
+        entry = ttk.Entry(
+            parent,
+            textvariable=variable,
+            width=width,
+            state="readonly" if readonly else "normal",
+        )
+        entry.grid(
+            row=row,
+            column=column + 1,
+            columnspan=columnspan,
+            sticky="ew",
+            padx=(6, 14),
+            pady=(4, 2),
+        )
+        return entry
+
+    @staticmethod
+    def _add_labeled_combo(
+        parent: tk.Widget,
+        row: int,
+        column: int,
+        label: str,
+        variable: tk.StringVar,
+        values: tuple[str, ...],
+        *,
+        width: int = 25,
+    ) -> ttk.Combobox:
+        ttk.Label(parent, text=label).grid(
+            row=row,
+            column=column,
+            sticky="w",
+            pady=(4, 2),
+        )
+        combo = ttk.Combobox(
+            parent,
+            textvariable=variable,
+            values=values,
+            state="readonly",
+            width=width,
+        )
+        combo.grid(
+            row=row,
+            column=column + 1,
+            sticky="ew",
+            padx=(6, 14),
+            pady=(4, 2),
+        )
+        return combo
+
+    def _add_file_field(
+        self,
+        parent: tk.Widget,
+        row: int,
+        label: str,
+        key: str,
+    ) -> None:
+        variable = self._var(key)
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=(4, 2))
+        entry = ttk.Entry(parent, textvariable=variable)
+        entry.grid(row=row, column=1, columnspan=2, sticky="ew", padx=(6, 6), pady=(4, 2))
+
+        def browse() -> None:
+            selected = filedialog.askopenfilename(
+                parent=self,
+                title=label,
+                initialdir=str(self.scrubbed_dir),
+            )
+            if selected:
+                variable.set(selected)
+
+        ttk.Button(parent, text="Browse…", command=browse).grid(
+            row=row,
+            column=3,
+            sticky="e",
+            pady=(4, 2),
+        )
+
+    def _clear_frame(self, frame: tk.Widget) -> None:
+        for child in frame.winfo_children():
+            child.destroy()
 
     def build_interface(self) -> None:
-        root = ttk.Frame(self, padding=16)
+        root = ttk.Frame(self, padding=14)
         root.pack(fill="both", expand=True)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(2, weight=1)
 
-        ttk.Label(root, text="BIDS Metadata Review", font=("", 18, "bold")).grid(
-            row=0, column=0, sticky="w"
-        )
+        ttk.Label(
+            root,
+            text="Electrophysiology BIDS Metadata Review",
+            font=("", 18, "bold"),
+        ).grid(row=0, column=0, sticky="w")
+
         ttk.Label(
             root,
             text=(
-                "Assign a dataset and recording metadata to selected rows. "
-                "Each dataset name creates a separate folder inside the BIDS output folder."
+                "** Required by CoCANoT     * Required by BIDS     "
+                "Fields without a marker are BIDS recommended / optional. "
+                "Recording duration and sampling frequency are extracted from each recording when possible."
             ),
-            wraplength=1400,
-        ).grid(row=1, column=0, sticky="w", pady=(4, 12))
+            wraplength=1500,
+        ).grid(row=1, column=0, sticky="w", pady=(4, 10))
+
+        # --------------------------------------------------------------
+        # Recording table
+        # --------------------------------------------------------------
 
         table_frame = ttk.Frame(root)
         table_frame.grid(row=2, column=0, sticky="nsew")
@@ -865,40 +1131,50 @@ class BIDSMetadataWindow(tk.Toplevel):
         table_frame.rowconfigure(0, weight=1)
 
         columns = (
-            "include", "file", "dataset", "participant", "task",
-            "datatype", "site", "manufacturer", "model", "age", "sex",
+            "include",
+            "file",
+            "project",
+            "patient",
+            "surgery",
+            "recording",
+            "modality",
+            "datatype",
+            "duration",
+            "task",
+            "status",
         )
         self.tree = ttk.Treeview(
             table_frame,
             columns=columns,
             show="headings",
             selectmode="extended",
+            height=8,
         )
         headings = {
             "include": "Include",
             "file": "Scrubbed EDF",
-            "dataset": "Dataset",
-            "participant": "Participant ID",
-            "task": "Task",
-            "datatype": "Datatype",
-            "site": "Site",
-            "manufacturer": "Manufacturer",
-            "model": "Model Name",
-            "age": "Age",
-            "sex": "Sex",
+            "project": "Project*",
+            "patient": "CoCANoT Patient ID**",
+            "surgery": "Surgery ID**",
+            "recording": "Recording ID**",
+            "modality": "Recording Modality**",
+            "datatype": "BIDS Data Type",
+            "duration": "Duration (sec)**",
+            "task": "Task Name*",
+            "status": "Status",
         }
         widths = {
-            "include": 65,
+            "include": 60,
             "file": 300,
-            "dataset": 170,
-            "participant": 120,
-            "task": 100,
-            "datatype": 75,
-            "site": 80,
-            "manufacturer": 130,
-            "model": 130,
-            "age": 55,
-            "sex": 60,
+            "project": 130,
+            "patient": 140,
+            "surgery": 110,
+            "recording": 120,
+            "modality": 210,
+            "datatype": 90,
+            "duration": 110,
+            "task": 110,
+            "status": 190,
         }
         for column in columns:
             self.tree.heading(column, text=headings[column])
@@ -913,103 +1189,490 @@ class BIDSMetadataWindow(tk.Toplevel):
         self.tree.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
         self.tree_selection = ExtendedSelectionController(self.tree)
 
-        controls = ttk.LabelFrame(root, text="Metadata to apply", padding=12)
-        controls.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-        for index in range(6):
-            controls.columnconfigure(index, weight=1 if index in (1, 3, 5) else 0)
+        # --------------------------------------------------------------
+        # Scrollable metadata area
+        # --------------------------------------------------------------
 
-        ttk.Label(controls, text="Dataset name").grid(row=0, column=0, sticky="w")
-        ttk.Entry(controls, textvariable=self.dataset_name_var).grid(
-            row=0, column=1, sticky="ew", padx=(6, 12)
+        metadata_shell = ttk.Frame(root)
+        metadata_shell.grid(row=3, column=0, sticky="nsew", pady=(10, 0))
+        metadata_shell.columnconfigure(0, weight=1)
+        metadata_shell.rowconfigure(0, weight=1)
+
+        self.metadata_canvas = tk.Canvas(metadata_shell, height=520, highlightthickness=0)
+        self.metadata_canvas.grid(row=0, column=0, sticky="nsew")
+        metadata_scroll = ttk.Scrollbar(
+            metadata_shell,
+            orient="vertical",
+            command=self.metadata_canvas.yview,
         )
-        ttk.Label(controls, text="Dataset description").grid(row=0, column=2, sticky="w")
-        ttk.Entry(controls, textvariable=self.dataset_description_var).grid(
-            row=0, column=3, columnspan=3, sticky="ew", padx=(6, 0)
+        metadata_scroll.grid(row=0, column=1, sticky="ns")
+        self.metadata_canvas.configure(yscrollcommand=metadata_scroll.set)
+
+        self.metadata_body = ttk.Frame(self.metadata_canvas)
+        self.metadata_window_id = self.metadata_canvas.create_window(
+            (0, 0),
+            window=self.metadata_body,
+            anchor="nw",
+        )
+        self.metadata_body.bind("<Configure>", self._metadata_body_configured)
+        self.metadata_canvas.bind("<Configure>", self._metadata_canvas_configured)
+
+        self.metadata_body.columnconfigure(0, weight=1)
+
+        # --------------------------------------------------------------
+        # CoCANoT section
+        # --------------------------------------------------------------
+
+        cocanot = ttk.LabelFrame(
+            self.metadata_body,
+            text="CoCANoT Metadata — all fields marked ** are required",
+            padding=12,
+        )
+        cocanot.grid(row=0, column=0, sticky="ew")
+        for col in (1, 3):
+            cocanot.columnconfigure(col, weight=1)
+
+        self._add_labeled_entry(
+            cocanot, 0, 0, "CoCANoT Patient ID**", self.cocanot_patient_id_var
+        )
+        self._add_labeled_entry(
+            cocanot, 0, 2, "Surgery ID**", self.surgery_id_var
+        )
+        self._add_labeled_entry(
+            cocanot, 1, 0, "Recording ID**", self.recording_id_var
         )
 
-        ttk.Label(controls, text="Site code").grid(row=1, column=0, sticky="w", pady=(8, 0))
-        ttk.Entry(controls, textvariable=self.site_var).grid(
-            row=1, column=1, sticky="ew", padx=(6, 12), pady=(8, 0)
+        ttk.Label(cocanot, text="Recording Modality**").grid(
+            row=1, column=2, sticky="w", pady=(4, 2)
         )
-        ttk.Label(controls, text="Task").grid(row=1, column=2, sticky="w", pady=(8, 0))
-        ttk.Entry(controls, textvariable=self.task_var).grid(
-            row=1, column=3, sticky="ew", padx=(6, 12), pady=(8, 0)
-        )
-        ttk.Label(controls, text="Datatype").grid(row=1, column=4, sticky="w", pady=(8, 0))
-        ttk.Combobox(
-            controls,
-            textvariable=self.datatype_var,
-            values=("eeg", "ieeg"),
+        modality_combo = ttk.Combobox(
+            cocanot,
+            textvariable=self.recording_modality_var,
+            values=tuple(self.RECORDING_MODALITY_TO_DATATYPE),
             state="readonly",
-            width=8,
-        ).grid(row=1, column=5, sticky="ew", padx=(6, 0), pady=(8, 0))
+        )
+        modality_combo.grid(row=1, column=3, sticky="ew", padx=(6, 14), pady=(4, 2))
+        modality_combo.bind("<<ComboboxSelected>>", self._modality_changed)
 
-        ttk.Label(controls, text="Task description").grid(row=2, column=0, sticky="w", pady=(8, 0))
-        ttk.Entry(controls, textvariable=self.task_description_var).grid(
-            row=2, column=1, columnspan=5, sticky="ew", padx=(6, 0), pady=(8, 0)
+        ttk.Label(cocanot, text="Purpose** (select one or more)").grid(
+            row=2, column=0, sticky="nw", pady=(8, 2)
+        )
+        purpose_frame = ttk.Frame(cocanot)
+        purpose_frame.grid(row=2, column=1, sticky="nsew", padx=(6, 14), pady=(8, 2))
+        purpose_frame.columnconfigure(0, weight=1)
+        self.purpose_list = tk.Listbox(
+            purpose_frame,
+            selectmode="extended",
+            exportselection=False,
+            height=5,
+        )
+        self.purpose_list.grid(row=0, column=0, sticky="nsew")
+        for option in self.PURPOSE_OPTIONS:
+            self.purpose_list.insert("end", option)
+        purpose_scroll = ttk.Scrollbar(
+            purpose_frame,
+            orient="vertical",
+            command=self.purpose_list.yview,
+        )
+        purpose_scroll.grid(row=0, column=1, sticky="ns")
+        self.purpose_list.configure(yscrollcommand=purpose_scroll.set)
+        self.purpose_selection = ExtendedSelectionController(self.purpose_list)
+
+        ttk.Label(cocanot, text="Timing Relative to Surgery**").grid(
+            row=2, column=2, sticky="nw", pady=(8, 2)
+        )
+        ttk.Combobox(
+            cocanot,
+            textvariable=self.timing_var,
+            values=self.TIMING_OPTIONS,
+            state="readonly",
+        ).grid(row=2, column=3, sticky="ew", padx=(6, 14), pady=(8, 2))
+
+        self._add_labeled_combo(
+            cocanot,
+            3,
+            0,
+            "Did you record the thalamus?**",
+            self.thalamus_recorded_var,
+            ("", "Yes", "No"),
+        )
+        self._add_labeled_combo(
+            cocanot,
+            3,
+            2,
+            "Did you stimulate the thalamus?**",
+            self.thalamus_stimulated_var,
+            ("", "Yes", "No"),
         )
 
-        ttk.Label(controls, text="Manufacturer").grid(row=3, column=0, sticky="w", pady=(8, 0))
-        ttk.Entry(controls, textvariable=self.manufacturer_var).grid(
-            row=3, column=1, sticky="ew", padx=(6, 12), pady=(8, 0)
+        ttk.Label(cocanot, text="Recording Duration (seconds)**").grid(
+            row=4, column=0, sticky="w", pady=(8, 2)
         )
-        ttk.Label(controls, text="Model name").grid(row=3, column=2, sticky="w", pady=(8, 0))
-        ttk.Entry(controls, textvariable=self.model_name_var).grid(
-            row=3, column=3, sticky="ew", padx=(6, 12), pady=(8, 0)
+        ttk.Label(
+            cocanot,
+            text="Automatically extracted separately from each EDF",
+        ).grid(row=4, column=1, sticky="w", padx=(6, 14), pady=(8, 2))
+
+        ttk.Label(cocanot, text="Number of Seizures Captured**").grid(
+            row=4, column=2, sticky="w", pady=(8, 2)
         )
-        ttk.Label(controls, text="Channel type description").grid(
-            row=3, column=4, sticky="w", pady=(8, 0)
+        seizure_entry = ttk.Entry(cocanot, textvariable=self.seizure_count_var)
+        seizure_entry.grid(row=4, column=3, sticky="ew", padx=(6, 14), pady=(8, 2))
+        seizure_entry.bind("<KeyRelease>", self._seizure_count_changed)
+
+        ttk.Label(
+            cocanot,
+            text="Primary Seizure Onset Localization**",
+        ).grid(row=5, column=0, sticky="nw", pady=(8, 2))
+        localization_frame = ttk.Frame(cocanot)
+        localization_frame.grid(
+            row=5,
+            column=1,
+            columnspan=3,
+            sticky="ew",
+            padx=(6, 14),
+            pady=(8, 2),
         )
-        ttk.Entry(controls, textvariable=self.channel_type_description_var).grid(
-            row=3, column=5, sticky="ew", padx=(6, 0), pady=(8, 0)
+        localization_frame.columnconfigure(0, weight=1)
+        self.localization_list = tk.Listbox(
+            localization_frame,
+            selectmode="extended",
+            exportselection=False,
+            height=5,
+        )
+        self.localization_list.grid(row=0, column=0, sticky="ew")
+        for option in self.LOCALIZATION_OPTIONS:
+            self.localization_list.insert("end", option)
+        localization_scroll = ttk.Scrollbar(
+            localization_frame,
+            orient="vertical",
+            command=self.localization_list.yview,
+        )
+        localization_scroll.grid(row=0, column=1, sticky="ns")
+        self.localization_list.configure(yscrollcommand=localization_scroll.set)
+        self.localization_selection = ExtendedSelectionController(self.localization_list)
+
+        ttk.Label(cocanot, text="Comments**").grid(
+            row=6, column=0, sticky="w", pady=(8, 2)
+        )
+        comments_entry = ttk.Entry(cocanot, textvariable=self.comments_var)
+        comments_entry.grid(
+            row=6,
+            column=1,
+            columnspan=3,
+            sticky="ew",
+            padx=(6, 14),
+            pady=(8, 2),
+        )
+        ttk.Label(
+            cocanot,
+            text='Use "N/A" when there are no additional comments. Do not include PHI.',
+        ).grid(row=7, column=1, columnspan=3, sticky="w", padx=(6, 14))
+
+        # --------------------------------------------------------------
+        # BIDS required section
+        # --------------------------------------------------------------
+
+        required = ttk.LabelFrame(
+            self.metadata_body,
+            text="BIDS Required Metadata — fields marked * are required",
+            padding=12,
+        )
+        required.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        required.columnconfigure(1, weight=1)
+        required.columnconfigure(3, weight=1)
+
+        self._add_labeled_entry(required, 0, 0, "Project*", self.project_var)
+
+        self.subject_preview_var = tk.StringVar(value="Derived from CoCANoT Patient ID")
+        self._add_labeled_entry(
+            required,
+            0,
+            2,
+            "Subject ID*",
+            self.subject_preview_var,
+            readonly=True,
         )
 
-        apply_actions = ttk.Frame(controls)
-        apply_actions.grid(row=4, column=0, columnspan=6, sticky="e", pady=(10, 0))
-        ttk.Button(
-            apply_actions,
-            text="Apply to Selected",
-            command=self.apply_to_selected,
-        ).pack(side="left")
-        ttk.Button(
-            apply_actions,
-            text="Apply to All",
-            command=self.apply_to_all,
-        ).pack(side="left", padx=(8, 0))
+        self._add_labeled_entry(
+            required,
+            1,
+            0,
+            "Task Name*",
+            self.task_name_var,
+            columnspan=1,
+        )
+
+        ttk.Label(required, text="Sampling Frequency*").grid(
+            row=1, column=2, sticky="w", pady=(4, 2)
+        )
+        ttk.Label(
+            required,
+            text="Automatically extracted from the recording",
+        ).grid(row=1, column=3, sticky="w", padx=(6, 14), pady=(4, 2))
+
+        self.required_dynamic = ttk.Frame(required)
+        self.required_dynamic.grid(
+            row=2,
+            column=0,
+            columnspan=4,
+            sticky="ew",
+            pady=(8, 0),
+        )
+        self.required_dynamic.columnconfigure(1, weight=1)
+        self.required_dynamic.columnconfigure(3, weight=1)
+
+        # --------------------------------------------------------------
+        # Optional / recommended BIDS section
+        # --------------------------------------------------------------
+
+        self.optional_section = CollapsibleSection(
+            self.metadata_body,
+            "BIDS Optional / Recommended Metadata",
+            expanded=False,
+        )
+        self.optional_section.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        self.optional_dynamic = self.optional_section.body
+        self.optional_dynamic.columnconfigure(1, weight=1)
+        self.optional_dynamic.columnconfigure(3, weight=1)
+
+        # --------------------------------------------------------------
+        # MEG warning
+        # --------------------------------------------------------------
+
+        self.modality_notice_var = tk.StringVar()
+        self.modality_notice = ttk.Label(
+            self.metadata_body,
+            textvariable=self.modality_notice_var,
+            wraplength=1450,
+        )
+        self.modality_notice.grid(row=3, column=0, sticky="w", pady=(10, 0))
+
+        # --------------------------------------------------------------
+        # Bottom controls
+        # --------------------------------------------------------------
 
         actions = ttk.Frame(root)
-        actions.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+        actions.grid(row=4, column=0, sticky="ew", pady=(10, 0))
 
         ttk.Button(
             actions,
             text="Include Selected",
             command=lambda: self.set_selected_included(True),
         ).pack(side="left")
+
         ttk.Button(
             actions,
             text="Exclude Selected",
             command=lambda: self.set_selected_included(False),
         ).pack(side="left", padx=(6, 0))
+
         ttk.Button(
             actions,
-            text="Generate Different Participant IDs",
-            command=self.generate_distinct_ids,
+            text="Apply to Selected",
+            command=self.apply_to_selected,
         ).pack(side="left", padx=(18, 0))
-        ttk.Button(
-            actions,
-            text="Assign Same Participant ID",
-            command=self.assign_same_id,
-        ).pack(side="left", padx=(6, 0))
-        ttk.Button(
-            actions,
-            text="Edit Participant ID",
-            command=self.edit_participant_id,
-        ).pack(side="left", padx=(6, 0))
+
         ttk.Button(
             actions,
             text="Convert Included Recordings",
             command=self.create_manifest_and_convert,
         ).pack(side="right")
+
+    def _metadata_body_configured(self, _event: tk.Event) -> None:
+        self.metadata_canvas.configure(scrollregion=self.metadata_canvas.bbox("all"))
+
+    def _metadata_canvas_configured(self, event: tk.Event) -> None:
+        self.metadata_canvas.itemconfigure(self.metadata_window_id, width=event.width)
+
+    def _add_dynamic_field(
+        self,
+        parent: tk.Widget,
+        row: int,
+        config: tuple,
+        *,
+        required: bool = False,
+    ) -> int:
+        key, label, field_type, *rest = config
+        label_text = f"{label}*" if required else label
+        variable = self._var(key)
+
+        if field_type == "combo":
+            values = tuple(rest[0]) if rest else ("",)
+            self._add_labeled_combo(parent, row, 0, label_text, variable, values)
+        elif field_type == "file":
+            self._add_file_field(parent, row, label_text, key)
+        else:
+            self._add_labeled_entry(parent, row, 0, label_text, variable, columnspan=2)
+        return row + 1
+
+    def _modality_changed(self, _event: Optional[tk.Event] = None) -> None:
+        modality = self.recording_modality_var.get().strip()
+        datatype = self.RECORDING_MODALITY_TO_DATATYPE.get(modality, "")
+
+        self._clear_frame(self.required_dynamic)
+        self._clear_frame(self.optional_dynamic)
+        self.required_dynamic.columnconfigure(1, weight=1)
+        self.required_dynamic.columnconfigure(3, weight=1)
+        self.optional_dynamic.columnconfigure(1, weight=1)
+        self.optional_dynamic.columnconfigure(3, weight=1)
+
+        # Defaults that are BIDS-valid and explicit.
+        if not self._var("software_filters").get():
+            self._var("software_filters").set("n/a")
+
+        row = 0
+
+        if datatype == "eeg":
+            self._add_labeled_entry(
+                self.required_dynamic,
+                row,
+                0,
+                "EEG Reference*",
+                self._var("eeg_reference"),
+            )
+            self._add_labeled_combo(
+                self.required_dynamic,
+                row,
+                2,
+                "Power Line Frequency*",
+                self._var("power_line_frequency"),
+                ("", "50", "60", "n/a"),
+            )
+            row += 1
+            self._add_labeled_entry(
+                self.required_dynamic,
+                row,
+                0,
+                "Software Filters* (JSON or n/a)",
+                self._var("software_filters"),
+                columnspan=2,
+            )
+
+            optional = list(self.COMMON_OPTIONAL_FIELDS) + list(self.EEG_OPTIONAL_FIELDS)
+            self.modality_notice_var.set(
+                "Scalp EEG selected: conversion will follow the BIDS EEG layout "
+                "and create an *_eeg.json sidecar plus *_channels.tsv."
+            )
+
+        elif datatype == "ieeg":
+            self._add_labeled_entry(
+                self.required_dynamic,
+                row,
+                0,
+                "iEEG Reference*",
+                self._var("ieeg_reference"),
+            )
+            self._add_labeled_combo(
+                self.required_dynamic,
+                row,
+                2,
+                "Power Line Frequency*",
+                self._var("power_line_frequency"),
+                ("", "50", "60", "n/a"),
+            )
+            row += 1
+            self._add_labeled_entry(
+                self.required_dynamic,
+                row,
+                0,
+                "Software Filters* (JSON or n/a)",
+                self._var("software_filters"),
+                columnspan=2,
+            )
+            row += 1
+            self._add_file_field(
+                self.required_dynamic,
+                row,
+                "Electrodes TSV*",
+                "ieeg_electrodes_tsv_path",
+            )
+            row += 1
+            self._add_file_field(
+                self.required_dynamic,
+                row,
+                "Coordinate System JSON*",
+                "ieeg_coordsystem_json_path",
+            )
+
+            optional = list(self.COMMON_OPTIONAL_FIELDS) + list(self.IEEG_OPTIONAL_FIELDS)
+            self.modality_notice_var.set(
+                "SEEG / ECoG selected: conversion will follow the BIDS iEEG layout. "
+                "BIDS requires an electrodes.tsv file and matching coordsystem.json for iEEG."
+            )
+
+        elif datatype == "meg":
+            self._add_labeled_combo(
+                self.required_dynamic,
+                row,
+                0,
+                "Power Line Frequency*",
+                self._var("power_line_frequency"),
+                ("", "50", "60", "n/a"),
+            )
+            self._add_labeled_entry(
+                self.required_dynamic,
+                row,
+                2,
+                "Dewar Position*",
+                self._var("dewar_position"),
+            )
+            row += 1
+            self._add_labeled_entry(
+                self.required_dynamic,
+                row,
+                0,
+                "Software Filters* (JSON or n/a)",
+                self._var("software_filters"),
+                columnspan=2,
+            )
+            row += 1
+            self._add_labeled_combo(
+                self.required_dynamic,
+                row,
+                0,
+                "Digitized Landmarks*",
+                self._var("digitized_landmarks"),
+                ("", "true", "false"),
+            )
+            self._add_labeled_combo(
+                self.required_dynamic,
+                row,
+                2,
+                "Digitized Head Points*",
+                self._var("digitized_head_points"),
+                ("", "true", "false"),
+            )
+
+            optional = list(self.COMMON_OPTIONAL_FIELDS) + list(self.MEG_OPTIONAL_FIELDS)
+            self.modality_notice_var.set(
+                "MEG selected. BIDS requires raw MEG data to remain in the native "
+                "manufacturer format. This EDF workflow will therefore NOT export an EDF "
+                "as raw BIDS MEG. The fields are shown so the metadata model is complete, "
+                "but conversion is intentionally blocked until a native-MEG workflow is added."
+            )
+
+        else:
+            optional = []
+            self.modality_notice_var.set("Select a recording modality.")
+
+        optional_row = 0
+        for config in optional:
+            optional_row = self._add_dynamic_field(
+                self.optional_dynamic,
+                optional_row,
+                config,
+                required=False,
+            )
+
+        self.subject_preview_var.set(
+            self.cocanot_patient_id_var.get().strip()
+            or "Derived from CoCANoT Patient ID"
+        )
+
+    # ------------------------------------------------------------------
+    # File metadata
+    # ------------------------------------------------------------------
 
     @staticmethod
     def matching_sidecar(edf_path: Path) -> Optional[Path]:
@@ -1017,10 +1680,7 @@ class BIDSMetadataWindow(tk.Toplevel):
             edf_path.with_suffix(".json"),
             edf_path.with_name(edf_path.stem + "_metadata.json"),
         ]
-        for candidate in candidates:
-            if candidate.exists():
-                return candidate
-        return None
+        return next((candidate for candidate in candidates if candidate.exists()), None)
 
     @staticmethod
     def find_nested_value(payload: object, keys: set[str]) -> str:
@@ -1039,47 +1699,67 @@ class BIDSMetadataWindow(tk.Toplevel):
                     return found
         return ""
 
-    def sidecar_demographics(self, sidecar: Optional[Path]) -> tuple[str, str]:
+    def sidecar_sex(self, sidecar: Optional[Path]) -> str:
         if sidecar is None:
-            return "n/a", "n/a"
+            return "n/a"
         try:
             payload = json.loads(sidecar.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            return "n/a", "n/a"
-        age = self.find_nested_value(
-            payload, {"age", "age_at_recording", "participant_age"}
+            return "n/a"
+        return self.find_nested_value(
+            payload,
+            {"sex", "gender", "participant_sex"},
         ) or "n/a"
-        sex = self.find_nested_value(
-            payload, {"sex", "gender", "participant_sex"}
-        ) or "n/a"
-        return age, sex
+
+    @staticmethod
+    def edf_duration_seconds(edf_path: Path) -> object:
+        try:
+            import pyedflib
+
+            reader = pyedflib.EdfReader(str(edf_path))
+            try:
+                return float(reader.file_duration)
+            finally:
+                reader.close()
+        except Exception:
+            return "n/a"
 
     def load_scrubbed_files(self) -> None:
         edf_files = sorted(
-            path for path in self.scrubbed_dir.rglob("*")
+            path
+            for path in self.scrubbed_dir.rglob("*")
             if path.is_file() and path.suffix.lower() == ".edf"
         )
+
         for index, edf_path in enumerate(edf_files, start=1):
             sidecar = self.matching_sidecar(edf_path)
-            age, sex = self.sidecar_demographics(sidecar)
             item_id = f"record-{index}"
+
             self.records[item_id] = {
                 "edf_path": str(edf_path.resolve()),
                 "sidecar_path": str(sidecar.resolve()) if sidecar else "",
                 "source_label": str(edf_path.relative_to(self.scrubbed_dir)),
                 "include": "Yes",
-                "dataset_name": "",
-                "dataset_description": "",
-                "participant": "",
-                "task": "",
-                "task_description": "",
+                "project": "",
+                "project_description": "",
+                "cocanot_patient_id": "",
+                "surgery_id": "",
+                "recording_id": "",
+                "recording_modality": "",
                 "datatype": "",
-                "site": "",
-                "manufacturer": "",
-                "model_name": "",
-                "channel_type_description": "",
-                "age": age,
-                "sex": sex,
+                "purpose": [],
+                "timing_relative_to_surgery": "",
+                "thalamus_recorded": "",
+                "thalamus_stimulated": "",
+                "recording_duration_seconds": self.edf_duration_seconds(edf_path),
+                "number_of_seizures_captured": "",
+                "primary_seizure_onset_localization": [],
+                "comments": "",
+                "task_name": "",
+                "session": "",
+                "bids_metadata": {},
+                "sex": self.sidecar_sex(sidecar),
+                "status": "Missing required metadata",
             }
             self.refresh_row(item_id)
 
@@ -1095,24 +1775,26 @@ class BIDSMetadataWindow(tk.Toplevel):
         values = (
             record["include"],
             record["source_label"],
-            record["dataset_name"],
-            record["participant"],
-            record["task"],
+            record["project"],
+            record["cocanot_patient_id"],
+            record["surgery_id"],
+            record["recording_id"],
+            record["recording_modality"],
             record["datatype"],
-            record["site"],
-            record["manufacturer"],
-            record["model_name"],
-            record["age"],
-            record["sex"],
+            record["recording_duration_seconds"],
+            record["task_name"],
+            record["status"],
         )
         if self.tree.exists(item_id):
             self.tree.item(item_id, values=values)
         else:
             self.tree.insert("", "end", iid=item_id, values=values)
 
-    def target_ids(self, all_rows: bool = False) -> List[str]:
-        if all_rows:
-            return list(self.records)
+    # ------------------------------------------------------------------
+    # Form values / validation
+    # ------------------------------------------------------------------
+
+    def target_ids(self) -> List[str]:
         selected = list(self.tree.selection())
         if not selected:
             messagebox.showinfo(
@@ -1122,47 +1804,230 @@ class BIDSMetadataWindow(tk.Toplevel):
             )
         return selected
 
-    def metadata_values(self) -> Dict[str, str]:
-        return {
-            "dataset_name": self.dataset_name_var.get().strip(),
-            "dataset_description": self.dataset_description_var.get().strip(),
-            "site": self.site_var.get().strip(),
-            "task": self.task_var.get().strip(),
-            "task_description": self.task_description_var.get().strip(),
-            "datatype": self.datatype_var.get().strip().lower(),
-            "manufacturer": self.manufacturer_var.get().strip(),
-            "model_name": self.model_name_var.get().strip(),
-            "channel_type_description": self.channel_type_description_var.get().strip(),
+    @staticmethod
+    def _selected_values(listbox: tk.Listbox) -> List[str]:
+        return [str(listbox.get(index)) for index in listbox.curselection()]
+
+    def _seizure_count_changed(self, _event: Optional[tk.Event] = None) -> None:
+        text = self.seizure_count_var.get().strip()
+
+        if text.isdigit() and int(text) == 0:
+            self.localization_list.configure(state="disabled")
+            self.localization_list.selection_clear(0, "end")
+            try:
+                index = self.LOCALIZATION_OPTIONS.index("N/A")
+                self.localization_list.selection_set(index)
+            except ValueError:
+                pass
+        else:
+            self.localization_list.configure(state="normal")
+
+    @staticmethod
+    def _valid_json_or_na(value: str) -> bool:
+        text = value.strip()
+        if text.lower() == "n/a":
+            return True
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return False
+        return isinstance(parsed, dict)
+
+    @staticmethod
+    def _valid_number_or_na(value: str) -> bool:
+        text = value.strip()
+        if text.lower() == "n/a":
+            return True
+        try:
+            float(text)
+        except ValueError:
+            return False
+        return True
+
+    def metadata_values(self) -> Dict[str, object]:
+        modality = self.recording_modality_var.get().strip()
+        datatype = self.RECORDING_MODALITY_TO_DATATYPE.get(modality, "")
+
+        localization = self._selected_values(self.localization_list)
+        seizure_text = self.seizure_count_var.get().strip()
+        if seizure_text == "0":
+            localization = ["N/A"]
+
+        bids_metadata = {
+            key: variable.get().strip()
+            for key, variable in self.field_vars.items()
         }
+
+        return {
+            "project": self.project_var.get().strip(),
+            "project_description": bids_metadata.get("project_description", ""),
+            "cocanot_patient_id": self.cocanot_patient_id_var.get().strip(),
+            "participant": self.cocanot_patient_id_var.get().strip(),
+            "surgery_id": self.surgery_id_var.get().strip(),
+            "recording_id": self.recording_id_var.get().strip(),
+            "recording_modality": modality,
+            "datatype": datatype,
+            "purpose": self._selected_values(self.purpose_list),
+            "timing_relative_to_surgery": self.timing_var.get().strip(),
+            "thalamus_recorded": self.thalamus_recorded_var.get().strip(),
+            "thalamus_stimulated": self.thalamus_stimulated_var.get().strip(),
+            "number_of_seizures_captured": seizure_text,
+            "primary_seizure_onset_localization": localization,
+            "comments": self.comments_var.get().strip(),
+            "task_name": self.task_name_var.get().strip(),
+            "session": bids_metadata.get("session", ""),
+            "bids_metadata": bids_metadata,
+        }
+
+    def validate_values(self, values: Dict[str, object]) -> List[str]:
+        problems: List[str] = []
+
+        # CoCANoT required metadata.
+        for key, label in (
+            ("cocanot_patient_id", "CoCANoT Patient ID"),
+            ("surgery_id", "Surgery ID"),
+            ("recording_id", "Recording ID"),
+            ("recording_modality", "Recording Modality"),
+            ("timing_relative_to_surgery", "Timing Relative to Surgery"),
+            ("thalamus_recorded", "Did you record the thalamus?"),
+            ("thalamus_stimulated", "Did you stimulate the thalamus?"),
+            ("number_of_seizures_captured", "Number of Seizures Captured"),
+            ("comments", 'Comments (use "N/A" when none)'),
+        ):
+            if not str(values.get(key, "")).strip():
+                problems.append(f"{label} is required by CoCANoT.")
+
+        if not values.get("purpose"):
+            problems.append("Purpose is required by CoCANoT.")
+
+        seizure_text = str(values.get("number_of_seizures_captured", "")).strip()
+        if seizure_text:
+            if not seizure_text.isdigit():
+                problems.append(
+                    "Number of Seizures Captured must be zero or a positive whole number."
+                )
+            elif int(seizure_text) > 0 and not values.get(
+                "primary_seizure_onset_localization"
+            ):
+                problems.append(
+                    "Primary Seizure Onset Localization is required when seizures were captured."
+                )
+
+        # BIDS workflow required metadata.
+        if not str(values.get("project", "")).strip():
+            problems.append("Project is required for the BIDS dataset.")
+        if not str(values.get("task_name", "")).strip():
+            problems.append("Task Name is required by BIDS.")
+
+        modality = str(values.get("recording_modality", ""))
+        datatype = str(values.get("datatype", ""))
+        bids = dict(values.get("bids_metadata", {}))
+
+        if datatype == "eeg":
+            if not bids.get("eeg_reference"):
+                problems.append("EEG Reference is required by BIDS.")
+            if not bids.get("power_line_frequency"):
+                problems.append("Power Line Frequency is required by BIDS.")
+            if not bids.get("software_filters"):
+                problems.append("Software Filters is required by BIDS.")
+
+            electrodes = str(bids.get("eeg_electrodes_tsv_path", "")).strip()
+            coordsystem = str(bids.get("eeg_coordsystem_json_path", "")).strip()
+            if bool(electrodes) != bool(coordsystem):
+                problems.append(
+                    "For EEG, Electrode TSV and Coordinate System JSON must be supplied together."
+                )
+
+        elif datatype == "ieeg":
+            if not bids.get("ieeg_reference"):
+                problems.append("iEEG Reference is required by BIDS.")
+            if not bids.get("power_line_frequency"):
+                problems.append("Power Line Frequency is required by BIDS.")
+            if not bids.get("software_filters"):
+                problems.append("Software Filters is required by BIDS.")
+            if not bids.get("ieeg_electrodes_tsv_path"):
+                problems.append("Electrodes TSV is required for BIDS iEEG.")
+            if not bids.get("ieeg_coordsystem_json_path"):
+                problems.append("Coordinate System JSON is required for BIDS iEEG.")
+
+        elif datatype == "meg":
+            for key, label in (
+                ("power_line_frequency", "Power Line Frequency"),
+                ("dewar_position", "Dewar Position"),
+                ("software_filters", "Software Filters"),
+                ("digitized_landmarks", "Digitized Landmarks"),
+                ("digitized_head_points", "Digitized Head Points"),
+            ):
+                if not bids.get(key):
+                    problems.append(f"{label} is required by BIDS MEG.")
+
+        if bids.get("software_filters") and not self._valid_json_or_na(
+            str(bids["software_filters"])
+        ):
+            problems.append(
+                'Software Filters must be a JSON object or the literal value "n/a".'
+            )
+
+        if bids.get("hardware_filters") and not self._valid_json_or_na(
+            str(bids["hardware_filters"])
+        ):
+            problems.append(
+                'Hardware Filters must be a JSON object or the literal value "n/a".'
+            )
+
+        if bids.get("power_line_frequency") and not self._valid_number_or_na(
+            str(bids["power_line_frequency"])
+        ):
+            problems.append("Power Line Frequency must be numeric or n/a.")
+
+        if bids.get("epoch_length"):
+            try:
+                if float(str(bids["epoch_length"])) < 0:
+                    raise ValueError
+            except ValueError:
+                problems.append("Epoch Length must be a non-negative number.")
+
+        if bids.get("head_circumference"):
+            try:
+                if float(str(bids["head_circumference"])) <= 0:
+                    raise ValueError
+            except ValueError:
+                problems.append("Head Circumference must be a number greater than zero.")
+
+        if modality == "Magnetoencephalography (MEG)":
+            # This is a workflow limitation, not missing metadata.
+            pass
+
+        return problems
 
     def apply_metadata(self, item_ids: List[str]) -> None:
         values = self.metadata_values()
-        missing = [
-            label
-            for key, label in (
-                ("dataset_name", "dataset name"),
-                ("dataset_description", "dataset description"),
-                ("site", "site code"),
-                ("task", "task"),
-                ("task_description", "task description"),
-                ("manufacturer", "manufacturer"),
-                ("model_name", "model name"),
-                ("channel_type_description", "channel type description"),
-            )
-            if not values[key]
-        ]
-        if values["datatype"] not in {"eeg", "ieeg"}:
-            missing.append("datatype")
-        if missing:
+        problems = self.validate_values(values)
+
+        if problems:
             messagebox.showerror(
-                "Missing metadata",
-                "Complete these fields before applying:\n\n" + "\n".join(missing),
+                "Missing or invalid metadata",
+                "Correct these fields before applying:\n\n"
+                + "\n".join(f"• {problem}" for problem in problems),
                 parent=self,
             )
             return
 
+        self.subject_preview_var.set(str(values["participant"]))
+
         for item_id in item_ids:
+            preserved_duration = self.records[item_id]["recording_duration_seconds"]
             self.records[item_id].update(values)
+            self.records[item_id]["recording_duration_seconds"] = preserved_duration
+
+            if preserved_duration == "n/a":
+                self.records[item_id]["status"] = "Could not read recording duration"
+            else:
+                self.records[item_id]["status"] = (
+                    "Ready"
+                    if self._record_complete(self.records[item_id])
+                    else "Missing required metadata"
+                )
             self.refresh_row(item_id)
 
     def apply_to_selected(self) -> None:
@@ -1170,89 +2035,49 @@ class BIDSMetadataWindow(tk.Toplevel):
         if ids:
             self.apply_metadata(ids)
 
-    def apply_to_all(self) -> None:
-        self.apply_metadata(self.target_ids(all_rows=True))
-
     def set_selected_included(self, included: bool) -> None:
         for item_id in self.target_ids():
             self.records[item_id]["include"] = "Yes" if included else "No"
+            if not included:
+                self.records[item_id]["status"] = "Excluded"
+            else:
+                self.records[item_id]["status"] = (
+                    "Ready"
+                    if self._record_complete(self.records[item_id])
+                    else "Missing required metadata"
+                )
             self.refresh_row(item_id)
 
     def toggle_inclusion_at_pointer(self, event: tk.Event) -> None:
         item_id = self.tree.identify_row(event.y)
         if not item_id:
             return
-        current = self.records[item_id]["include"]
-        self.records[item_id]["include"] = "No" if current == "Yes" else "Yes"
+        included = self.records[item_id]["include"] != "Yes"
+        self.records[item_id]["include"] = "Yes" if included else "No"
+        self.records[item_id]["status"] = (
+            "Ready"
+            if included and self._record_complete(self.records[item_id])
+            else ("Excluded" if not included else "Missing required metadata")
+        )
         self.refresh_row(item_id)
 
-    def next_generated_id(self) -> str:
-        used = {
-            record["participant"].replace("sub-", "")
-            for record in self.records.values()
-            if record["participant"]
-        }
-        while True:
-            candidate = f"{self.next_subject_number:06d}"
-            self.next_subject_number += 1
-            if candidate not in used:
-                return f"sub-{candidate}"
+    def _record_complete(self, record: Dict[str, object]) -> bool:
+        if record.get("recording_duration_seconds") == "n/a":
+            return False
+        values = dict(record)
+        return not self.validate_values(values)
 
-    def generate_distinct_ids(self) -> None:
-        for item_id in self.target_ids():
-            self.records[item_id]["participant"] = self.next_generated_id()
-            self.refresh_row(item_id)
-
-    def assign_same_id(self) -> None:
-        ids = self.target_ids()
-        if not ids:
-            return
-        existing = next(
-            (
-                self.records[item]["participant"]
-                for item in ids
-                if self.records[item]["participant"]
-            ),
-            "",
-        )
-        value = simpledialog.askstring(
-            "Participant ID",
-            "Enter a de-identified participant ID, or leave blank to generate one:",
-            initialvalue=existing,
-            parent=self,
-        )
-        if value is None:
-            return
-        value = value.strip() or self.next_generated_id()
-        for item_id in ids:
-            self.records[item_id]["participant"] = value
-            self.refresh_row(item_id)
-
-    def edit_participant_id(self) -> None:
-        ids = self.target_ids()
-        if len(ids) != 1:
-            messagebox.showinfo(
-                "Select one",
-                "Select exactly one recording to edit.",
-                parent=self,
-            )
-            return
-        item_id = ids[0]
-        value = simpledialog.askstring(
-            "Participant ID",
-            "Enter the de-identified participant ID:",
-            initialvalue=self.records[item_id]["participant"],
-            parent=self,
-        )
-        if value is not None and value.strip():
-            self.records[item_id]["participant"] = value.strip()
-            self.refresh_row(item_id)
+    # ------------------------------------------------------------------
+    # Manifest / conversion
+    # ------------------------------------------------------------------
 
     def create_manifest_and_convert(self) -> None:
         included = [
-            record for record in self.records.values()
+            record
+            for record in self.records.values()
             if record["include"] == "Yes"
         ]
+
         if not included:
             messagebox.showerror(
                 "Nothing selected",
@@ -1261,71 +2086,70 @@ class BIDSMetadataWindow(tk.Toplevel):
             )
             return
 
-        required = (
-            "dataset_name",
-            "dataset_description",
-            "participant",
-            "task",
-            "task_description",
-            "datatype",
-            "site",
-            "manufacturer",
-            "model_name",
-            "channel_type_description",
-        )
-        missing: List[str] = []
-        for record in included:
-            absent = [name for name in required if not record[name]]
-            if absent:
-                missing.append(f"{record['source_label']}: {', '.join(absent)}")
-        if missing:
+        incomplete = [
+            str(record["source_label"])
+            for record in included
+            if not self._record_complete(record)
+        ]
+        if incomplete:
             messagebox.showerror(
                 "Incomplete metadata",
-                "Complete the required fields before conversion:\n\n"
-                + "\n".join(missing[:15]),
+                "Complete the required metadata for:\n\n"
+                + "\n".join(incomplete[:20]),
                 parent=self,
             )
             return
 
-        dataset_descriptions: Dict[str, str] = {}
-        conflicts: List[str] = []
-        for record in included:
-            name = record["dataset_name"]
-            description = record["dataset_description"]
-            existing = dataset_descriptions.get(name)
-            if existing is not None and existing != description:
-                conflicts.append(name)
-            dataset_descriptions[name] = description
-        if conflicts:
+        meg_records = [
+            str(record["source_label"])
+            for record in included
+            if record["datatype"] == "meg"
+        ]
+        if meg_records:
             messagebox.showerror(
-                "Dataset description conflict",
-                "These dataset names have more than one description:\n\n"
-                + "\n".join(sorted(set(conflicts))),
+                "Native MEG files required",
+                "BIDS raw MEG data must remain in the native MEG acquisition format.\n\n"
+                "This EDF conversion workflow will not export EDF files as raw BIDS MEG.\n\n"
+                "MEG recording(s):\n" + "\n".join(meg_records[:20]),
                 parent=self,
             )
             return
 
         manifest_path = self.scrubbed_dir.parent / "bids_conversion_manifest.json"
+
         payload = {
             "bids_version": "1.11.1",
-            "records": [
+            "records": [],
+        }
+
+        for record in included:
+            payload["records"].append(
                 {
                     "edf_path": record["edf_path"],
                     "sidecar_path": record["sidecar_path"],
-                    "participant_id": record["participant"],
-                    "task": record["task"],
-                    "task_description": record["task_description"],
+                    "project": record["project"],
+                    "project_description": record["project_description"],
+                    "participant_id": record["cocanot_patient_id"],
+                    "cocanot_patient_id": record["cocanot_patient_id"],
+                    "surgery_id": record["surgery_id"],
+                    "recording_id": record["recording_id"],
+                    "session_id": record["session"],
+                    "task_name": record["task_name"],
+                    "recording_modality": record["recording_modality"],
                     "datatype": record["datatype"],
-                    "site": record["site"],
-                    "dataset_name": record["dataset_name"],
-                    "dataset_description": record["dataset_description"],
-                    "manufacturer": record["manufacturer"],
-                    "model_name": record["model_name"],
-                    "channel_type_description": record["channel_type_description"],
+                    "purpose": record["purpose"],
+                    "timing_relative_to_surgery": record["timing_relative_to_surgery"],
+                    "thalamus_recorded": record["thalamus_recorded"],
+                    "thalamus_stimulated": record["thalamus_stimulated"],
+                    "number_of_seizures_captured": record["number_of_seizures_captured"],
+                    "primary_seizure_onset_localization": record[
+                        "primary_seizure_onset_localization"
+                    ],
+                    "comments": record["comments"],
+                    "bids_metadata": record["bids_metadata"],
                 }
-                for record in included
-            ],
-        }
+            )
+
         manifest_path.write_text(
             json.dumps(payload, indent=2) + "\n",
             encoding="utf-8",
@@ -1343,18 +2167,18 @@ class BIDSMetadataWindow(tk.Toplevel):
         if self.overwrite:
             command.append("--overwrite")
 
-        # Keep this review window open while conversion runs. If the converter
-        # reports an error, every annotation remains available for correction.
-        # Close the window only after a successful conversion.
         self.parent_dashboard.run_command(
             command,
             "BIDS conversion",
             on_success=self.destroy,
         )
+
+
+
 class PipelineDashboard(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Electrophysiology Pipeline")
+        self.title("Electrophysiology DeID Dashboard")
         self.geometry("1180x840")
         self.minsize(980, 700)
 
@@ -1391,14 +2215,14 @@ class PipelineDashboard(tk.Tk):
         root.columnconfigure(0, weight=1)
         root.rowconfigure(3, weight=1)
 
-        ttk.Label(root, text="Electrophysiology Pipeline", font=("", 22, "bold")).grid(
+        ttk.Label(root, text="Electrophysiology DeID Dashboard", font=("", 22, "bold")).grid(
             row=0, column=0, sticky="w"
         )
         ttk.Label(
             root,
             text=(
-                "Add multiple raw EDF folders, scan them, and include only the recordings you want. "
-                "Use Shift-click or Ctrl/Cmd-click to select ranges or individual rows."
+                "Select folders containing EDF or EDF files, scrub headers, "
+                "review, and convert accepted files to BIDS."
             ),
             wraplength=1100,
         ).grid(row=1, column=0, sticky="w", pady=(4, 12))
