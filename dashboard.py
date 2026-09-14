@@ -77,6 +77,12 @@ class CoCANoTApp(tk.Tk):
     def _show_patient_review(self):
         self._navigate(self._make_patient_review)
 
+    def _show_imaging_processing(self):
+        self._navigate(self._make_imaging_processing)
+
+    def _show_ephys_processing(self):
+        self._navigate(self._make_ephys_processing)
+
     def _navigate(self, factory, remember=True):
         previous = self.current_page
 
@@ -144,6 +150,30 @@ class CoCANoTApp(tk.Tk):
             on_review_patients=self._show_patient_review,
         )
 
+    def _make_imaging_processing(self):
+        from ImagingPipeline.dashboard import ImagingDashboard
+
+        return ImagingDashboard(
+            self.container,
+            site_id=self.active_site_id,
+            on_back=self.go_back,
+            on_review_patients=self._show_patient_review,
+            initial_view="processing",
+            processing_return=self.go_back,
+        )
+
+    def _make_ephys_processing(self):
+        from ElectrophysiologyPipeline.dashboard import PipelineDashboard
+
+        return PipelineDashboard(
+            self.container,
+            site_id=self.active_site_id,
+            on_back=self.go_back,
+            on_review_patients=self._show_patient_review,
+            initial_view="processing",
+            processing_return=self.go_back,
+        )
+
     def _make_metadata(self):
         from MetadataPipeline.dashboard import MetadataDashboard
 
@@ -152,6 +182,8 @@ class CoCANoTApp(tk.Tk):
             site_id=self.active_site_id,
             on_back=self.go_back,
             initial_view="home",
+            on_open_imaging=self._show_imaging_processing,
+            on_open_electrophysiology=self._show_ephys_processing,
         )
 
     def _make_patient_review(self):
@@ -162,6 +194,8 @@ class CoCANoTApp(tk.Tk):
             site_id=self.active_site_id,
             on_back=self.go_back,
             initial_view="patient_explorer",
+            on_open_imaging=self._show_imaging_processing,
+            on_open_electrophysiology=self._show_ephys_processing,
         )
 
 

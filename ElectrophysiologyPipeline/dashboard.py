@@ -2845,12 +2845,16 @@ class PipelineDashboard(ttk.Frame):
         site_id="",
         on_back=None,
         on_review_patients=None,
+        initial_view="home",
+        processing_return=None,
     ) -> None:
         super().__init__(parent)
 
         self.site_id = str(site_id or "").strip()
         self.on_back = on_back
         self.on_review_patients = on_review_patients
+        self.initial_view = initial_view
+        self.processing_return = processing_return
 
         self.output_queue: Queue[str] = Queue()
         self.running_process: subprocess.Popen[str] | None = None
@@ -2870,7 +2874,11 @@ class PipelineDashboard(ttk.Frame):
         self.status_var = tk.StringVar(value="Ready")
 
         self.after(100, self.process_output_queue)
-        self.show_home()
+
+        if self.initial_view == "processing":
+            self.show_processing()
+        else:
+            self.show_home()
 
     def clear_window(self) -> None:
         for child in self.winfo_children():
@@ -2972,6 +2980,24 @@ class PipelineDashboard(ttk.Frame):
                 getattr(self, "stop_button", None),
                 state="normal",
             )
+
+    def leave_processing(self) -> None:
+        if self.is_pipeline_running():
+            messagebox.showwarning(
+                "Pipeline busy",
+                (
+                    "Finish or stop the current operation before "
+                    "leaving the processing screen."
+                ),
+                parent=self,
+            )
+            return
+
+        if self.processing_return is not None:
+            self.processing_return()
+            return
+
+        self.show_home()
 
     def open_patient_explorer(self) -> None:
         if self.is_pipeline_running():
@@ -3141,7 +3167,7 @@ class PipelineDashboard(ttk.Frame):
         ttk.Button(
             root,
             text="Back",
-            command=self.show_home,
+            command=self.leave_processing,
         ).grid(
             row=0,
             column=1,

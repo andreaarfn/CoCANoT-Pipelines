@@ -30,6 +30,8 @@ class PatientExplorer(ttk.Frame):
         on_upload_clinical,
         on_add_surgical,
         on_upload_surgical,
+        on_add_imaging,
+        on_add_electrophysiology,
         on_add_patient,
     ):
         super().__init__(parent)
@@ -42,6 +44,8 @@ class PatientExplorer(ttk.Frame):
         self.on_upload_clinical = on_upload_clinical
         self.on_add_surgical = on_add_surgical
         self.on_upload_surgical = on_upload_surgical
+        self.on_add_imaging = on_add_imaging
+        self.on_add_electrophysiology = on_add_electrophysiology
         self.on_add_patient = on_add_patient
         self.data_links = PatientDataLinkStore()
         self.record_deletion = RecordDeletionService()
@@ -154,6 +158,8 @@ class PatientExplorer(ttk.Frame):
                 record,
             ),
             open_text="Review Patient Data",
+            add_text="Add Imaging Data",
+            on_add=self.on_add_imaging,
             on_delete=lambda record: self._delete_metadata_record(
                 "Imaging",
                 record,
@@ -174,6 +180,8 @@ class PatientExplorer(ttk.Frame):
                 record,
             ),
             open_text="Review Patient Data",
+            add_text="Add Electrophysiology Data",
+            on_add=self.on_add_electrophysiology,
             on_delete=lambda record: self._delete_metadata_record(
                 "Electrophysiology",
                 record,

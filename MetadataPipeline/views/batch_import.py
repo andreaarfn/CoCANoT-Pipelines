@@ -33,6 +33,7 @@ class MetadataBatchImport(ttk.Frame):
         metadata_store,
         site_id_getter,
         on_back,
+        table_name,
         on_import_complete=None,
     ):
         super().__init__(parent)
@@ -42,6 +43,13 @@ class MetadataBatchImport(ttk.Frame):
         self.metadata_store = metadata_store
         self.site_id_getter = site_id_getter
         self.on_back = on_back
+        self.table_name = str(table_name or "").strip()
+
+        if self.table_name not in RECORD_ID_FIELDS:
+            raise ValueError(
+                "MetadataBatchImport table_name must be 'Clinical' or 'Surgical'."
+            )
+
         self.on_import_complete = on_import_complete
 
         self.loaded = None
@@ -51,7 +59,7 @@ class MetadataBatchImport(ttk.Frame):
             value="No file selected"
         )
         self.summary_var = tk.StringVar(
-            value="Select a Clinical or Surgical CSV/XLSX file to begin."
+            value=f"Select a {self.table_name} CSV/XLSX file to begin."
         )
 
         self.columnconfigure(0, weight=1)
@@ -74,7 +82,7 @@ class MetadataBatchImport(ttk.Frame):
 
         ttk.Label(
             header,
-            text="Batch Import",
+            text=f"{self.table_name} Metadata Batch Import",
             font=("", 22, "bold"),
         ).grid(
             row=0,
@@ -84,7 +92,7 @@ class MetadataBatchImport(ttk.Frame):
 
         ttk.Button(
             header,
-            text="Back to Metadata Management",
+            text="Back to Bulk Upload",
             command=self.on_back,
         ).grid(
             row=0,
@@ -95,8 +103,9 @@ class MetadataBatchImport(ttk.Frame):
         ttk.Label(
             self,
             text=(
-                "Import Clinical or Surgical metadata for one or more "
-                "participants. Patient IDs in the uploaded file are preserved."
+                f"Import {self.table_name} metadata for one or more participants. "
+                f"Validation follows MR {self.table_name} from the active "
+                "CoCANoT metadata dictionary."
             ),
             wraplength=950,
         ).grid(
@@ -280,6 +289,20 @@ class MetadataBatchImport(ttk.Frame):
             )
             return
 
+        detected_table = str(loaded.get("table_name") or "").strip()
+
+        if detected_table != self.table_name:
+            messagebox.showerror(
+                "Wrong metadata type",
+                (
+                    f"This upload pathway accepts {self.table_name} metadata only. "
+                    f"The selected file was detected as "
+                    f"{detected_table or 'an unknown metadata type'}."
+                ),
+                parent=self,
+            )
+            return
+
         self.loaded = loaded
         self.records = [
             dict(row["record"])
@@ -297,7 +320,7 @@ class MetadataBatchImport(ttk.Frame):
 
         if not self.loaded:
             self.summary_var.set(
-                "Select a Clinical or Surgical CSV/XLSX file to begin."
+                f"Select a {self.table_name} CSV/XLSX file to begin."
             )
             self.review_button.configure(
                 state="disabled"

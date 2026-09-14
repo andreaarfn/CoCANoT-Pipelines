@@ -35,7 +35,7 @@ from MetadataPipeline.storage.record_repository import (
 from MetadataPipeline.views.batch_import import MetadataBatchImport
 from MetadataPipeline.views.clinical_review import ClinicalAssessmentReview
 from MetadataPipeline.views.metadata_editor import MetadataEditor
-from MetadataPipeline.views.metadata_home import MetadataHome
+from MetadataPipeline.views.metadata_home import MetadataBulkHome, MetadataHome
 from MetadataPipeline.views.patient_explorer import PatientExplorer
 from MetadataPipeline.validation.dictionary_loader import load_dictionary
 
@@ -56,11 +56,15 @@ class MetadataDashboard(ttk.Frame):
         site_id="",
         on_back=None,
         initial_view="home",
+        on_open_imaging=None,
+        on_open_electrophysiology=None,
     ):
         super().__init__(parent)
 
         self.on_back = on_back
         self.initial_view = initial_view
+        self.on_open_imaging = on_open_imaging
+        self.on_open_electrophysiology = on_open_electrophysiology
 
         self.dictionary = load_dictionary(
             METADATA_DICTIONARY
@@ -369,8 +373,8 @@ class MetadataDashboard(ttk.Frame):
 
         self.current_view = MetadataHome(
             page,
-            on_open_patient_explorer=self._show_patient_explorer,
-            on_open_batch_import=self._show_batch_import,
+            on_manage_one_patient=self._show_patient_explorer,
+            on_open_bulk_upload=self._show_bulk_home,
         )
         self.current_view.grid(
             row=1,
@@ -501,6 +505,8 @@ class MetadataDashboard(ttk.Frame):
             on_upload_clinical=self._upload_clinical_assessments,
             on_add_surgical=self._add_surgical_record,
             on_upload_surgical=self._upload_surgical_records,
+            on_add_imaging=self._open_imaging_workflow,
+            on_add_electrophysiology=self._open_electrophysiology_workflow,
             on_add_patient=self._add_new_patient,
         )
         self.explorer.grid(
@@ -511,7 +517,24 @@ class MetadataDashboard(ttk.Frame):
 
         self.current_view = scroll_container
 
-    def _show_batch_import(self):
+    def _show_bulk_home(self):
+        self._clear_content()
+
+        self.current_view = MetadataBulkHome(
+            self.content,
+            on_back=self._show_home,
+            on_clinical=lambda: self._show_batch_import("Clinical"),
+            on_surgical=lambda: self._show_batch_import("Surgical"),
+            on_imaging=self._open_imaging_workflow,
+            on_electrophysiology=self._open_electrophysiology_workflow,
+        )
+        self.current_view.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+
+    def _show_batch_import(self, table_name):
         self._clear_content()
 
         self.current_view = MetadataBatchImport(
@@ -520,13 +543,39 @@ class MetadataDashboard(ttk.Frame):
             repository=self.repository,
             metadata_store=self.metadata_store,
             site_id_getter=lambda: self.site_id,
-            on_back=self._show_home,
+            on_back=self._show_bulk_home,
+            table_name=table_name,
         )
         self.current_view.grid(
             row=0,
             column=0,
             sticky="nsew",
         )
+
+    def _open_imaging_workflow(self):
+        if self.on_open_imaging is None:
+            messagebox.showerror(
+                "Imaging workflow unavailable",
+                "The Imaging processing workflow is not available from this window.",
+                parent=self,
+            )
+            return
+
+        self.on_open_imaging()
+
+    def _open_electrophysiology_workflow(self):
+        if self.on_open_electrophysiology is None:
+            messagebox.showerror(
+                "Electrophysiology workflow unavailable",
+                (
+                    "The Electrophysiology processing workflow is not available "
+                    "from this window."
+                ),
+                parent=self,
+            )
+            return
+
+        self.on_open_electrophysiology()
 
     def _selected_patient_id(self):
         if self.explorer is None:

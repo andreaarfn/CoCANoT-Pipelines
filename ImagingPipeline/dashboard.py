@@ -5177,12 +5177,16 @@ class ImagingDashboard(ttk.Frame):
         site_id="",
         on_back=None,
         on_review_patients=None,
+        initial_view="home",
+        processing_return=None,
     ) -> None:
         super().__init__(parent)
 
         self.site_id = str(site_id or "").strip()
         self.on_back = on_back
         self.on_review_patients = on_review_patients
+        self.initial_view = initial_view
+        self.processing_return = processing_return
 
         self.output_queue: Queue[str] = Queue()
         self.running_process: subprocess.Popen[str] | None = None
@@ -5213,7 +5217,11 @@ class ImagingDashboard(ttk.Frame):
         self.status_var = tk.StringVar(value="Ready")
 
         self.after(100, self._process_output_queue)
-        self._show_home()
+
+        if self.initial_view == "processing":
+            self._show_processing()
+        else:
+            self._show_home()
 
     def _clear_window(self) -> None:
         for child in self.winfo_children():
@@ -5274,6 +5282,24 @@ class ImagingDashboard(ttk.Frame):
         self._clear_window()
         self._build_interface()
         self._refresh_all_input_lists()
+
+    def _leave_processing(self) -> None:
+        if self.pipeline_busy:
+            messagebox.showwarning(
+                "Pipeline busy",
+                (
+                    "Finish or stop the current operation before "
+                    "leaving the processing screen."
+                ),
+                parent=self,
+            )
+            return
+
+        if self.processing_return is not None:
+            self.processing_return()
+            return
+
+        self._show_home()
 
     def _open_patient_explorer(self) -> None:
         if self.pipeline_busy:
@@ -5443,7 +5469,7 @@ class ImagingDashboard(ttk.Frame):
         ttk.Button(
             root,
             text="Back",
-            command=self._show_home,
+            command=self._leave_processing,
         ).grid(
             row=0,
             column=1,
