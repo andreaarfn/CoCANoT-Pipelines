@@ -29,7 +29,6 @@ from MetadataPipeline.forms.clinical_assessment import (
     review_clinical_batch,
 )
 from MetadataPipeline.storage import LocalMetadataStore
-from MetadataPipeline.storage.record_repository import MetadataRepository
 from MetadataPipeline.validation import MetadataValidator, load_dictionary
 from MetadataPipeline.validation.conditions import condition_matches
 
@@ -469,25 +468,28 @@ def load_comparison_module():
     return module
 
 
-class EDFReviewWindow(ttk.Frame):
-    """Embedded page for comparing and editing raw/scrubbed EDF metadata."""
+class EDFReviewWindow(tk.Toplevel):
+    """Native dashboard window for comparing and editing raw/scrubbed EDF metadata."""
 
     def __init__(
         self,
         parent: "PipelineDashboard",
         input_dir: Path,
         scrubbed_dir: Path,
-        on_close: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(parent)
         self.parent_dashboard = parent
-        self.on_close = on_close
         self.input_dir = input_dir
         self.scrubbed_dir = scrubbed_dir
         self.helpers = load_comparison_module()
         self.pairs: List[Dict[str, object]] = []
         self.current_pair_index: Optional[int] = None
         self.current_data: Optional[Dict[str, object]] = None
+
+        self.title("EDF Header and Annotation Review")
+        self.geometry("1500x900")
+        self.minsize(1050, 680)
+        self.transient(parent)
 
         self.header_field_var = tk.StringVar()
         self.header_value_var = tk.StringVar()
@@ -496,12 +498,6 @@ class EDFReviewWindow(ttk.Frame):
         self.build_pairs()
         self.build_interface()
         self.populate_file_list()
-
-    def _close_page(self) -> None:
-        if self.on_close is not None:
-            self.on_close()
-        else:
-            self.destroy()
 
     def build_pairs(self) -> None:
         for raw_path in self.helpers.find_edf_files(self.input_dir):
@@ -636,7 +632,7 @@ class EDFReviewWindow(ttk.Frame):
         footer.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         ttk.Label(footer, textvariable=self.status_var).pack(side="left")
         ttk.Button(footer, text="Save Scrubbed EDF", command=self.save_current).pack(side="right")
-        ttk.Button(footer, text="Back to Electrophysiology", command=self._close_page).pack(side="right", padx=(0, 8))
+        ttk.Button(footer, text="Close", command=self.destroy).pack(side="right", padx=(0, 8))
 
     def make_annotation_tree(self, parent: tk.Widget, title: str) -> ttk.Treeview:
         panel = ttk.LabelFrame(parent, text=title, padding=6)
@@ -829,8 +825,8 @@ class EDFReviewWindow(ttk.Frame):
 
 
 
-class BIDSMetadataWindow(ttk.Frame):
-    """Embedded page for scrubbed EDF metadata review and BIDS conversion."""
+class BIDSMetadataWindow(tk.Toplevel):
+    """Review scrubbed EDF recordings and assign CoCANoT metadata."""
 
     RECORDING_MODALITY_TO_DATATYPE = {
         "Scalp EEG": "eeg",
@@ -852,11 +848,9 @@ class BIDSMetadataWindow(ttk.Frame):
         scrubbed_dir: Path,
         output_dir: Path,
         overwrite: bool,
-        on_close: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(parent)
         self.parent_dashboard = parent
-        self.on_close = on_close
         self.scrubbed_dir = scrubbed_dir
         self.output_dir = output_dir
         self.overwrite = overwrite
@@ -872,7 +866,6 @@ class BIDSMetadataWindow(ttk.Frame):
         )
 
         self.metadata_store = LocalMetadataStore()
-        self.repository = MetadataRepository()
         self.site_id = self._require_site_id()
 
         if not self.site_id:
@@ -892,15 +885,14 @@ class BIDSMetadataWindow(ttk.Frame):
             value=f"Site: {self.site_id}"
         )
 
+        self.title("Electrophysiology Metadata & BIDS")
+        self.geometry("1600x1000")
+        self.minsize(1200, 760)
+        self.transient(parent)
+
         self._build_interface()
         self._load_scrubbed_files()
         self._refresh_conditional_fields()
-
-    def _close_page(self) -> None:
-        if self.on_close is not None:
-            self.on_close()
-        else:
-            self.destroy()
 
     # ------------------------------------------------------------------
     # Site
@@ -1053,17 +1045,6 @@ class BIDSMetadataWindow(ttk.Frame):
             row=0,
             column=2,
             sticky="e",
-        )
-
-        ttk.Button(
-            header,
-            text="Back to Electrophysiology",
-            command=self._close_page,
-        ).grid(
-            row=0,
-            column=3,
-            sticky="e",
-            padx=(8, 0),
         )
 
         ttk.Label(
@@ -2731,132 +2712,20 @@ class BIDSMetadataWindow(ttk.Frame):
         self.parent_dashboard.run_command(
             command,
             "BIDS conversion",
-            on_success=lambda: self._bids_conversion_succeeded(
-                included
-            ),
+            on_success=self.destroy,
         )
 
-    def _bids_conversion_succeeded(
-        self,
-        included: List[Dict[str, object]],
-    ) -> None:
-        """Persist successfully converted Ephys metadata for Patient Review."""
-        records_to_save = []
 
-        for record in included:
-            metadata = dict(
-                record.get(
-                    "cocanot_metadata",
-                    {},
-                )
-            )
-
-            context = {
-                "project": str(
-                    record.get(
-                        "project",
-                        "",
-                    )
-                    or ""
-                ),
-                "project_description": str(
-                    record.get(
-                        "project_description",
-                        "",
-                    )
-                    or ""
-                ),
-                "session_id": str(
-                    record.get(
-                        "session_id",
-                        "",
-                    )
-                    or ""
-                ),
-                "source_label": str(
-                    record.get(
-                        "source_label",
-                        "",
-                    )
-                    or ""
-                ),
-                "edf_path": str(
-                    record.get(
-                        "edf_path",
-                        "",
-                    )
-                    or ""
-                ),
-                "sidecar_path": str(
-                    record.get(
-                        "sidecar_path",
-                        "",
-                    )
-                    or ""
-                ),
-                "bids_output_dir": str(
-                    self.output_dir
-                ),
-            }
-
-            records_to_save.append({
-                "metadata": metadata,
-                "context": context,
-            })
-
-        try:
-            saved = self.repository.save_records(
-                self.site_id,
-                "Electrophysiology",
-                records_to_save,
-                source="electrophysiology_pipeline",
-            )
-        except (ValueError, OSError) as exc:
-            messagebox.showerror(
-                "BIDS completed, metadata save failed",
-                (
-                    "The BIDS conversion completed successfully, but "
-                    "the Electrophysiology records could not be saved "
-                    "to CoCANoT Metadata Management.\n\n"
-                    f"{exc}"
-                ),
-                parent=self,
-            )
-            return
-
-        messagebox.showinfo(
-            "Electrophysiology saved",
-            (
-                f"BIDS conversion completed and {len(saved)} "
-                "Electrophysiology record"
-                f"{'' if len(saved) == 1 else 's'} "
-                "were saved to Metadata Management."
-            ),
-            parent=self,
-        )
-
-        self._close_page()
-
-
-class PipelineDashboard(ttk.Frame):
-    def __init__(
-        self,
-        parent,
-        site_id="",
-        on_back=None,
-        on_review_patients=None,
-    ) -> None:
-        super().__init__(parent)
-
-        self.site_id = str(site_id or "").strip()
-        self.on_back = on_back
-        self.on_review_patients = on_review_patients
+class PipelineDashboard(tk.Tk):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("Electrophysiology DeID Dashboard")
+        self.geometry("1180x840")
+        self.minsize(980, 700)
 
         self.output_queue: Queue[str] = Queue()
         self.running_process: subprocess.Popen[str] | None = None
-        self.worker_thread: threading.Thread | None = None
         self.pipeline_busy = False
-        self.log_history: List[str] = []
         self.raw_records: Dict[str, Dict[str, str]] = {}
 
         saved = self.read_saved_settings()
@@ -2870,94 +2739,32 @@ class PipelineDashboard(ttk.Frame):
         self.status_var = tk.StringVar(value="Ready")
 
         self.after(100, self.process_output_queue)
+        self.protocol("WM_DELETE_WINDOW", self.close_dashboard)
         self.show_home()
 
     def clear_window(self) -> None:
         for child in self.winfo_children():
             child.destroy()
 
-    def is_pipeline_running(self) -> bool:
-        """Return True only while a worker/process is actually active."""
-        process_running = (
-            self.running_process is not None
-            and self.running_process.poll() is None
-        )
-        worker_running = (
-            self.worker_thread is not None
-            and self.worker_thread.is_alive()
-        )
-
-        if process_running or worker_running:
-            self.pipeline_busy = True
-            return True
-
-        self.pipeline_busy = False
-        self.running_process = None
-        self.worker_thread = None
-        return False
-
-    def _widget_exists(self, widget) -> bool:
-        try:
-            return widget is not None and bool(widget.winfo_exists())
-        except (AttributeError, tk.TclError):
-            return False
-
-    def _configure_if_alive(self, widget, **kwargs) -> None:
-        if self._widget_exists(widget):
-            try:
-                widget.configure(**kwargs)
-            except tk.TclError:
-                pass
-
     def show_home(self) -> None:
-        if self.is_pipeline_running():
+        if self.pipeline_busy:
             messagebox.showwarning(
                 "Pipeline busy",
-                (
-                    "Finish or stop the current operation before "
-                    "leaving the processing screen."
-                ),
+                "Finish or stop the current operation before leaving the processing screen.",
                 parent=self,
             )
             return
 
         self.clear_window()
 
-        page = ttk.Frame(
-            self,
-            padding=(16, 12, 16, 16),
-        )
-        page.pack(
-            fill="both",
-            expand=True,
-        )
-        page.columnconfigure(0, weight=1)
-        page.rowconfigure(1, weight=1)
-
-        if self.on_back is not None:
-            navigation = ttk.Frame(page)
-            navigation.grid(
-                row=0,
-                column=0,
-                sticky="ew",
-                pady=(0, 8),
-            )
-
-            ttk.Button(
-                navigation,
-                text="Back",
-                command=self.return_to_cocanot,
-            ).pack(side="left")
-
         home = EphysHome(
-            page,
+            self,
             on_process=self.show_processing,
             on_review_patients=self.open_patient_explorer,
         )
-        home.grid(
-            row=1,
-            column=0,
-            sticky="nsew",
+        home.pack(
+            fill="both",
+            expand=True,
         )
 
     def show_processing(self) -> None:
@@ -2966,29 +2773,7 @@ class PipelineDashboard(ttk.Frame):
         self.refresh_folder_list()
         self.scan_input_sources()
 
-        if self.is_pipeline_running():
-            self.set_controls_enabled(False)
-            self._configure_if_alive(
-                getattr(self, "stop_button", None),
-                state="normal",
-            )
-
     def open_patient_explorer(self) -> None:
-        if self.is_pipeline_running():
-            messagebox.showwarning(
-                "Pipeline busy",
-                (
-                    "Finish or stop the current operation before "
-                    "opening Patient Data Review."
-                ),
-                parent=self,
-            )
-            return
-
-        if self.on_review_patients is not None:
-            self.on_review_patients()
-            return
-
         metadata_dashboard = (
             PROJECT_ROOT
             / "MetadataPipeline"
@@ -3018,21 +2803,6 @@ class PipelineDashboard(ttk.Frame):
                 str(exc),
                 parent=self,
             )
-
-    def return_to_cocanot(self) -> None:
-        if self.is_pipeline_running():
-            messagebox.showwarning(
-                "Pipeline busy",
-                (
-                    "Finish or stop the current operation before "
-                    "leaving Electrophysiology."
-                ),
-                parent=self,
-            )
-            return
-
-        if self.on_back is not None:
-            self.on_back()
 
     def read_saved_settings(self) -> dict:
         try:
@@ -3579,18 +3349,9 @@ class PipelineDashboard(ttk.Frame):
             yscrollcommand=log_scroll.set,
         )
 
-        if self.log_history:
-            self.log_text.configure(state="normal")
-            self.log_text.insert(
-                "1.0",
-                "\n".join(self.log_history) + "\n",
-            )
-            self.log_text.see("end")
-            self.log_text.configure(state="disabled")
-        else:
-            self.append_log(
-                f"Dashboard ready. Settings file: {get_settings_path()}"
-            )
+        self.append_log(
+            f"Dashboard ready. Settings file: {get_settings_path()}"
+        )
 
     def _scroll_main_dashboard(
         self,
@@ -4099,32 +3860,17 @@ class PipelineDashboard(ttk.Frame):
             )
             return
 
-        self.clear_window()
-
         try:
-            review = EDFReviewWindow(
-                self,
-                input_dir,
-                scrubbed_dir,
-                on_close=self.show_processing,
-            )
-            review.pack(fill="both", expand=True)
+            review = EDFReviewWindow(self, input_dir, scrubbed_dir)
         except Exception as exc:
-            self.show_processing()
-            messagebox.showerror(
-                "Could not open EDF review",
-                str(exc),
-                parent=self,
-            )
+            messagebox.showerror("Could not open EDF review", str(exc))
             return
 
         if not review.pairs:
             review.destroy()
-            self.show_processing()
             messagebox.showerror(
                 "No matching EDF files",
                 "No matching raw and scrubbed EDF pairs were found.",
-                parent=self,
             )
 
     def open_bids_metadata_review(self) -> None:
@@ -4135,63 +3881,22 @@ class PipelineDashboard(ttk.Frame):
         if not scrubbed_dir.exists() or not any(path.suffix.lower() == ".edf" for path in scrubbed_dir.rglob("*")):
             messagebox.showerror("No scrubbed EDFs", "Run the scrubber before BIDS conversion.")
             return
-        self.clear_window()
-        page = BIDSMetadataWindow(
-            self,
-            scrubbed_dir,
-            config.electrophysiology.bids_output_dir,
-            self.overwrite_var.get(),
-            on_close=self.show_processing,
-        )
-        page.pack(fill="both", expand=True)
+        BIDSMetadataWindow(self, scrubbed_dir, config.electrophysiology.bids_output_dir, self.overwrite_var.get())
 
-    def run_command(
-        self,
-        command: List[str],
-        operation_name: str,
-        on_success: Optional[Callable[[], None]] = None,
-    ) -> None:
-        if self.is_pipeline_running():
-            messagebox.showwarning(
-                "Pipeline busy",
-                "Another pipeline operation is already running.",
-                parent=self,
-            )
+    def run_command(self, command: List[str], operation_name: str, on_success: Optional[Callable[[], None]] = None) -> None:
+        if self.pipeline_busy:
+            messagebox.showwarning("Pipeline busy", "Another pipeline operation is already running.")
             return
-
         self.pipeline_busy = True
         self.set_controls_enabled(False)
-        self._configure_if_alive(
-            getattr(self, "stop_button", None),
-            state="normal",
-        )
+        self.stop_button.configure(state="normal")
         self.status_var.set(f"Running: {operation_name}")
         self.append_log("\n" + "=" * 72)
         self.append_log(f"Starting {operation_name}")
-        self.append_log(
-            "Command: "
-            + " ".join(
-                self.format_command_argument(arg)
-                for arg in command
-            )
-        )
+        self.append_log("Command: " + " ".join(self.format_command_argument(arg) for arg in command))
+        threading.Thread(target=self.command_worker, args=(command, operation_name, on_success), daemon=True).start()
 
-        worker = threading.Thread(
-            target=self.command_worker,
-            args=(command, operation_name, on_success),
-            daemon=True,
-        )
-        self.worker_thread = worker
-        worker.start()
-
-    def command_worker(
-        self,
-        command: List[str],
-        operation_name: str,
-        on_success: Optional[Callable[[], None]],
-    ) -> None:
-        return_code = 1
-
+    def command_worker(self, command: List[str], operation_name: str, on_success: Optional[Callable[[], None]]) -> None:
         try:
             self.running_process = subprocess.Popen(
                 command,
@@ -4201,134 +3906,56 @@ class PipelineDashboard(ttk.Frame):
                 text=True,
                 bufsize=1,
             )
-
             if self.running_process.stdout is not None:
                 for line in self.running_process.stdout:
-                    self.output_queue.put(
-                        line.rstrip("\n")
-                    )
-
+                    self.output_queue.put(line.rstrip("\n"))
             return_code = self.running_process.wait()
-
-        except Exception as exc:
-            self.output_queue.put(
-                f"ERROR: Could not run {operation_name}: {exc}"
-            )
+        except OSError as exc:
+            self.output_queue.put(f"ERROR: Could not start {operation_name}: {exc}")
             return_code = 1
-
         finally:
             self.running_process = None
+        self.after(0, lambda: self.command_finished(operation_name, return_code, on_success))
 
-        try:
-            self.after(
-                0,
-                lambda: self.command_finished(
-                    operation_name,
-                    return_code,
-                    on_success,
-                ),
-            )
-        except tk.TclError:
-            pass
-
-    def command_finished(
-        self,
-        operation_name: str,
-        return_code: int,
-        on_success: Optional[Callable[[], None]],
-    ) -> None:
+    def command_finished(self, operation_name: str, return_code: int, on_success: Optional[Callable[[], None]]) -> None:
         self.pipeline_busy = False
-        self.running_process = None
-        self.worker_thread = None
-
         self.set_controls_enabled(True)
-        self._configure_if_alive(
-            getattr(self, "stop_button", None),
-            state="disabled",
-        )
-
+        self.stop_button.configure(state="disabled")
         if return_code == 0:
-            self.status_var.set(
-                f"Completed: {operation_name}"
-            )
-            self.append_log(
-                f"{operation_name} completed successfully."
-            )
-
+            self.status_var.set(f"Completed: {operation_name}")
+            self.append_log(f"{operation_name} completed successfully.")
             if on_success:
                 on_success()
         else:
-            self.status_var.set(
-                f"Failed: {operation_name}"
-            )
-            self.append_log(
-                f"{operation_name} exited with code {return_code}."
-            )
-            messagebox.showerror(
-                "Pipeline operation failed",
-                "See the pipeline log for details.",
-                parent=self,
-            )
+            self.status_var.set(f"Failed: {operation_name}")
+            self.append_log(f"{operation_name} exited with code {return_code}.")
+            messagebox.showerror("Pipeline operation failed", "See the pipeline log for details.")
 
     def stop_current_operation(self) -> None:
-        if (
-            self.running_process is not None
-            and self.running_process.poll() is None
-        ):
+        if self.running_process is not None and self.running_process.poll() is None:
             self.running_process.terminate()
 
     def set_controls_enabled(self, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"
-
-        for selector_name in (
-            "derivatives_selector",
-            "bids_selector",
+        self.derivatives_selector.set_enabled(enabled)
+        self.bids_selector.set_enabled(enabled)
+        for widget in (
+            self.add_file_button,
+            self.add_folder_button,
+            self.remove_folder_button,
+            self.save_settings_button,
+            self.scrub_button,
+            self.compare_button,
+            self.bids_button,
+            self.overwrite_checkbox,
         ):
-            selector = getattr(
-                self,
-                selector_name,
-                None,
-            )
-            if self._widget_exists(selector):
-                try:
-                    selector.set_enabled(enabled)
-                except tk.TclError:
-                    pass
-
-        for widget_name in (
-            "add_file_button",
-            "add_folder_button",
-            "remove_folder_button",
-            "save_settings_button",
-            "scrub_button",
-            "compare_button",
-            "bids_button",
-            "overwrite_checkbox",
-        ):
-            self._configure_if_alive(
-                getattr(self, widget_name, None),
-                state=state,
-            )
+            widget.configure(state=state)
 
     def append_log(self, message: str) -> None:
-        self.log_history.append(message)
-
-        log_widget = getattr(
-            self,
-            "log_text",
-            None,
-        )
-
-        if not self._widget_exists(log_widget):
-            return
-
-        try:
-            log_widget.configure(state="normal")
-            log_widget.insert("end", message + "\n")
-            log_widget.see("end")
-            log_widget.configure(state="disabled")
-        except tk.TclError:
-            pass
+        self.log_text.configure(state="normal")
+        self.log_text.insert("end", message + "\n")
+        self.log_text.see("end")
+        self.log_text.configure(state="disabled")
 
     def process_output_queue(self) -> None:
         while True:
@@ -4336,49 +3963,24 @@ class PipelineDashboard(ttk.Frame):
                 message = self.output_queue.get_nowait()
             except Empty:
                 break
-
             self.append_log(message)
-
-        try:
-            self.after(
-                100,
-                self.process_output_queue,
-            )
-        except tk.TclError:
-            pass
+        self.after(100, self.process_output_queue)
 
     @staticmethod
     def format_command_argument(argument: str) -> str:
         return f'"{argument}"' if " " in argument else argument
 
     def close_dashboard(self) -> None:
-        if self.is_pipeline_running():
-            if not messagebox.askyesno(
-                "Operation running",
-                "Stop the current operation and close?",
-                parent=self,
-            ):
+        if self.running_process is not None and self.running_process.poll() is None:
+            if not messagebox.askyesno("Operation running", "Stop the current operation and close?"):
                 return
-
             self.running_process.terminate()
-
-        self.winfo_toplevel().destroy()
+        self.destroy()
 
 
 def main() -> None:
-    root = tk.Tk()
-    root.title("Electrophysiology DeID Dashboard")
-    root.geometry("1180x840")
-    root.minsize(980, 700)
-
-    app = PipelineDashboard(root)
-    app.pack(fill="both", expand=True)
-
-    root.protocol(
-        "WM_DELETE_WINDOW",
-        app.close_dashboard,
-    )
-    root.mainloop()
+    app = PipelineDashboard()
+    app.mainloop()
 
 
 if __name__ == "__main__":

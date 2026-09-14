@@ -10,7 +10,24 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
+
+import sys
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from MetadataPipeline.storage.data_link_store import PatientDataLinkStore
+from MetadataPipeline.storage.record_repository import MetadataRepository
+from MetadataPipeline.validation import MetadataValidator, load_dictionary
+
 SUPPORTED_BIDS_VERSION = "1.11.1"
+METADATA_DICTIONARY = (
+    PROJECT_ROOT
+    / "MetadataPipeline"
+    / "dictionaries"
+    / "CoCANoT_Metadata_Phase1.xlsx"
+)
 
 MRI_SEQUENCE_MAP = {
     "T1": ("anat", "T1w"),
@@ -30,65 +47,12 @@ ENUM_FIELDS = {
 PYDEFACE_NAME = "PyDeface"
 PYDEFACE_URL = "https://github.com/poldracklab/pydeface"
 
-IMAGING_PURPOSE_OPTIONS = {
-    "Diagnostic evaluation",
-    "Presurgical evaluation",
-    "Neuromodulation Planning",
-    "Electrode Localization",
-    "Postoperative Evaluation (<30 days)",
-    "Follow-up Evaluation (>30 days after surgery)",
-    "Other",
-    "Unknown",
-}
+MRI_SEQUENCE_FIELDS = (
+    "MRI Sequence(s) (if applicable)",
+    "MRI Sequence(s) - if MRI (multiselect)",
+)
 
-SURGERY_TIMING_OPTIONS = {
-    "Preoperative",
-    "Intraoperative",
-    "Immediate Postoperative (<30 days after surgery)",
-    "Follow-up (>30 days after surgery)",
-    "Unknown",
-}
 
-MRI_OPTIONAL_MAP = {
-    "manufacturer": "Manufacturer",
-    "model_name": "ManufacturersModelName",
-    "software_versions": "SoftwareVersions",
-    "magnetic_field_strength": "MagneticFieldStrength",
-    "receive_coil_name": "ReceiveCoilName",
-    "sequence_name": "SequenceName",
-    "pulse_sequence_details": "PulseSequenceDetails",
-    "echo_time": "EchoTime",
-    "repetition_time_excitation": "RepetitionTimeExcitation",
-    "inversion_time": "InversionTime",
-    "flip_angle": "FlipAngle",
-    "phase_encoding_direction": "PhaseEncodingDirection",
-    "effective_echo_spacing": "EffectiveEchoSpacing",
-    "total_readout_time": "TotalReadoutTime",
-}
-
-CT_OPTIONAL_MAP = {
-    "manufacturer": "Manufacturer",
-    "model_name": "ManufacturersModelName",
-    "software_versions": "SoftwareVersions",
-    "kvp": "KVP",
-    "slice_thickness": "SliceThickness",
-    "convolution_kernel": "ConvolutionKernel",
-    "pixel_spacing": "PixelSpacing",
-    "reconstruction_diameter": "ReconstructionDiameter",
-}
-
-NUMERIC_OPTIONAL_FIELDS = {
-    "magnetic_field_strength",
-    "echo_time",
-    "repetition_time_excitation",
-    "inversion_time",
-    "flip_angle",
-    "effective_echo_spacing",
-    "total_readout_time",
-    "kvp",
-    "slice_thickness",
-    "reconstruction_diameter",
-}
 
 
 def strip_nifti_suffix(path: Path) -> str:
@@ -186,122 +150,132 @@ def clean_label(
     return text
 
 
-def clean_optional_entity(value: Any, field: str) -> str:
-    return clean_label(str(value or ""), field, optional=True)
 
 
-def parse_optional_number(value: Any, field: str) -> Optional[float]:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        return float(text)
-    except ValueError as exc:
-        raise ValueError(f"{field} must be numeric.") from exc
+def imaging_sequence_value(
+    metadata: Dict[str, Any],
+) -> str:
+    """Return the one MRI sequence assigned to this image."""
 
-
-def parse_pixel_spacing(value: Any) -> Optional[list[float]]:
-    text = str(value or "").strip()
-    if not text:
-        return None
-
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            "Pixel Spacing must be a JSON array, for example [0.5, 0.5]."
-        ) from exc
-
-    if (
-        not isinstance(parsed, list)
-        or len(parsed) != 2
-        or not all(isinstance(item, (int, float)) for item in parsed)
-    ):
-        raise ValueError(
-            "Pixel Spacing must be a two-number JSON array."
+    for field_name in MRI_SEQUENCE_FIELDS:
+        value = metadata.get(
+            field_name
         )
 
-    return [float(item) for item in parsed]
+        if type(value) is list:
+            selected = [
+                str(item).strip()
+                for item in value
+                if str(item).strip()
+            ]
 
+            if len(selected) == 1:
+                return selected[0]
 
-def normalize_optional_metadata(
-    raw: Dict[str, Any],
-    *,
-    modality: str,
-) -> Dict[str, Any]:
-    if not isinstance(raw, dict):
-        raise ValueError("optional_metadata must be a JSON object.")
+            if selected:
+                return ""
 
-    normalized: Dict[str, Any] = {}
-
-    for key, value in raw.items():
-        text = str(value).strip()
-        if not text:
             continue
 
-        if key in NUMERIC_OPTIONAL_FIELDS:
-            normalized[key] = parse_optional_number(text, key)
-        elif key == "pixel_spacing":
-            normalized[key] = parse_pixel_spacing(text)
-        elif key == "run":
-            normalized[key] = clean_optional_entity(text, "run")
-        elif key == "part":
-            normalized[key] = clean_optional_entity(text, "part")
-        elif key in {"acq", "rec"}:
-            normalized[key] = clean_label(text, key, optional=True)
-        else:
-            normalized[key] = text
+        text = str(
+            value
+            or ""
+        ).strip()
 
-    if modality == "MRI":
-        allowed = set(MRI_OPTIONAL_MAP) | {"acq", "rec", "run", "part"}
-    else:
-        allowed = set(CT_OPTIONAL_MAP) | {"acq", "rec", "run"}
+        if text:
+            return text
 
-    invalid = sorted(set(normalized) - allowed)
-    if invalid:
+    return ""
+
+
+def load_metadata_validator() -> MetadataValidator:
+    """Load the active CoCANoT dictionary and build the shared validator."""
+    dictionary = load_dictionary(
+        METADATA_DICTIONARY
+    )
+    return MetadataValidator(
+        dictionary
+    )
+
+
+def validate_cocanot_metadata(
+    raw: Dict[str, Any],
+    index: int,
+    validator: MetadataValidator,
+) -> Dict[str, Any]:
+    metadata = raw.get("cocanot_metadata")
+
+    if type(metadata) is not dict:
         raise ValueError(
-            f"Unsupported optional metadata field(s) for {modality}: "
-            + ", ".join(invalid)
+            f"Record {index} is missing the cocanot_metadata object."
         )
 
-    return normalized
+    validation = validator.validate_record(
+        "Imaging",
+        metadata,
+    )
 
-
-def validate_record(raw: Dict[str, Any], index: int) -> Dict[str, Any]:
-    path = Path(str(raw.get("nifti_path", "")).strip()).expanduser().resolve()
-    if not path.is_file() or not path.name.endswith((".nii", ".nii.gz")):
-        raise ValueError(f"Record {index} has an invalid NIfTI path: {path}")
-
-    modality = str(raw.get("imaging_modality", "")).strip()
-    if modality not in {"MRI", "CT"}:
+    if not validation["passes_automatic_validation"]:
+        problems = [
+            result["message"]
+            for result in validation["results"]
+            if result["status"] in {
+                "invalid",
+                "missing_required",
+            }
+        ]
         raise ValueError(
-            f"Record {index} has an unsupported imaging modality: {modality}"
+            f"Record {index} has invalid CoCANoT metadata: "
+            + "; ".join(problems[:5])
         )
 
-    raw_purposes = raw.get("imaging_purpose", [])
-    if not isinstance(raw_purposes, list) or not raw_purposes:
+    if validation["requires_manual_review"] and not raw.get(
+        "metadata_confirmed"
+    ):
         raise ValueError(
-            f"Record {index} requires at least one purpose of imaging."
+            f"Record {index} contains free-text metadata that has not "
+            "been manually confirmed."
         )
 
-    purposes = [str(value).strip() for value in raw_purposes]
-    invalid_purposes = [
-        value for value in purposes if value not in IMAGING_PURPOSE_OPTIONS
-    ]
-    if invalid_purposes:
+    return metadata
+
+def validate_record(
+    raw: Dict[str, Any],
+    index: int,
+    metadata_validator: MetadataValidator,
+) -> Dict[str, Any]:
+    path = Path(
+        str(raw.get("nifti_path", "")).strip()
+    ).expanduser().resolve()
+
+    if not path.is_file() or not path.name.endswith(
+        (".nii", ".nii.gz")
+    ):
         raise ValueError(
-            f"Record {index} has invalid imaging purpose: {invalid_purposes[0]}"
+            f"Record {index} has an invalid NIfTI path: {path}"
         )
 
-    timing = str(raw.get("timing_relative_to_surgery", "")).strip()
-    if timing not in SURGERY_TIMING_OPTIONS:
-        raise ValueError(
-            f"Record {index} has invalid timing relative to surgery: {timing!r}"
-        )
+    metadata = validate_cocanot_metadata(
+        raw,
+        index,
+        metadata_validator,
+    )
+
+    modality = str(
+        metadata.get("Imaging Modality") or ""
+    ).strip()
 
     record: Dict[str, Any] = {
         "nifti_path": path,
-        "project": clean_project(str(raw.get("project", ""))),
+        "project": clean_project(
+            str(raw.get("project", ""))
+        ),
+        "project_description": str(
+            raw.get(
+                "project_description",
+                "",
+            )
+        ).strip(),
         "participant": clean_label(
             str(raw.get("participant_id", "")),
             "participant_id",
@@ -311,29 +285,23 @@ def validate_record(raw: Dict[str, Any], index: int) -> Dict[str, Any]:
             "session_id",
             optional=True,
         ),
-        "cocanot_patient_id": str(
-            raw.get("cocanot_patient_id", "")
-        ).strip(),
-        "surgery_id": str(raw.get("surgery_id", "")).strip(),
-        "image_id": str(raw.get("image_id", "")).strip(),
+        "cocanot_metadata": metadata,
         "imaging_modality": modality,
-        "imaging_purpose": purposes,
-        "timing_relative_to_surgery": timing,
-        "comments": str(raw.get("comments", "")).strip(),
+        "bids_entities": {},
+        "defacing_source": str(
+            raw.get(
+                "defacing_source",
+                ""
+            )
+            or ""
+        ).strip(),
     }
 
-    for key in ("cocanot_patient_id", "surgery_id", "image_id"):
-        if not record[key]:
-            raise ValueError(f"Record {index} is missing required CoCANoT field: {key}")
-
-    optional = normalize_optional_metadata(
-        raw.get("optional_metadata", {}),
-        modality=modality,
-    )
-    record["optional_metadata"] = optional
-
     if modality == "MRI":
-        sequence = str(raw.get("mri_sequence", "")).strip()
+        sequence = imaging_sequence_value(
+            metadata
+        )
+
         if sequence not in MRI_SEQUENCE_MAP:
             raise ValueError(
                 f"Record {index} has an unsupported MRI sequence: {sequence}"
@@ -350,7 +318,7 @@ def validate_record(raw: Dict[str, Any], index: int) -> Dict[str, Any]:
             )
 
         if sequence == "SWI":
-            optional.setdefault("acq", "swi")
+            record["bids_entities"]["acq"] = "swi"
 
         record["mri_sequence"] = sequence
         record["datatype"] = datatype
@@ -365,13 +333,19 @@ def validate_record(raw: Dict[str, Any], index: int) -> Dict[str, Any]:
             ]
             if missing:
                 raise ValueError(
-                    f"Record {index} is DWI but is missing: {', '.join(missing)}"
+                    f"Record {index} is DWI but is missing: "
+                    + ", ".join(missing)
                 )
 
-    else:
+    elif modality == "CT":
         record["mri_sequence"] = ""
         record["datatype"] = "ct"
         record["suffix"] = "ct"
+
+    else:
+        raise ValueError(
+            f"Record {index} has an unsupported imaging modality: {modality}"
+        )
 
     return record
 
@@ -385,25 +359,15 @@ def build_bids_base(
     if record["session"]:
         parts.append(f"ses-{record['session']}")
 
-    optional = record["optional_metadata"]
-
-    acq = str(optional.get("acq", "")).strip()
-    rec = str(optional.get("rec", "")).strip()
-    run = str(optional.get("run", "")).strip()
-    part = str(optional.get("part", "")).strip()
+    acq = str(
+        record["bids_entities"].get("acq", "")
+    ).strip()
 
     if acq:
         parts.append(f"acq-{acq}")
-    if rec:
-        parts.append(f"rec-{rec}")
 
     if run_override is not None:
         parts.append(f"run-{run_override:02d}")
-    elif run:
-        parts.append(f"run-{run}")
-
-    if record["imaging_modality"] == "MRI" and part:
-        parts.append(f"part-{part}")
 
     parts.append(record["suffix"])
     return "_".join(parts)
@@ -420,12 +384,7 @@ def choose_output_base(
     if overwrite or not (data_dir / f"{base}{extension}").exists():
         return base
 
-    existing_run = str(
-        record["optional_metadata"].get("run", "")
-    ).strip()
-    start = int(existing_run or 1) + 1
-
-    for run in range(start, 10000):
+    for run in range(2, 10000):
         candidate = build_bids_base(
             record,
             run_override=run,
@@ -465,22 +424,6 @@ def source_sidecar_metadata(path: Path) -> Dict[str, Any]:
 
     return sidecar
 
-
-def add_optional_fields(
-    sidecar: Dict[str, Any],
-    record: Dict[str, Any],
-) -> None:
-    optional = record["optional_metadata"]
-
-    mapping = (
-        MRI_OPTIONAL_MAP
-        if record["imaging_modality"] == "MRI"
-        else CT_OPTIONAL_MAP
-    )
-
-    for source_key, output_key in mapping.items():
-        if source_key in optional:
-            sidecar[output_key] = optional[source_key]
 
 
 def write_participants(
@@ -551,25 +494,82 @@ def copy_record(
     shutil.copy2(path, output_nifti)
 
     sidecar = source_sidecar_metadata(path)
-    add_optional_fields(sidecar, record)
 
     sidecar["Defaced"] = True
-    sidecar["DefacingSoftware"] = PYDEFACE_NAME
-    sidecar["DefacingSoftwareURL"] = PYDEFACE_URL
 
-    # CoCANoT extension metadata.
-    sidecar["CoCANoTPatientID"] = record["cocanot_patient_id"]
-    sidecar["SurgeryID"] = record["surgery_id"]
-    sidecar["ImageID"] = record["image_id"]
-    sidecar["ImagingModality"] = record["imaging_modality"]
+    if record.get(
+        "defacing_source"
+    ) == "external":
+        sidecar[
+            "DefacingSoftware"
+        ] = "External defacing software"
+        sidecar.pop(
+            "DefacingSoftwareURL",
+            None,
+        )
+    else:
+        sidecar[
+            "DefacingSoftware"
+        ] = PYDEFACE_NAME
+        sidecar[
+            "DefacingSoftwareURL"
+        ] = PYDEFACE_URL
+
+    # CoCANoT metadata validated against the active dictionary.
+    metadata = record["cocanot_metadata"]
+
+    sidecar["CoCANoTSiteID"] = record["site_id"]
+    sidecar["CoCANoTPatientID"] = metadata["CoCANoT Patient ID"]
+    sidecar["ClinicalAssessmentID"] = metadata["Clinical Assessment ID"]
+    sidecar["ImageID"] = metadata["Image ID"]
+
+    surgery_id = str(metadata.get("Surgery ID") or "").strip()
+    if surgery_id:
+        sidecar["SurgeryID"] = surgery_id
+
+    sidecar["ImagingModality"] = metadata["Imaging Modality"]
+
     if record["imaging_modality"] == "MRI":
-        sidecar["MRISequence"] = record["mri_sequence"]
-    sidecar["PurposeOfImaging"] = record["imaging_purpose"]
-    sidecar["TimingRelativeToSurgery"] = record[
-        "timing_relative_to_surgery"
+        sidecar["MRISequence"] = record[
+            "mri_sequence"
+        ]
+
+    sidecar["PurposeOfImaging"] = metadata[
+        "Purpose of Imaging (multiselect)"
     ]
-    if record["comments"]:
-        sidecar["Comments"] = record["comments"]
+
+    other_purpose = str(
+        metadata.get(
+            "Other Purpose of Imaging (if applicable; free text)"
+        )
+        or ""
+    ).strip()
+    if other_purpose:
+        sidecar["OtherPurposeOfImaging"] = other_purpose
+
+    sidecar["TimingRelativeToSurgery"] = metadata[
+        "Timing Relative to Surgery"
+    ]
+
+    sidecar["ImagingFindings"] = metadata[
+        "Imaging Findings (multiselect)"
+    ]
+
+    other_findings = str(
+        metadata.get(
+            "Other Imaging Findings (if applicable; free text)"
+        )
+        or ""
+    ).strip()
+    if other_findings:
+        sidecar["OtherImagingFindings"] = other_findings
+
+    comments = str(
+        metadata.get("Comments (free text)")
+        or ""
+    ).strip()
+    if comments:
+        sidecar["Comments"] = comments
 
     if record["imaging_modality"] == "CT":
         sidecar["CoCANoTExtension"] = (
@@ -614,28 +614,95 @@ def main() -> None:
             "Manifest contains no selected imaging records."
         )
 
+    site_id = str(
+        manifest.get("site_id") or ""
+    ).strip()
+
+    if not site_id:
+        raise SystemExit(
+            "Manifest is missing the CoCANoT Site ID."
+        )
+
+    metadata_validator = load_metadata_validator()
+    metadata_repository = MetadataRepository()
+    data_links = PatientDataLinkStore()
+
     records = [
-        validate_record(record, index)
-        for index, record in enumerate(raw_records, start=1)
+        validate_record(
+            record,
+            index,
+            metadata_validator,
+        )
+        for index, record in enumerate(
+            raw_records,
+            start=1,
+        )
     ]
+
+    for record in records:
+        record["site_id"] = site_id
 
     output_root.mkdir(parents=True, exist_ok=True)
 
     by_project: dict[str, list[str]] = {}
+    project_descriptions: dict[str, str] = {}
+
+    for record in records:
+        project = record["project"]
+        description = record[
+            "project_description"
+        ]
+
+        current = project_descriptions.get(
+            project
+        )
+
+        if (
+            current is not None
+            and current
+            and description
+            and current != description
+        ):
+            raise SystemExit(
+                f"Project {project!r} has more than one Project Description."
+            )
+
+        if description:
+            project_descriptions[
+                project
+            ] = description
+        elif current is None:
+            project_descriptions[
+                project
+            ] = ""
 
     for index, record in enumerate(records, start=1):
         project_dir = output_root / record["project"]
 
+        dataset_description = {
+            "Name": record["project"],
+            "BIDSVersion": str(
+                manifest.get("bids_version")
+                or SUPPORTED_BIDS_VERSION
+            ),
+            "DatasetType": "raw",
+        }
+
+        project_description = (
+            project_descriptions.get(
+                record["project"],
+                "",
+            )
+        )
+
+        if project_description:
+            dataset_description[
+                "Description"
+            ] = project_description
+
         write_json(
             project_dir / "dataset_description.json",
-            {
-                "Name": record["project"],
-                "BIDSVersion": str(
-                    manifest.get("bids_version")
-                    or SUPPORTED_BIDS_VERSION
-                ),
-                "DatasetType": "raw",
-            },
+            dataset_description,
         )
 
         print(
@@ -650,6 +717,55 @@ def main() -> None:
             record,
             output_root,
             args.overwrite,
+        )
+
+        output_json = output.with_name(
+            f"{strip_nifti_suffix(output)}.json"
+        )
+        metadata = record[
+            "cocanot_metadata"
+        ]
+
+        link_context = {
+            "project": record[
+                "project"
+            ],
+            "project_description": record[
+                "project_description"
+            ],
+            "session_id": record[
+                "session"
+            ],
+            "bids_data_path": str(
+                output.resolve()
+            ),
+            "bids_sidecar_path": str(
+                output_json.resolve()
+            ),
+            "defacing_source": record.get(
+                "defacing_source",
+                "",
+            ),
+        }
+
+        metadata_repository.save_record(
+            record["site_id"],
+            "Imaging",
+            metadata,
+            source="imaging_pipeline",
+            context=link_context,
+        )
+
+        data_links.save_link(
+            record["site_id"],
+            metadata[
+                "CoCANoT Patient ID"
+            ],
+            "Imaging",
+            metadata[
+                "Image ID"
+            ],
+            link_context,
         )
 
         by_project.setdefault(

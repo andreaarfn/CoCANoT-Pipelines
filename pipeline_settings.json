@@ -1,14 +1,26 @@
 {
   "electrophysiology": {
-    "input_dirs": [],
-    "derivatives_dir": "",
-    "bids_output_dir": ""
+    "input_dirs": [
+      "/Users/arifi020/Documents/MockPipelines/EEGPipeline/sample_data/IER008",
+      "/Users/arifi020/Documents/MockPipelines/EEGPipeline/sample_data/B044"
+    ],
+    "derivatives_dir": "/Users/arifi020/Documents/CoCANoT/testephyspipe/der",
+    "bids_output_dir": "/Users/arifi020/Documents/CoCANoT/testephyspipe/bids"
   },
   "imaging": {
-    "input_dirs": [],
-    "derivatives_dir": "",
-    "bids_output_dir": "",
-    "dicom_input_dirs": [],
-    "nifti_input_dirs": []
+    "input_dirs": [
+      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/dicom_files/patient15",
+      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/dicom_files/patient14",
+      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/nifti_output/Patient1/SER_0002/OBJ_0001"
+    ],
+    "derivatives_dir": "/Users/arifi020/Documents/CoCANoT/testimagingpipe/deri",
+    "bids_output_dir": "/Users/arifi020/Documents/CoCANoT/testimagingpipe/bids",
+    "dicom_input_dirs": [
+      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/dicom_files/patient15",
+      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/dicom_files/patient14"
+    ],
+    "nifti_input_dirs": [
+      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/nifti_output/Patient1/SER_0002/OBJ_0001/Sag_T1_MP2RAGE_MAYO_7.nii.gz"
+    ]
   }
 }

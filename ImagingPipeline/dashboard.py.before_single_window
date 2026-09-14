@@ -512,8 +512,8 @@ class FolderSelector(ttk.Frame):
         self.browse_button.configure(state=state)
 
 
-class ImagingReviewWindow(ttk.Frame):
-    """Embedded page for reviewing headers and raw/defaced NIfTI data."""
+class ImagingReviewWindow(tk.Toplevel):
+    """Review headers and interactively inspect raw and defaced NIfTI data."""
 
     def __init__(
         self,
@@ -522,10 +522,8 @@ class ImagingReviewWindow(ttk.Frame):
         scrubbed_dir: Path,
         defaced_dir: Path,
         state_path: Path,
-        on_close: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(parent)
-        self.on_close = on_close
         self.prepared_dir = prepared_dir
         self.scrubbed_dir = scrubbed_dir
         self.defaced_dir = defaced_dir
@@ -546,6 +544,11 @@ class ImagingReviewWindow(ttk.Frame):
         self.current_volume = 0
         self.intensity_limits = (0.0, 1.0)
 
+        self.title("Imaging Header and Defacing Review")
+        self.geometry("1600x980")
+        self.minsize(1180, 800)
+        self.transient(parent)
+
         self.field_var = tk.StringVar()
         self.value_var = tk.StringVar()
         self.status_var = tk.StringVar(
@@ -560,12 +563,6 @@ class ImagingReviewWindow(ttk.Frame):
         self._build_items()
         self._build_interface()
         self._populate_file_list()
-
-    def _close_page(self) -> None:
-        if self.on_close is not None:
-            self.on_close()
-        else:
-            self.destroy()
 
     def _load_state(self) -> dict[str, object]:
         if not self.state_path.exists():
@@ -1117,8 +1114,8 @@ class ImagingReviewWindow(ttk.Frame):
 
         ttk.Button(
             footer,
-            text="Back to Imaging",
-            command=self._close_page,
+            text="Close",
+            command=self.destroy,
         ).pack(side="right")
 
         ttk.Button(
@@ -2569,7 +2566,7 @@ class MetadataConfirmationWindow(tk.Toplevel):
         self.title("Confirm Imaging Metadata")
         self.geometry("1120x760")
         self.minsize(900, 620)
-        self.transient(parent.winfo_toplevel())
+        self.transient(parent)
         self.grab_set()
 
         self.status_var = tk.StringVar(
@@ -2883,8 +2880,8 @@ def imaging_sequence_value(
     return ""
 
 
-class BIDSMetadataWindow(ttk.Frame):
-    """Embedded dictionary-driven CoCANoT Imaging metadata and BIDS page."""
+class BIDSMetadataWindow(tk.Toplevel):
+    """Dictionary-driven CoCANoT Imaging metadata plus BIDS organization."""
 
     MRI_SEQUENCE_MAP = {
         "T1": ("anat", "T1w"),
@@ -2901,11 +2898,9 @@ class BIDSMetadataWindow(ttk.Frame):
         accepted_files: list[Path],
         output_dir: Path,
         overwrite: bool,
-        on_close: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(parent)
         self.parent_dashboard = parent
-        self.on_close = on_close
         self.accepted_files = accepted_files
         self.output_dir = output_dir
         self.overwrite = overwrite
@@ -2943,15 +2938,14 @@ class BIDSMetadataWindow(ttk.Frame):
             value=f"Site: {self.site_id}"
         )
 
+        self.title("Imaging Metadata & BIDS")
+        self.geometry("1600x1000")
+        self.minsize(1200, 760)
+        self.transient(parent)
+
         self._build_interface()
         self._load_files()
         self._refresh_conditional_fields()
-
-    def _close_page(self) -> None:
-        if self.on_close is not None:
-            self.on_close()
-        else:
-            self.destroy()
 
     def _scroll_metadata_with_wheel(
         self,
@@ -3259,14 +3253,6 @@ class BIDSMetadataWindow(ttk.Frame):
             site,
             text="Change Site",
             command=self._change_site,
-        ).pack(
-            side="left",
-            padx=(8, 0),
-        )
-        ttk.Button(
-            site,
-            text="Back to Imaging",
-            command=self._close_page,
         ).pack(
             side="left",
             padx=(8, 0),
@@ -5166,23 +5152,16 @@ class BIDSMetadataWindow(ttk.Frame):
         self.parent_dashboard.run_command(
             command,
             "Imaging BIDS / CoCANoT conversion",
-            on_success=self._close_page,
+            on_success=self.destroy,
         )
 
 
-class ImagingDashboard(ttk.Frame):
-    def __init__(
-        self,
-        parent,
-        site_id="",
-        on_back=None,
-        on_review_patients=None,
-    ) -> None:
-        super().__init__(parent)
-
-        self.site_id = str(site_id or "").strip()
-        self.on_back = on_back
-        self.on_review_patients = on_review_patients
+class ImagingDashboard(tk.Tk):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("Imaging DeID Dashboard")
+        self.geometry("1180x860")
+        self.minsize(980, 720)
 
         self.output_queue: Queue[str] = Queue()
         self.running_process: subprocess.Popen[str] | None = None
@@ -5213,6 +5192,7 @@ class ImagingDashboard(ttk.Frame):
         self.status_var = tk.StringVar(value="Ready")
 
         self.after(100, self._process_output_queue)
+        self.protocol("WM_DELETE_WINDOW", self._close_dashboard)
         self._show_home()
 
     def _clear_window(self) -> None:
@@ -5223,51 +5203,21 @@ class ImagingDashboard(ttk.Frame):
         if self.pipeline_busy:
             messagebox.showwarning(
                 "Pipeline busy",
-                (
-                    "Finish or stop the current operation before "
-                    "leaving the processing screen."
-                ),
+                "Finish or stop the current operation before leaving the processing screen.",
                 parent=self,
             )
             return
 
         self._clear_window()
 
-        page = ttk.Frame(
-            self,
-            padding=(16, 12, 16, 16),
-        )
-        page.pack(
-            fill="both",
-            expand=True,
-        )
-        page.columnconfigure(0, weight=1)
-        page.rowconfigure(1, weight=1)
-
-        if self.on_back is not None:
-            navigation = ttk.Frame(page)
-            navigation.grid(
-                row=0,
-                column=0,
-                sticky="ew",
-                pady=(0, 8),
-            )
-
-            ttk.Button(
-                navigation,
-                text="Back",
-                command=self._return_to_cocanot,
-            ).pack(side="left")
-
         home = ImagingHome(
-            page,
+            self,
             on_process=self._show_processing,
             on_review_patients=self._open_patient_explorer,
         )
-        home.grid(
-            row=1,
-            column=0,
-            sticky="nsew",
+        home.pack(
+            fill="both",
+            expand=True,
         )
 
     def _show_processing(self) -> None:
@@ -5276,21 +5226,6 @@ class ImagingDashboard(ttk.Frame):
         self._refresh_all_input_lists()
 
     def _open_patient_explorer(self) -> None:
-        if self.pipeline_busy:
-            messagebox.showwarning(
-                "Pipeline busy",
-                (
-                    "Finish or stop the current operation before "
-                    "opening Patient Data Review."
-                ),
-                parent=self,
-            )
-            return
-
-        if self.on_review_patients is not None:
-            self.on_review_patients()
-            return
-
         metadata_dashboard = (
             PROJECT_ROOT
             / "MetadataPipeline"
@@ -5320,21 +5255,6 @@ class ImagingDashboard(ttk.Frame):
                 str(exc),
                 parent=self,
             )
-
-    def _return_to_cocanot(self) -> None:
-        if self.pipeline_busy:
-            messagebox.showwarning(
-                "Pipeline busy",
-                (
-                    "Finish or stop the current operation before "
-                    "leaving Imaging."
-                ),
-                parent=self,
-            )
-            return
-
-        if self.on_back is not None:
-            self.on_back()
 
     def _read_saved_settings(self) -> dict:
         try:
@@ -6714,25 +6634,16 @@ class ImagingDashboard(ttk.Frame):
         if config is None:
             return
         stages = self._stage_paths(config)
-        self._clear_window()
         review = ImagingReviewWindow(
             self,
             stages["converted"],
             stages["scrubbed"],
             stages["defaced"],
             stages["review_state"],
-            on_close=self._show_processing,
         )
-        review.pack(fill="both", expand=True)
-
         if not review.items:
             review.destroy()
-            self._show_processing()
-            messagebox.showerror(
-                "No reviewable images",
-                "Run preparation, header scrubbing, and defacing first.",
-                parent=self,
-            )
+            messagebox.showerror("No reviewable images", "Run preparation, header scrubbing, and defacing first.")
 
     def _accepted_files(
         self,
@@ -6903,15 +6814,12 @@ class ImagingDashboard(ttk.Frame):
             ):
                 return
 
-        self._clear_window()
-        page = BIDSMetadataWindow(
+        BIDSMetadataWindow(
             self,
             accepted,
             config.imaging.bids_output_dir,
             self.overwrite_var.get(),
-            on_close=self._show_processing,
         )
-        page.pack(fill="both", expand=True)
 
     def run_command(
         self,
@@ -7025,36 +6933,16 @@ class ImagingDashboard(ttk.Frame):
         return f'"{argument}"' if " " in argument else argument
 
     def _close_dashboard(self) -> None:
-        if (
-            self.running_process is not None
-            and self.running_process.poll() is None
-        ):
-            if not messagebox.askyesno(
-                "Operation running",
-                "Stop the current operation and close?",
-                parent=self,
-            ):
+        if self.running_process is not None and self.running_process.poll() is None:
+            if not messagebox.askyesno("Operation running", "Stop the current operation and close?"):
                 return
-
             self.running_process.terminate()
-
-        self.winfo_toplevel().destroy()
+        self.destroy()
 
 
 def main() -> None:
-    root = tk.Tk()
-    root.title("Imaging DeID Dashboard")
-    root.geometry("1180x860")
-    root.minsize(980, 720)
-
-    app = ImagingDashboard(root)
-    app.pack(fill="both", expand=True)
-
-    root.protocol(
-        "WM_DELETE_WINDOW",
-        app._close_dashboard,
-    )
-    root.mainloop()
+    app = ImagingDashboard()
+    app.mainloop()
 
 
 if __name__ == "__main__":
