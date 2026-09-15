@@ -20,7 +20,8 @@
       "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/dicom_files/patient14"
     ],
     "nifti_input_dirs": [
-      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/nifti_output/Patient1/SER_0002/OBJ_0001/Sag_T1_MP2RAGE_MAYO_7.nii.gz"
+      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/nifti_output/Patient1/SER_0002/OBJ_0001/Sag_T1_MP2RAGE_MAYO_7.nii.gz",
+      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/nifti_output/Patient1/SER_0002/OBJ_0001"
     ]
   }
 }

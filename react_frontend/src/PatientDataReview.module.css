@@ -1,0 +1,180 @@
+.topActions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.backButton,.editButton,.refreshButton,.timeControls button,.channelHeader button{min-height:35px;padding:0 11px;display:flex;align-items:center;gap:6px;border:1px solid #c9d5df;border-radius:7px;background:#fff;color:#314961;font-weight:700}.backButton{padding-left:0;border:0;background:transparent;color:#1767b1}.editButton,.channelHeader button{border-color:#2470ae;color:#1767b1}.heading{display:flex;gap:13px;align-items:flex-start;margin-bottom:14px}.headingIcon{width:48px;height:48px;display:grid;place-items:center;border-radius:10px;background:#e9f3f9;color:#2b6684}.heading span{display:block;color:#47728b;font-size:10px;font-weight:850;letter-spacing:.09em}.heading h1{margin:4px 0;font-size:27px}.heading p{margin:0;color:#65778c;line-height:1.5}.metadataCard,.viewerCard,.controlsCard,.channelCard,.signalCard{margin-bottom:12px;padding:15px;border:1px solid #d9e3ec;border-radius:9px;background:#fff}.metadataCard>div:first-child{display:flex;justify-content:space-between;gap:12px}.metadataCard>div>span{color:#718195;font-size:10px}.metadataCard dl{margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px}.metadataCard dl>div{min-width:170px;padding:7px 9px;border-radius:6px;background:#f6f9fb}.metadataCard dt{color:#6a7b8e;font-size:9px;font-weight:750}.metadataCard dd{margin:2px 0 0;color:#2f465f;font-size:11px}.viewerHeader{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.viewerHeader strong,.viewerHeader span{display:block}.viewerHeader span{margin-top:3px;color:#718195;font-size:10px}.imageGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.imagePanel>span{display:block;margin-bottom:5px;color:#4d6279;font-size:11px;font-weight:750}.imagePanel>div{aspect-ratio:1/1;display:grid;place-items:center;overflow:hidden;border-radius:7px;background:#14202c}.imagePanel img{width:100%;height:100%;object-fit:contain}.sliderStack{margin-top:12px;display:grid;gap:8px}.sliderRow{display:grid;grid-template-columns:100px 1fr 72px;align-items:center;gap:9px;color:#52667c;font-size:10px}.sliderRow strong{text-align:right}.viewerNote{margin:10px 0 0;color:#5f7489;font-size:10px}.errorBox{margin-bottom:12px;padding:12px;border:1px solid #d99fa5;border-radius:7px;background:#fff5f6;color:#7c3038}.loading{padding:40px;border:1px dashed #bfcbd6;border-radius:8px;color:#718195;text-align:center}.controlsCard{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}.recordingInfo strong,.recordingInfo span{display:block}.recordingInfo span{margin-top:2px;color:#718195;font-size:10px}.timeControls{display:flex;align-items:end;gap:7px}.timeControls label{display:grid;gap:4px;color:#53687e;font-size:9px;font-weight:750}.timeControls select{min-height:35px;padding:0 8px;border:1px solid #c9d5df;border-radius:6px}.timeSlider{grid-column:1/-1;display:grid;grid-template-columns:150px 1fr;align-items:center;gap:8px;color:#53687e;font-size:10px}.channelHeader{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.channelHeader strong,.channelHeader span{display:block}.channelHeader span{margin-top:2px;color:#718195;font-size:10px}.channelGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px 8px}.channelGrid label{display:flex;align-items:center;gap:6px;padding:5px;border-radius:5px;background:#f7f9fb;color:#4e6378;font-size:10px}.signalCard{padding:8px 12px}.signalStrip{display:grid;grid-template-columns:115px minmax(0,1fr);align-items:center;gap:8px;border-bottom:1px solid #edf1f4}.signalStrip:last-child{border-bottom:0}.signalLabel strong,.signalLabel span{display:block}.signalLabel strong{font-size:10px}.signalLabel span{color:#7a8998;font-size:9px}.signalStrip svg{width:100%;height:90px;background:#fbfcfd}.signalLine{fill:none;stroke:#2b6684;stroke-width:1.2;vector-effect:non-scaling-stroke}.zeroLine{stroke:#dfe6ec;stroke-width:1;vector-effect:non-scaling-stroke}@media(max-width:900px){.imageGrid,.channelGrid{grid-template-columns:1fr 1fr}.controlsCard{grid-template-columns:1fr}.timeSlider{grid-column:auto}.signalStrip{grid-template-columns:90px 1fr}}@media(max-width:650px){.imageGrid,.channelGrid{grid-template-columns:1fr}.topActions,.channelHeader,.timeControls{align-items:stretch;flex-direction:column}.sliderRow,.timeSlider{grid-template-columns:1fr}}
+
+.channelActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modeToggle {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid #c9d5df;
+  border-radius: 7px;
+  background: #f5f8fa;
+}
+
+.modeToggle button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #52677c;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.modeToggle .modeActive {
+  background: #1767b1;
+  color: #fff;
+}
+
+.signalLabel small {
+  display: block;
+  margin-top: 4px;
+  color: #8090a0;
+  font-size: 8px;
+}
+
+.timeAxis {
+  margin-left: 123px;
+  padding: 6px 8px 0;
+  border-top: 1px solid #e7edf2;
+}
+
+.timeAxisLabel {
+  display: block;
+  margin-bottom: 3px;
+  color: #52677c;
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.timeTicks {
+  display: flex;
+  justify-content: space-between;
+  color: #6e7f91;
+  font-size: 9px;
+}
+
+.overlayWrap {
+  padding: 4px 0 8px;
+}
+
+.overlayHeader {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.overlayHeader strong,
+.overlayHeader span {
+  display: block;
+}
+
+.overlayHeader > div:first-child > span {
+  max-width: 620px;
+  margin-top: 3px;
+  color: #718195;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.overlayLegend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px 10px;
+}
+
+.overlayLegend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #52677c;
+  font-size: 9px;
+}
+
+.overlayLegend i {
+  width: 18px;
+  height: 3px;
+  display: inline-block;
+  border-radius: 999px;
+}
+
+.overlayChart {
+  position: relative;
+  padding-left: 28px;
+}
+
+.overlayChart svg {
+  width: 100%;
+  height: 330px;
+  border: 1px solid #e5ebf0;
+  border-radius: 6px;
+  background: #fbfcfd;
+}
+
+.overlayYAxis {
+  position: absolute;
+  left: -45px;
+  top: 50%;
+  width: 120px;
+  color: #52677c;
+  font-size: 9px;
+  font-weight: 750;
+  text-align: center;
+  transform: rotate(-90deg);
+}
+
+.gridLine {
+  stroke: #e7edf2;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlayLine {
+  fill: none;
+  stroke-width: 1.35;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlayLine1 {
+  stroke: #255f85;
+  background: #255f85;
+}
+
+.overlayLine2 {
+  stroke: #8b5a2b;
+  background: #8b5a2b;
+}
+
+.overlayLine3 {
+  stroke: #607744;
+  background: #607744;
+}
+
+.overlayLine4 {
+  stroke: #76518b;
+  background: #76518b;
+}
+
+@media (max-width: 800px) {
+  .channelActions,
+  .overlayHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .overlayLegend {
+    justify-content: flex-start;
+  }
+
+  .timeAxis {
+    margin-left: 0;
+  }
+}
