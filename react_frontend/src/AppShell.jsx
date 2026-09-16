@@ -8,7 +8,6 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  Play,
   UploadCloud,
   Users,
 } from "lucide-react";
@@ -133,7 +132,6 @@ export default function AppShell({
                         onNavigate("imaging-processing")
                       }
                     >
-                      <Play size={15} />
                       Process Imaging
                     </button>
                   )}
@@ -151,8 +149,7 @@ export default function AppShell({
                         onNavigate("ephys-processing")
                       }
                     >
-                      <Play size={15} />
-                      Process Electrophysiology
+                      Process Recordings
                     </button>
                   )}
 

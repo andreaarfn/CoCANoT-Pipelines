@@ -5074,6 +5074,475 @@ class CoCANoTAPI:
         )
 
 
+
+    @staticmethod
+    def _metadata_comparison_projection(
+        metadata: dict[str, Any],
+        rules: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """
+        Compare only MR-defined, non-system-generated fields.
+
+        This prevents Clinical Assessment ID and other generated values from
+        making an otherwise identical upload look changed.
+        """
+        projection: dict[str, Any] = {}
+
+        for rule in rules:
+            if bool(
+                rule.get(
+                    "system_generated",
+                    False,
+                )
+            ):
+                continue
+
+            field_name = str(
+                rule.get(
+                    "field_name",
+                    "",
+                )
+            ).strip()
+
+            if not field_name:
+                continue
+
+            value = metadata.get(
+                field_name
+            )
+
+            if isinstance(
+                value,
+                list,
+            ):
+                projection[
+                    field_name
+                ] = [
+                    str(item).strip()
+                    for item in value
+                    if str(item).strip()
+                ]
+            elif value is None:
+                projection[
+                    field_name
+                ] = ""
+            elif isinstance(
+                value,
+                str,
+            ):
+                projection[
+                    field_name
+                ] = value.strip()
+            else:
+                projection[
+                    field_name
+                ] = value
+
+        return projection
+
+    def _metadata_batch_difference_status(
+        self,
+        table_name: str,
+        metadata: dict[str, Any],
+        rules: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """
+        Classify a staged row without mutating storage.
+
+        Clinical classification follows the same MR-driven tracked-field
+        concept as save_clinical_assessment(). Historical assessments are
+        treated as immutable: a differing historical match is blocked for
+        manual review instead of being overwritten.
+        """
+        clean = self._normalize_metadata_values(
+            dict(metadata or {}),
+            rules,
+        )
+        patient_id = str(
+            clean.get(
+                "CoCANoT Patient ID",
+                "",
+            )
+            or ""
+        ).strip()
+
+        base = {
+            "existing_record_id": "",
+            "has_changes": True,
+            "requires_review": False,
+            "immutable": False,
+            "import_allowed": True,
+        }
+
+        if not patient_id:
+            return {
+                **base,
+                "difference_status": "New",
+                "proposed_action": "Create record",
+            }
+
+        incoming_projection = (
+            self._metadata_comparison_projection(
+                clean,
+                rules,
+            )
+        )
+
+        if table_name == "Clinical":
+            dictionary = load_dictionary(
+                METADATA_DICTIONARY
+            )
+            tracked = {
+                str(field).strip()
+                for field in tracked_clinical_fields(
+                    dictionary
+                )
+                if str(field).strip()
+            }
+
+            assessments = (
+                self.repository.clinical_assessments(
+                    self.get_site_id(),
+                    patient_id,
+                )
+            )
+
+            if not assessments:
+                return {
+                    **base,
+                    "difference_status": "New",
+                    "proposed_action": (
+                        "Create first Clinical Assessment"
+                    ),
+                }
+
+            current = assessments[0]
+            uploaded_assessment_id = str(
+                clean.get(
+                    "Clinical Assessment ID",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            projections: list[
+                tuple[
+                    dict[str, Any],
+                    dict[str, Any],
+                ]
+            ] = []
+
+            for record in assessments:
+                existing_clean = (
+                    self._normalize_metadata_values(
+                        dict(
+                            record.get(
+                                "metadata",
+                                {},
+                            )
+                            or {}
+                        ),
+                        rules,
+                    )
+                )
+                projections.append(
+                    (
+                        record,
+                        self._metadata_comparison_projection(
+                            existing_clean,
+                            rules,
+                        ),
+                    )
+                )
+
+            def tracked_projection(
+                projection: dict[str, Any],
+            ) -> dict[str, Any]:
+                return {
+                    key: projection.get(
+                        key,
+                        "",
+                    )
+                    for key in tracked
+                }
+
+            # If the upload names a CA explicitly, honor that identity.
+            if uploaded_assessment_id:
+                matched = next(
+                    (
+                        pair
+                        for pair in projections
+                        if str(
+                            pair[0].get(
+                                "record_id",
+                                "",
+                            )
+                        )
+                        == uploaded_assessment_id
+                    ),
+                    None,
+                )
+
+                if matched is not None:
+                    record, existing_projection = (
+                        matched
+                    )
+                    is_current = (
+                        str(
+                            record.get(
+                                "record_id",
+                                "",
+                            )
+                        )
+                        == str(
+                            current.get(
+                                "record_id",
+                                "",
+                            )
+                        )
+                    )
+                    exact = (
+                        existing_projection
+                        == incoming_projection
+                    )
+
+                    if exact:
+                        return {
+                            **base,
+                            "difference_status": "Unchanged",
+                            "proposed_action": "Skip unchanged",
+                            "existing_record_id": str(
+                                record.get(
+                                    "record_id",
+                                    "",
+                                )
+                            ),
+                            "has_changes": False,
+                            "import_allowed": False,
+                            "immutable": not is_current,
+                        }
+
+                    if not is_current:
+                        return {
+                            **base,
+                            "difference_status": (
+                                "Historical review"
+                            ),
+                            "proposed_action": (
+                                "Historical CA is immutable; review differences"
+                            ),
+                            "existing_record_id": str(
+                                record.get(
+                                    "record_id",
+                                    "",
+                                )
+                            ),
+                            "requires_review": True,
+                            "immutable": True,
+                            "import_allowed": False,
+                        }
+
+            # Exact duplicate against any assessment: always skip.
+            exact_match = next(
+                (
+                    pair
+                    for pair in projections
+                    if pair[1]
+                    == incoming_projection
+                ),
+                None,
+            )
+
+            if exact_match is not None:
+                record = exact_match[
+                    0
+                ]
+                return {
+                    **base,
+                    "difference_status": "Unchanged",
+                    "proposed_action": "Skip unchanged",
+                    "existing_record_id": str(
+                        record.get(
+                            "record_id",
+                            "",
+                        )
+                    ),
+                    "has_changes": False,
+                    "import_allowed": False,
+                    "immutable": (
+                        str(
+                            record.get(
+                                "record_id",
+                                "",
+                            )
+                        )
+                        != str(
+                            current.get(
+                                "record_id",
+                                "",
+                            )
+                        )
+                    ),
+                }
+
+            current_projection = projections[
+                0
+            ][
+                1
+            ]
+            current_tracked = tracked_projection(
+                current_projection
+            )
+            incoming_tracked = tracked_projection(
+                incoming_projection
+            )
+
+            # If tracked values identify an older assessment, do not
+            # silently correct history.
+            historical_tracked_match = next(
+                (
+                    pair
+                    for pair in projections[
+                        1:
+                    ]
+                    if tracked_projection(
+                        pair[
+                            1
+                        ]
+                    )
+                    == incoming_tracked
+                ),
+                None,
+            )
+
+            if historical_tracked_match is not None:
+                return {
+                    **base,
+                    "difference_status": (
+                        "Historical review"
+                    ),
+                    "proposed_action": (
+                        "Possible historical CA correction; manual review required"
+                    ),
+                    "existing_record_id": str(
+                        historical_tracked_match[
+                            0
+                        ].get(
+                            "record_id",
+                            "",
+                        )
+                    ),
+                    "requires_review": True,
+                    "immutable": True,
+                    "import_allowed": False,
+                }
+
+            if incoming_tracked == current_tracked:
+                return {
+                    **base,
+                    "difference_status": "Correction",
+                    "proposed_action": (
+                        "Correct current Clinical Assessment"
+                    ),
+                    "existing_record_id": str(
+                        current.get(
+                            "record_id",
+                            "",
+                        )
+                    ),
+                }
+
+            return {
+                **base,
+                "difference_status": "New assessment",
+                "proposed_action": (
+                    "Create new Clinical Assessment"
+                ),
+                "existing_record_id": str(
+                    current.get(
+                        "record_id",
+                        "",
+                    )
+                ),
+            }
+
+        if table_name == "Surgical":
+            record_id = str(
+                clean.get(
+                    "Surgery ID",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if not record_id:
+                return {
+                    **base,
+                    "difference_status": "New",
+                    "proposed_action": "Create Surgical record",
+                }
+
+            existing = self.repository.get_record(
+                self.get_site_id(),
+                "Surgical",
+                record_id,
+                patient_id=patient_id,
+            )
+
+            if existing is None:
+                return {
+                    **base,
+                    "difference_status": "New",
+                    "proposed_action": "Create Surgical record",
+                }
+
+            existing_clean = (
+                self._normalize_metadata_values(
+                    dict(
+                        existing.get(
+                            "metadata",
+                            {},
+                        )
+                        or {}
+                    ),
+                    rules,
+                )
+            )
+            existing_projection = (
+                self._metadata_comparison_projection(
+                    existing_clean,
+                    rules,
+                )
+            )
+            unchanged = (
+                existing_projection
+                == incoming_projection
+            )
+
+            return {
+                **base,
+                "difference_status": (
+                    "Unchanged"
+                    if unchanged
+                    else "Changed"
+                ),
+                "proposed_action": (
+                    "Skip unchanged"
+                    if unchanged
+                    else "Update existing Surgical record"
+                ),
+                "existing_record_id": record_id,
+                "has_changes": not unchanged,
+                "import_allowed": not unchanged,
+            }
+
+        return {
+            **base,
+            "difference_status": "New",
+            "proposed_action": "Create record",
+        }
+
+
     def metadata_batch_choose_file(
         self,
         table_name: str,
@@ -5139,20 +5608,39 @@ class CoCANoTAPI:
                 }
             ]
 
+            difference = (
+                self._metadata_batch_difference_status(
+                    table_name,
+                    clean,
+                    rules,
+                )
+            )
+
             preview.append(
                 {
                     "row_number": row_number,
-                    "include": not problems,
+                    "include": (
+                        not problems
+                        and bool(
+                            difference.get(
+                                "import_allowed",
+                                True,
+                            )
+                        )
+                    ),
                     "patient_id": str(
                         clean.get("CoCANoT Patient ID", "") or ""
                     ).strip(),
                     "metadata": clean,
                     "problems": problems,
                     "status": (
-                        "Valid"
-                        if not problems
-                        else "Needs attention"
+                        "Needs attention"
+                        if problems
+                        else difference[
+                            "difference_status"
+                        ]
                     ),
+                    **difference,
                 }
             )
 
@@ -5168,6 +5656,27 @@ class CoCANoTAPI:
             ),
             "invalid_count": sum(
                 1 for item in preview if item["problems"]
+            ),
+            "new_count": sum(
+                1
+                for item in preview
+                if item.get(
+                    "difference_status"
+                ) == "New"
+            ),
+            "changed_count": sum(
+                1
+                for item in preview
+                if item.get(
+                    "difference_status"
+                ) == "Changed"
+            ),
+            "unchanged_count": sum(
+                1
+                for item in preview
+                if item.get(
+                    "difference_status"
+                ) == "Unchanged"
             ),
             "rows": preview,
         }
@@ -5212,6 +5721,14 @@ class CoCANoTAPI:
                 }
             ]
 
+            difference = (
+                self._metadata_batch_difference_status(
+                    table_name,
+                    clean,
+                    rules,
+                )
+            )
+
             validated.append(
                 {
                     **dict(item),
@@ -5221,10 +5738,13 @@ class CoCANoTAPI:
                     "metadata": clean,
                     "problems": problems,
                     "status": (
-                        "Valid"
-                        if not problems
-                        else "Needs attention"
+                        "Needs attention"
+                        if problems
+                        else difference[
+                            "difference_status"
+                        ]
                     ),
+                    **difference,
                 }
             )
 
@@ -5233,6 +5753,9 @@ class CoCANoTAPI:
                 item["problems"]
                 for item in validated
                 if bool(item.get("include", True))
+                and item.get(
+                    "difference_status"
+                ) != "Unchanged"
             ),
             "rows": validated,
             "valid_count": sum(
@@ -5240,6 +5763,27 @@ class CoCANoTAPI:
             ),
             "invalid_count": sum(
                 1 for item in validated if item["problems"]
+            ),
+            "new_count": sum(
+                1
+                for item in validated
+                if item.get(
+                    "difference_status"
+                ) == "New"
+            ),
+            "changed_count": sum(
+                1
+                for item in validated
+                if item.get(
+                    "difference_status"
+                ) == "Changed"
+            ),
+            "unchanged_count": sum(
+                1
+                for item in validated
+                if item.get(
+                    "difference_status"
+                ) == "Unchanged"
             ),
         }
 
@@ -5253,16 +5797,39 @@ class CoCANoTAPI:
             rows,
         )
 
+        unchanged = [
+            item
+            for item in validated["rows"]
+            if item.get(
+                "difference_status"
+            ) == "Unchanged"
+        ]
+
         included = [
             item
             for item in validated["rows"]
             if bool(item.get("include", True))
+            and item.get(
+                "difference_status"
+            ) != "Unchanged"
         ]
 
         blocked = [
             item
             for item in included
             if item["problems"]
+            or bool(
+                item.get(
+                    "requires_review",
+                    False,
+                )
+            )
+            or not bool(
+                item.get(
+                    "import_allowed",
+                    True,
+                )
+            )
         ]
 
         if blocked:
@@ -5270,13 +5837,25 @@ class CoCANoTAPI:
                 "ok": False,
                 "imported": 0,
                 "failed": len(blocked),
+                "skipped_unchanged": len(
+                    unchanged
+                ),
                 "rows": validated["rows"],
                 "problems": [
                     (
                         f"Row {item['row_number']}: "
-                        + "; ".join(
-                            problem["message"]
-                            for problem in item["problems"]
+                        + (
+                            "; ".join(
+                                problem["message"]
+                                for problem in item["problems"]
+                            )
+                            if item["problems"]
+                            else str(
+                                item.get(
+                                    "proposed_action",
+                                    "Manual review required",
+                                )
+                            )
                         )
                     )
                     for item in blocked[:20]
@@ -5284,8 +5863,30 @@ class CoCANoTAPI:
             }
 
         imported = 0
+        created = 0
+        updated = 0
         failed = 0
         results: list[dict[str, Any]] = []
+
+        for item in unchanged:
+            results.append(
+                {
+                    "row_number": item[
+                        "row_number"
+                    ],
+                    "status": "Skipped - unchanged",
+                    "record_id": str(
+                        item.get(
+                            "existing_record_id",
+                            "",
+                        )
+                        or ""
+                    ),
+                    "message": (
+                        "No metadata differences were detected."
+                    ),
+                }
+            )
 
         for item in included:
             try:
@@ -5306,10 +5907,20 @@ class CoCANoTAPI:
                     )
 
                 imported += 1
+
+                if item.get(
+                    "difference_status"
+                ) == "Changed":
+                    updated += 1
+                    action_status = "Updated"
+                else:
+                    created += 1
+                    action_status = "Created"
+
                 results.append(
                     {
                         "row_number": item["row_number"],
-                        "status": "Imported",
+                        "status": action_status,
                         "record_id": str(
                             saved.get(
                                 "record_id",
@@ -5334,6 +5945,11 @@ class CoCANoTAPI:
         return {
             "ok": failed == 0,
             "imported": imported,
+            "created": created,
+            "updated": updated,
+            "skipped_unchanged": len(
+                unchanged
+            ),
             "failed": failed,
             "results": results,
         }

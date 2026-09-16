@@ -91,6 +91,7 @@ export default function App() {
         onBack={() => setPage("home")}
         onHome={() => setPage("home")}
         onPatientReview={() => setPage("patient-review")}
+        onRouteChange={setPage}
       />
     );
   } else if (
@@ -104,6 +105,7 @@ export default function App() {
           page === "ephys-processing" ? "processing" : "home"
         }
         onNavigate={setPage}
+        onRouteChange={setPage}
       />
     );
   } else if (
@@ -123,6 +125,7 @@ export default function App() {
               ? "bulk"
               : "home"
         }
+        patientReviewMode={page === "patient-review"}
         onNavigate={setPage}
       />
     );

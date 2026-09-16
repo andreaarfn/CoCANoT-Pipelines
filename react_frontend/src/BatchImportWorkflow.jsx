@@ -375,12 +375,10 @@ export default function BatchImportWorkflow({
           <CheckCircle2 size={34} />
           <h2>Batch import complete</h2>
           <p>
-            Imported {result.imported ?? 0}{" "}
-            {tableName} record
-            {(result.imported ?? 0) === 1
-              ? ""
-              : "s"}
-            .
+            Created {result.created ?? 0}, updated{" "}
+            {result.updated ?? 0}, skipped unchanged{" "}
+            {result.skipped_unchanged ?? 0}, failed{" "}
+            {result.failed ?? 0}.
           </p>
 
           {(result.results ?? []).length > 0 && (
@@ -536,8 +534,41 @@ function BatchSummary({
         <span>Total rows</span>
       </div>
       <div>
-        <strong>{batch.valid_count}</strong>
-        <span>Initially valid</span>
+        <strong>
+          {(batch.rows ?? []).filter(
+            row =>
+              row.difference_status === "New" ||
+              row.difference_status === "New assessment"
+          ).length}
+        </strong>
+        <span>New</span>
+      </div>
+      <div>
+        <strong>
+          {(batch.rows ?? []).filter(
+            row =>
+              row.difference_status === "Changed" ||
+              row.difference_status === "Correction"
+          ).length}
+        </strong>
+        <span>Updates</span>
+      </div>
+      <div>
+        <strong>
+          {(batch.rows ?? []).filter(
+            row =>
+              row.difference_status === "Unchanged"
+          ).length}
+        </strong>
+        <span>Unchanged</span>
+      </div>
+      <div>
+        <strong>
+          {(batch.rows ?? []).filter(
+            row => row.requires_review
+          ).length}
+        </strong>
+        <span>Needs review</span>
       </div>
       <div>
         <strong>{includedCount}</strong>
@@ -560,7 +591,8 @@ function BatchTable({
             <th>Include</th>
             <th>Source Row</th>
             <th>Patient ID</th>
-            <th>Status</th>
+            <th>Difference</th>
+            <th>Proposed Action</th>
             <th>Validation</th>
             <th></th>
           </tr>
@@ -572,6 +604,16 @@ function BatchTable({
                 <input
                   type="checkbox"
                   checked={Boolean(row.include)}
+                  disabled={
+                    row.import_allowed === false
+                  }
+                  title={
+                    row.difference_status === "Unchanged"
+                      ? "No differences detected; this row will be skipped."
+                      : row.requires_review
+                        ? "This row may refer to an immutable historical Clinical Assessment and must be reviewed outside batch import."
+                        : ""
+                  }
                   onChange={() =>
                     onToggle(index)
                   }
@@ -582,13 +624,28 @@ function BatchTable({
               <td>
                 <span
                   className={
-                    (row.problems ?? []).length
-                      ? styles.problemBadge
-                      : styles.validBadge
+                    row.difference_status === "Unchanged"
+                      ? styles.unchangedBadge
+                      : row.requires_review
+                        ? styles.reviewBadge
+                        : row.difference_status === "Correction" ||
+                            row.difference_status === "Changed"
+                          ? styles.changedBadge
+                          : styles.newBadge
                   }
                 >
-                  {row.status}
+                  {row.difference_status ?? "New"}
                 </span>
+              </td>
+              <td>
+                <span className={styles.actionText}>
+                  {row.proposed_action ?? ""}
+                </span>
+                {row.immutable && (
+                  <small className={styles.immutableNote}>
+                    Historical Clinical Assessments are read-only.
+                  </small>
+                )}
               </td>
               <td>
                 {(row.problems ?? []).length

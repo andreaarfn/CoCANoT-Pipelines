@@ -34,6 +34,7 @@ export default function ImagingDashboard({
   onBack,
   onHome,
   onPatientReview,
+  onRouteChange,
 }) {
   const [view, setView] = useState(initialView === "processing" ? "processing" : "home");
   const [dicomSources, setDicomSources] = useState([]);
@@ -52,6 +53,16 @@ export default function ImagingDashboard({
   const [heldImageCount, setHeldImageCount] = useState(0);
   const [bidsState, setBidsState] = useState(null);
   const [openSection, setOpenSection] = useState(1);
+
+  function showImagingHome() {
+    setView("home");
+    onRouteChange?.("imaging");
+  }
+
+  function showImagingProcessing() {
+    setView("processing");
+    onRouteChange?.("imaging-processing");
+  }
 
   useEffect(() => {
     if (view === "processing") {
@@ -261,7 +272,7 @@ export default function ImagingDashboard({
         siteId={siteId}
         onBack={onBack}
         onHome={onHome}
-        onProcessImaging={() => setView("processing")}
+        onProcessImaging={showImagingProcessing}
         onPatientReview={onPatientReview}
       >
         <section className={styles.hero}>
@@ -277,7 +288,7 @@ export default function ImagingDashboard({
         </section>
 
         <section className={styles.optionGrid}>
-          <button className={styles.optionCard} onClick={() => setView("processing")}>
+          <button className={styles.optionCard} onClick={showImagingProcessing}>
             <span>01</span>
             <strong>Process imaging data</strong>
             <p>Open the complete five-step Imaging DeID workflow.</p>
@@ -297,9 +308,9 @@ export default function ImagingDashboard({
     return (
       <ImagingReview
         siteId={siteId}
-        onBack={() => setView("processing")}
+        onBack={showImagingProcessing}
         onHome={onHome}
-        onProcessImaging={() => setView("processing")}
+        onProcessImaging={showImagingProcessing}
         onPatientReview={onPatientReview}
         onContinue={() => setView("metadata")}
       />
@@ -312,9 +323,9 @@ export default function ImagingDashboard({
         siteId={siteId}
         bidsState={bidsState}
         overwrite={overwrite}
-        onBack={() => setView("processing")}
+        onBack={showImagingProcessing}
         onHome={onHome}
-        onProcessImaging={() => setView("processing")}
+        onProcessImaging={showImagingProcessing}
         onPatientReview={onPatientReview}
         onReload={loadBidsState}
         onLog={appendLog}
@@ -330,9 +341,9 @@ export default function ImagingDashboard({
     <Shell
       title="Process Imaging"
       siteId={siteId}
-      onBack={() => setView("home")}
+      onBack={showImagingHome}
       onHome={onHome}
-      onProcessImaging={() => setView("processing")}
+      onProcessImaging={showImagingProcessing}
       onPatientReview={onPatientReview}
       subtitle="De-identify and prepare MRI or CT data for CoCANoT. Follow the steps below to select your data, run the de-identification pipeline, and export BIDS-formatted output."
     >

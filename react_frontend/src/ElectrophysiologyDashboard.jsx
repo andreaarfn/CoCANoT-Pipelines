@@ -22,6 +22,7 @@ const api = () => window.pywebview?.api ?? null;
 export default function ElectrophysiologyDashboard({
   initialView = "home",
   onNavigate,
+  onRouteChange,
 }) {
   const [view, setView] = useState(
     initialView === "processing" ? "processing" : "home"
@@ -41,6 +42,16 @@ export default function ElectrophysiologyDashboard({
   const [reviewPairs, setReviewPairs] = useState([]);
   const [review, setReview] = useState(null);
   const [bidsState, setBidsState] = useState(null);
+
+  function showEphysHome() {
+    setView("home");
+    onRouteChange?.("ephys");
+  }
+
+  function showEphysProcessing() {
+    setView("processing");
+    onRouteChange?.("ephys-processing");
+  }
 
   useEffect(() => {
     if (view === "processing") loadState();
@@ -177,7 +188,7 @@ export default function ElectrophysiologyDashboard({
         />
 
         <div className={styles.homeCards}>
-          <button onClick={() => setView("processing")}>
+          <button onClick={showEphysProcessing}>
             <Activity size={28} />
             <strong>Process electrophysiology data</strong>
             <span>Open the complete EDF de-identification workflow.</span>
@@ -201,7 +212,7 @@ export default function ElectrophysiologyDashboard({
         onSelect={selectPair}
         onChange={setReview}
         onSave={saveReview}
-        onBack={() => setView("processing")}
+        onBack={showEphysProcessing}
         onContinue={() => setView("bids")}
       />
     );
@@ -212,7 +223,7 @@ export default function ElectrophysiologyDashboard({
       <EphysBids
         state={bidsState}
         overwrite={overwrite}
-        onBack={() => setView("processing")}
+        onBack={showEphysProcessing}
       />
     );
   }
@@ -221,7 +232,7 @@ export default function ElectrophysiologyDashboard({
     <div>
       <button
         className={styles.backLink}
-        onClick={() => setView("home")}
+        onClick={showEphysHome}
       >
         <ArrowLeft size={16} />
         Back to Electrophysiology

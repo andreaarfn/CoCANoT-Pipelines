@@ -48,6 +48,7 @@ const SECTION_CONFIG = {
 
 export default function MetadataDashboard({
   initialView = "home",
+  patientReviewMode = false,
   onNavigate,
 }) {
   const [view, setView] = useState(
@@ -394,7 +395,7 @@ export default function MetadataDashboard({
         />
 
         <div className={styles.homeCards}>
-          <button onClick={() => setView("patients")}>
+          <button onClick={() => onNavigate("metadata-patients")}>
             <Users size={29} />
             <strong>Manage one patient</strong>
             <span>
@@ -403,7 +404,7 @@ export default function MetadataDashboard({
             </span>
           </button>
 
-          <button onClick={() => setView("bulk")}>
+          <button onClick={() => onNavigate("metadata-bulk")}>
             <Upload size={29} />
             <strong>Bulk upload</strong>
             <span>
@@ -468,20 +469,43 @@ export default function MetadataDashboard({
 
   return (
     <div>
-      <div className={styles.breadcrumb}>
-        <button
-          onClick={() => onNavigate("metadata-home")}
-        >
-          <ArrowLeft size={14} />
-          Metadata Management
-        </button>
-        <span>›</span>
-        <strong>Manage One Patient</strong>
-      </div>
+      {!patientReviewMode && (
+        <div className={styles.breadcrumb}>
+          <button
+            onClick={() => onNavigate("metadata-home")}
+          >
+            <ArrowLeft size={14} />
+            Metadata Management
+          </button>
+          <span>›</span>
+          <strong>Manage One Patient</strong>
+        </div>
+      )}
+
+      {patientReviewMode && (
+        <div className={styles.breadcrumb}>
+          <button
+            onClick={() => onNavigate("home")}
+          >
+            <ArrowLeft size={14} />
+            Home
+          </button>
+          <span>›</span>
+          <strong>Patient Data Review</strong>
+        </div>
+      )}
 
       <PageHeading
-        title="Manage One Patient"
-        text="Review or update metadata for one patient."
+        title={
+          patientReviewMode
+            ? "Patient Data Review"
+            : "Manage One Patient"
+        }
+        text={
+          patientReviewMode
+            ? "Review stored clinical, surgical, imaging, and electrophysiology data for a patient."
+            : "Review or update metadata for one patient."
+        }
       />
 
       <section className={styles.patientLookup}>
@@ -574,8 +598,11 @@ export default function MetadataDashboard({
                 tableName === "Imaging" ||
                 tableName === "Electrophysiology"
                   ? "Review Patient Data"
-                  : "Review / Edit Selected"
+                  : patientReviewMode
+                    ? "Review Selected"
+                    : "Review / Edit Selected"
               }
+              reviewOnly={patientReviewMode}
             />
           ))}
         </div>
@@ -683,6 +710,7 @@ function PatientRecordSection({
   onDelete,
   onReview,
   reviewLabel,
+  reviewOnly = false,
 }) {
   const config = SECTION_CONFIG[tableName];
   const Icon = config.icon;
@@ -696,32 +724,36 @@ function PatientRecordSection({
         </div>
 
         <div className={styles.sectionActions}>
-          <button
-            className={styles.primarySmall}
-            onClick={onAdd}
-          >
-            <Plus size={14} />
-            {config.addLabel}
-          </button>
+          {!reviewOnly && (
+            <>
+              <button
+                className={styles.primarySmall}
+                onClick={onAdd}
+              >
+                <Plus size={14} />
+                {config.addLabel}
+              </button>
 
-          {onUpload && (
-            <button
-              className={styles.outlineSmall}
-              onClick={onUpload}
-            >
-              <Upload size={14} />
-              {config.uploadLabel}
-            </button>
+              {onUpload && (
+                <button
+                  className={styles.outlineSmall}
+                  onClick={onUpload}
+                >
+                  <Upload size={14} />
+                  {config.uploadLabel}
+                </button>
+              )}
+
+              <button
+                className={styles.dangerSmall}
+                disabled={!selected.length}
+                onClick={onDelete}
+              >
+                <Trash2 size={14} />
+                Delete Selected
+              </button>
+            </>
           )}
-
-          <button
-            className={styles.dangerSmall}
-            disabled={!selected.length}
-            onClick={onDelete}
-          >
-            <Trash2 size={14} />
-            Delete Selected
-          </button>
 
           <button
             className={styles.outlineSmall}
