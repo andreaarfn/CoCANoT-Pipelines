@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -35,8 +35,17 @@ export default function ImagingDashboard({
   onHome,
   onPatientReview,
   onRouteChange,
+  onCreateClinicalAssessment,
+  resumeBidsState = null,
+  autoValidateBids = false,
+  attentionSourceKey = "",
+  attentionRecordId = "",
 }) {
-  const [view, setView] = useState(initialView === "processing" ? "processing" : "home");
+  const [view, setView] = useState(
+    ["processing", "review", "metadata"].includes(initialView)
+      ? initialView
+      : "home"
+  );
   const [dicomSources, setDicomSources] = useState([]);
   const [niftiSources, setNiftiSources] = useState([]);
   const [rawDicom, setRawDicom] = useState([]);
@@ -53,6 +62,18 @@ export default function ImagingDashboard({
   const [heldImageCount, setHeldImageCount] = useState(0);
   const [bidsState, setBidsState] = useState(null);
   const [openSection, setOpenSection] = useState(1);
+  const [processStages, setProcessStages] = useState({
+    prepare: "not_started",
+    scrub: "not_started",
+    deface: "not_started",
+    review: "not_started",
+    metadata_bids: "not_started",
+  });
+  const [activeOperation, setActiveOperation] = useState("");
+  const [awareness, setAwareness] = useState({ source: "unavailable", note: "" });
+  const [completionNotice, setCompletionNotice] = useState(false);
+  const outputSettingsDirtyRef = useRef(false);
+  const metadataBidsTerminalRefreshRef = useRef("");
 
   function showImagingHome() {
     setView("home");
@@ -60,26 +81,58 @@ export default function ImagingDashboard({
   }
 
   function showImagingProcessing() {
+    setCompletionNotice(false);
     setView("processing");
     onRouteChange?.("imaging-processing");
   }
 
   useEffect(() => {
-    if (view === "processing") {
-      loadState();
-    }
-
     if (view === "metadata") {
       loadBidsState();
     }
+
+    if (!["processing", "review", "metadata"].includes(view)) {
+      return undefined;
+    }
+
+    loadState();
+
+    const interval = window.setInterval(() => {
+      loadState();
+    }, 750);
+
+    return () => window.clearInterval(interval);
   }, [view]);
 
   async function loadState() {
     const bridge = api();
     if (!bridge?.imaging_get_state) return;
+
     try {
       const state = await bridge.imaging_get_state();
       applyState(state);
+
+      const metadataBidsState =
+        state?.process_stages?.metadata_bids ?? "";
+
+      const terminalKey =
+        view === "metadata" &&
+        state?.process_running === false &&
+        ["complete", "failed", "stopped"].includes(metadataBidsState)
+          ? metadataBidsState
+          : "";
+
+      if (
+        terminalKey &&
+        metadataBidsTerminalRefreshRef.current !== terminalKey
+      ) {
+        metadataBidsTerminalRefreshRef.current = terminalKey;
+        await loadBidsState();
+      }
+
+      if (state?.process_running === true) {
+        metadataBidsTerminalRefreshRef.current = "";
+      }
     } catch (error) {
       appendLog(String(error));
     }
@@ -90,11 +143,55 @@ export default function ImagingDashboard({
     setNiftiSources(state.nifti_input_dirs ?? []);
     setRawDicom(state.raw_dicom_files ?? []);
     setRawNifti(state.raw_nifti_files ?? []);
-    if (typeof state.derivatives_dir === "string") setDerivativesDir(state.derivatives_dir);
-    if (typeof state.bids_output_dir === "string") setBidsOutputDir(state.bids_output_dir);
-    if (state.status) setStatus(state.status);
-    if (Array.isArray(state.logs)) setLogs(state.logs);
-    if (state.log) appendLog(state.log);
+
+    if (!outputSettingsDirtyRef.current) {
+      if (typeof state.derivatives_dir === "string") {
+        setDerivativesDir(state.derivatives_dir);
+      }
+
+      if (typeof state.bids_output_dir === "string") {
+        setBidsOutputDir(state.bids_output_dir);
+      }
+    }
+
+    if (state.status) {
+      setStatus(state.status);
+    }
+
+    if (Array.isArray(state.logs)) {
+      setLogs(state.logs);
+    }
+
+    if (state.process_stages && typeof state.process_stages === "object") {
+      setProcessStages(current => ({
+        ...current,
+        ...state.process_stages,
+      }));
+    }
+
+    if (state.awareness && typeof state.awareness === "object") {
+      setAwareness({
+        source: state.awareness.source ?? "unavailable",
+        note: state.awareness.note ?? "",
+      });
+    } else if (state.awareness_source) {
+      setAwareness({
+        source: state.awareness_source,
+        note: state.awareness_note ?? "",
+      });
+    }
+
+    if (typeof state.active_operation === "string") {
+      setActiveOperation(state.active_operation);
+    }
+
+    if (typeof state.process_running === "boolean") {
+      setBusy(state.process_running);
+    }
+
+    if (state.log) {
+      appendLog(state.log);
+    }
   }
 
   function appendLog(message) {
@@ -152,15 +249,41 @@ export default function ImagingDashboard({
   async function browseOutput(kind) {
     const bridge = api();
     if (!bridge?.choose_folder) return;
+
     const selected = await bridge.choose_folder();
     if (!selected) return;
-    if (kind === "derivatives") setDerivativesDir(selected);
-    else setBidsOutputDir(selected);
+
+    const nextDerivativesDir = kind === "derivatives" ? selected : derivativesDir;
+    const nextBidsOutputDir = kind === "bids" ? selected : bidsOutputDir;
+
+    outputSettingsDirtyRef.current = true;
+    setDerivativesDir(nextDerivativesDir);
+    setBidsOutputDir(nextBidsOutputDir);
+
+    if (
+      bridge.imaging_save_settings &&
+      nextDerivativesDir.trim() &&
+      nextBidsOutputDir.trim()
+    ) {
+      try {
+        const state = await bridge.imaging_save_settings({
+          dicom_input_dirs: dicomSources,
+          nifti_input_dirs: niftiSources,
+          derivatives_dir: nextDerivativesDir,
+          bids_output_dir: nextBidsOutputDir,
+        });
+        outputSettingsDirtyRef.current = false;
+        applyState(state);
+      } catch (error) {
+        appendLog(String(error));
+      }
+    }
   }
 
   async function saveSettings(showConfirmation = true) {
     const bridge = api();
     if (!bridge?.imaging_save_settings) return null;
+    if (!derivativesDir.trim() || !bidsOutputDir.trim()) return null;
 
     const state = await bridge.imaging_save_settings({
       dicom_input_dirs: dicomSources,
@@ -169,6 +292,7 @@ export default function ImagingDashboard({
       bids_output_dir: bidsOutputDir,
     });
 
+    outputSettingsDirtyRef.current = false;
     applyState(state);
     if (showConfirmation) alert("Imaging folder settings were saved successfully.");
     return state;
@@ -184,9 +308,17 @@ export default function ImagingDashboard({
 
     try {
       const state = await bridge.imaging_bids_get_state();
+      const records = state?.records ?? [];
       setBidsState(state);
-      setAcceptedImages(state?.records ?? []);
+      setAcceptedImages(records);
       setHeldImageCount(Number(state?.held_count ?? 0));
+
+      if (records.length > 0 && records.every(record => record.record_state === "completed_recorded")) {
+        setProcessStages(current => ({
+          ...current,
+          metadata_bids: "complete",
+        }));
+      }
     } catch (error) {
       setBidsState(null);
       appendLog(String(error));
@@ -216,14 +348,39 @@ export default function ImagingDashboard({
 
   async function runOperation(operation) {
     const bridge = api();
+
     if (!bridge?.imaging_run_operation) {
       alert("The Imaging Python bridge is unavailable.");
       return;
     }
 
+    const trackedOperation = [
+      "prepare",
+      "scrub",
+      "deface",
+      "review",
+      "bids",
+    ].includes(operation);
+
+    const stageKey = operation === "bids"
+      ? "metadata_bids"
+      : operation;
+
     try {
-      setBusy(true);
-      setStatus(`Running: ${operation}`);
+      if (trackedOperation) {
+        setProcessStages(current => ({
+          ...current,
+          [stageKey]: "running",
+        }));
+        setActiveOperation(
+          ["prepare", "scrub", "deface"].includes(operation)
+            ? operation
+            : ""
+        );
+      }
+
+      setBusy(operation !== "review");
+      setStatus(`Starting: ${operation}`);
 
       const result = await bridge.imaging_run_operation({
         operation,
@@ -234,36 +391,127 @@ export default function ImagingDashboard({
         overwrite,
       });
 
-      if (result?.log) appendLog(result.log);
-      if (result?.status) setStatus(result.status);
+      if (result?.log) {
+        appendLog(result.log);
+      }
+
+      if (result?.status) {
+        setStatus(result.status);
+      }
+
+      if (result?.process_stages) {
+        setProcessStages(current => ({
+          ...current,
+          ...result.process_stages,
+        }));
+      }
+
+      if (typeof result?.active_operation === "string") {
+        setActiveOperation(result.active_operation);
+      }
+
+      if (result?.state === "running") {
+        setBusy(true);
+      } else if (operation !== "review") {
+        const state = await bridge.imaging_get_state?.();
+
+        if (state) {
+          applyState(state);
+        } else {
+          setBusy(false);
+        }
+      }
 
       if (operation === "review" && result?.ok !== false) {
+        setBusy(false);
+        setActiveOperation("");
         setView("review");
       }
 
       if (operation === "bids" && result?.ok !== false) {
+        setBusy(false);
         setAcceptedImages(result?.accepted_files ?? []);
         setHeldImageCount(Number(result?.held_count ?? 0));
         setView("metadata");
       }
     } catch (error) {
+      if (trackedOperation) {
+        setProcessStages(current => ({
+          ...current,
+          [stageKey]: "failed",
+        }));
+      }
+
+      setBusy(false);
+      setActiveOperation("");
       setStatus(`Failed: ${operation}`);
       appendLog(String(error));
       alert(String(error));
-    } finally {
-      setBusy(false);
+
+      const state = await bridge.imaging_get_state?.();
+
+      if (state) {
+        applyState(state);
+      }
     }
   }
 
   async function stopOperation() {
+    const bridge = api();
+
+    if (!bridge?.imaging_stop_operation) {
+      return;
+    }
+
     try {
-      await api()?.imaging_stop_operation?.();
-    } finally {
-      setBusy(false);
-      setStatus("Stopped");
-      appendLog("Operation stopped.");
+      const result = await bridge.imaging_stop_operation();
+
+      if (result?.cleanup_message) {
+        appendLog(result.cleanup_message);
+      }
+
+      if (result?.process_stages) {
+        setProcessStages(current => ({
+          ...current,
+          ...result.process_stages,
+        }));
+      }
+
+      setStatus(result?.status || "Stopped");
+      setBusy(Boolean(result?.process_running));
+      setActiveOperation(result?.active_operation ?? "");
+
+      const state = await bridge.imaging_get_state?.();
+
+      if (state) {
+        applyState(state);
+      }
+    } catch (error) {
+      appendLog(String(error));
+      alert(String(error));
     }
   }
+
+  const dicomStudyCount = dicomSources.length;
+  const niftiStudyCount = niftiSources.length;
+  const selectedStudyCount = dicomStudyCount + niftiStudyCount;
+
+  const workflowCompletion = useMemo(() => ({
+    1: selectedStudyCount > 0,
+    2: Boolean(derivativesDir.trim() && bidsOutputDir.trim()),
+    3: ["prepare", "scrub", "deface"].every(key => processStages[key] === "complete"),
+    4: processStages.review === "complete",
+    5: processStages.metadata_bids === "complete",
+  }), [
+    selectedStudyCount,
+    derivativesDir,
+    bidsOutputDir,
+    processStages.prepare,
+    processStages.scrub,
+    processStages.deface,
+    processStages.review,
+    processStages.metadata_bids,
+  ]);
 
   if (view === "home") {
     return (
@@ -275,6 +523,18 @@ export default function ImagingDashboard({
         onProcessImaging={showImagingProcessing}
         onPatientReview={onPatientReview}
       >
+        {completionNotice && (
+          <section className={styles.completionBanner}>
+            <CheckCircle2 size={22} strokeWidth={2} />
+            <div>
+              <strong>Imaging workflow complete</strong>
+              <span>
+                De-identification review, metadata validation, and BIDS export completed successfully.
+              </span>
+            </div>
+          </section>
+        )}
+
         <section className={styles.hero}>
           <div className={styles.heroIcon}><Images size={30} strokeWidth={1.8} /></div>
           <div>
@@ -312,7 +572,19 @@ export default function ImagingDashboard({
         onHome={onHome}
         onProcessImaging={showImagingProcessing}
         onPatientReview={onPatientReview}
-        onContinue={() => setView("metadata")}
+        stageState={processStages.review}
+        completedSteps={workflowCompletion}
+        onStateRefresh={loadState}
+        onReviewSummary={({ total, accepted }) => {
+          setProcessStages(current => ({
+            ...current,
+            review: total > 0 && accepted === total ? "complete" : "not_started",
+          }));
+        }}
+        onContinue={() => {
+          setOpenSection(5);
+          setView("metadata");
+        }}
       />
     );
   }
@@ -323,19 +595,23 @@ export default function ImagingDashboard({
         siteId={siteId}
         bidsState={bidsState}
         overwrite={overwrite}
-        onBack={showImagingProcessing}
+        onBack={() => setView("review")}
         onHome={onHome}
         onProcessImaging={showImagingProcessing}
         onPatientReview={onPatientReview}
         onReload={loadBidsState}
         onLog={appendLog}
+        stageState={processStages.metadata_bids}
+        completedSteps={workflowCompletion}
+        onStateRefresh={loadState}
+        resumeState={resumeBidsState}
+        autoValidate={autoValidateBids}
+        onCreateClinicalAssessment={onCreateClinicalAssessment}
+        attentionSourceKey={attentionSourceKey}
+        attentionRecordId={attentionRecordId}
       />
     );
   }
-
-  const dicomStudyCount = dicomSources.length;
-  const niftiStudyCount = niftiSources.length;
-  const selectedStudyCount = dicomStudyCount + niftiStudyCount;
 
   return (
     <Shell
@@ -347,10 +623,11 @@ export default function ImagingDashboard({
       onPatientReview={onPatientReview}
       subtitle="De-identify and prepare MRI or CT data for CoCANoT. Follow the steps below to select your data, run the de-identification pipeline, and export BIDS-formatted output."
     >
-      <WorkflowStepper current={openSection} />
+      <WorkflowStepper current={openSection} completed={workflowCompletion} />
 
       <WorkflowSection
         number={1}
+        complete={workflowCompletion[1]}
         title="Select imaging data"
         subtitle="Add DICOM or NIfTI files and/or folders to include in this session."
         open={openSection === 1}
@@ -424,6 +701,7 @@ export default function ImagingDashboard({
 
       <WorkflowSection
         number={2}
+        complete={workflowCompletion[2]}
         title="Set output folders"
         subtitle="Choose where to save processed files. A derivatives folder is required before processing can begin."
         open={openSection === 2}
@@ -433,23 +711,34 @@ export default function ImagingDashboard({
           <FolderField
             label="Derivatives output folder"
             value={derivativesDir}
-            onChange={setDerivativesDir}
+            onChange={value => {
+              outputSettingsDirtyRef.current = true;
+              setDerivativesDir(value);
+            }}
             onBrowse={() => browseOutput("derivatives")}
             disabled={busy}
           />
 
+          <div className={styles.infoStrip}>
+            The derivatives folder will contain converted_nifti, scrubbed_header,
+            scrubbed_defaced, logs, and imaging_review_state.json.
+          </div>
+
           <FolderField
-            label="BIDS output folder"
+            label="Final output folder"
             value={bidsOutputDir}
-            onChange={setBidsOutputDir}
+            onChange={value => {
+              outputSettingsDirtyRef.current = true;
+              setBidsOutputDir(value);
+            }}
             onBrowse={() => browseOutput("bids")}
             disabled={busy}
           />
-        </div>
 
-        <div className={styles.infoStrip}>
-          The derivatives folder will contain converted_nifti, scrubbed_header,
-          scrubbed_defaced, logs, and imaging_review_state.json.
+          <div className={styles.infoStrip}>
+            The final de-identified file and associated metadata will be stored here
+            in a BIDS-compatible format.
+          </div>
         </div>
 
         <div className={styles.sectionActions}>
@@ -473,16 +762,51 @@ export default function ImagingDashboard({
 
       <WorkflowSection
         number={3}
-        title="Process & review"
-        subtitle="Run the de-identification pipeline and review outputs."
+        complete={workflowCompletion[3]}
+        title="Process imaging data"
+        subtitle="Prepare, scrub, and deface the selected imaging data."
         open={openSection === 3}
         onToggle={() => setOpenSection(3)}
       >
+        {awareness.source === "manifest" &&
+          [processStages.prepare, processStages.scrub, processStages.deface].some(
+            stage => stage === "complete"
+          ) && (
+            <div className={styles.awarenessNotice}>
+              <Database size={18} strokeWidth={1.8} />
+              <div>
+                <strong>Existing processing verified</strong>
+                <span>
+                  {awareness.note ||
+                    "CoCANoT verified the existing derivative outputs for the current imaging selection."}
+                </span>
+              </div>
+            </div>
+          )}
+
+        {awareness.source === "detected" && (
+          <div className={styles.awarenessNotice}>
+            <Database size={18} strokeWidth={1.8} />
+            <div>
+              <strong>Existing outputs matched</strong>
+              <span>
+                {awareness.note || "CoCANoT matched existing outputs to the current selected NIfTI data."}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <ProcessProgress
+          stages={processStages}
+          activeOperation={activeOperation}
+        />
+
         <div className={styles.processGrid}>
           <ProcessAction
             step="3A"
             title="Prepare NIfTI"
             description="Convert selected DICOM inputs and stage existing NIfTI files."
+            state={processStages.prepare}
             disabled={busy}
             onClick={() => runOperation("prepare")}
           />
@@ -491,7 +815,8 @@ export default function ImagingDashboard({
             step="3B"
             title="Scrub Headers"
             description="Remove identifying values from staged NIfTI headers."
-            disabled={busy}
+            state={processStages.scrub}
+            disabled={busy || processStages.prepare !== "complete"}
             onClick={() => runOperation("scrub")}
           />
 
@@ -499,17 +824,11 @@ export default function ImagingDashboard({
             step="3C"
             title="Deface"
             description="Create defaced copies for imaging review."
-            disabled={busy}
+            state={processStages.deface}
+            disabled={busy || processStages.scrub !== "complete"}
             onClick={() => runOperation("deface")}
           />
 
-          <ProcessAction
-            step="3D"
-            title="Review"
-            description="Compare raw and defaced images before accepting them."
-            disabled={busy}
-            onClick={() => runOperation("review")}
-          />
         </div>
 
         <div className={styles.processFooter}>
@@ -525,7 +844,7 @@ export default function ImagingDashboard({
 
           {busy && (
             <button className={styles.stopButtonInline} onClick={stopOperation}>
-              Stop Current Operation
+              Stop Current Process
             </button>
           )}
         </div>
@@ -557,44 +876,71 @@ export default function ImagingDashboard({
           <div />
           <button
             className={styles.ctaButton}
-            disabled={busy}
+            disabled={busy || processStages.deface !== "complete"}
             onClick={() => setOpenSection(4)}
           >
-            Continue to Finalize & Export <ArrowRight size={16} />
+            Continue to Review <ArrowRight size={16} />
           </button>
         </div>
       </WorkflowSection>
 
       <WorkflowSection
         number={4}
-        title="Finalize & export"
-        subtitle="Create BIDS-formatted output and complete the process."
+        complete={workflowCompletion[4]}
+        title="Review de-identification"
+        subtitle="Compare the original and defaced images, then accept, replace, hold, or reject each image."
         open={openSection === 4}
         onToggle={() => setOpenSection(4)}
       >
-        <div className={styles.finalizePanel}>
-          <div className={styles.finalizeIcon}><Check size={20} strokeWidth={2.2} /></div>
-          <div>
-            <strong>Metadata & BIDS</strong>
-            <p>
-              Continue with images accepted during review, complete the
-              dictionary-driven Imaging metadata, check for existing exports,
-              and launch BIDS conversion.
-            </p>
-          </div>
-        </div>
+        <WorkflowStatusCard
+          title="Review processed images"
+          description="Inspect the scrubbed headers and compare the original and defaced images before deciding which files can continue."
+          state={processStages.review}
+        />
 
         <div className={styles.sectionActions}>
           <button
             className={styles.secondaryButton}
             onClick={() => setOpenSection(3)}
           >
-            Back to Process & Review
+            Back to Processing
           </button>
 
           <button
             className={styles.ctaButton}
-            disabled={busy}
+            disabled={busy || processStages.deface !== "complete"}
+            onClick={() => runOperation("review")}
+          >
+            Open Imaging Review <ArrowRight size={16} />
+          </button>
+        </div>
+      </WorkflowSection>
+
+      <WorkflowSection
+        number={5}
+        complete={workflowCompletion[5]}
+        title="Metadata & BIDS"
+        subtitle="Add imaging metadata and create the final BIDS-compatible output."
+        open={openSection === 5}
+        onToggle={() => setOpenSection(5)}
+      >
+        <WorkflowStatusCard
+          title="Complete metadata and export"
+          description="Continue with images accepted during review, complete the dictionary-driven Imaging metadata, check for existing exports, and create the final BIDS-compatible output."
+          state={processStages.metadata_bids}
+        />
+
+        <div className={styles.sectionActions}>
+          <button
+            className={styles.secondaryButton}
+            onClick={() => setOpenSection(4)}
+          >
+            Back to Review
+          </button>
+
+          <button
+            className={styles.ctaButton}
+            disabled={busy || processStages.review !== "complete"}
             onClick={() => runOperation("bids")}
           >
             Open Metadata & BIDS <ArrowRight size={16} />
@@ -613,35 +959,51 @@ export default function ImagingDashboard({
   );
 }
 
-function WorkflowStepper({ current }) {
+function WorkflowStepper({ current, completed = {} }) {
   const steps = [
     ["Select Data", 1],
     ["Set Output Folders", 2],
-    ["Process & Review", 3],
-    ["Finalize & Export", 4],
+    ["Process", 3],
+    ["Review", 4],
+    ["Metadata & BIDS", 5],
   ];
 
   return (
     <div className={styles.stepper}>
-      {steps.map(([label, number], index) => (
-        <div className={styles.stepperItem} key={label}>
-          <div
-            className={`${styles.stepCircle} ${
-              number === current
-                ? styles.stepCircleActive
-                : number < current
+      {steps.map(([label, number], index) => {
+        const isComplete = Boolean(completed[number]);
+        const isActive = number === current;
+
+        return (
+          <div className={styles.stepperItem} key={label}>
+            <div
+              className={`${styles.stepCircle} ${
+                isComplete
                   ? styles.stepCircleDone
-                  : ""
-            }`}
-          >
-            {number}
+                  : isActive
+                    ? styles.stepCircleActive
+                    : ""
+              }`}
+            >
+              {isComplete ? <Check size={15} strokeWidth={2.5} /> : number}
+            </div>
+            <span
+              className={`${isActive ? styles.stepLabelActive : ""} ${
+                isComplete ? styles.stepLabelDone : ""
+              }`}
+            >
+              {label}
+            </span>
+            {index < steps.length - 1 && (
+              <div
+                className={`${styles.stepLine} ${
+                  isComplete ? styles.stepLineDone : ""
+                }`}
+              />
+            )}
           </div>
-          <span className={number === current ? styles.stepLabelActive : ""}>
-            {label}
-          </span>
-          {index < steps.length - 1 && <div className={styles.stepLine} />}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -651,19 +1013,30 @@ function WorkflowSection({
   title,
   subtitle,
   open,
+  complete = false,
   onToggle,
   children,
 }) {
   return (
-    <section className={`${styles.workflowSection} ${open ? styles.workflowSectionOpen : ""}`}>
+    <section
+      className={`${styles.workflowSection} ${open ? styles.workflowSectionOpen : ""} ${
+        complete ? styles.workflowSectionComplete : ""
+      }`}
+    >
       <button className={styles.workflowSectionHeader} onClick={onToggle}>
-        <div className={styles.sectionNumber}>{number}</div>
+        <div className={`${styles.sectionNumber} ${complete ? styles.sectionNumberComplete : ""}`}>
+          {complete ? <Check size={17} strokeWidth={2.5} /> : number}
+        </div>
         <div className={styles.sectionTitleBlock}>
           <strong>{title}</strong>
           <span>{subtitle}</span>
         </div>
 
-        {!open && <span className={styles.goSection}>Go to Section</span>}
+        {!open && (
+          <span className={complete ? styles.sectionCompleteLabel : styles.goSection}>
+            {complete ? "Complete" : "Go to Section"}
+          </span>
+        )}
         <ChevronDown className={`${styles.chevron} ${open ? styles.chevronOpen : ""}`} size={18} />
       </button>
 
@@ -756,18 +1129,127 @@ function SelectedSourceList({
   );
 }
 
+function WorkflowStatusCard({ title, description, state = "not_started" }) {
+  const stateLabel = {
+    not_started: "Not started",
+    running: "In progress",
+    complete: "Completed",
+    failed: "Needs attention",
+    stopped: "Stopped",
+  }[state] ?? "Not started";
+
+  return (
+    <div className={`${styles.workflowStatusCard} ${styles[`workflowStatusCard_${state}`] ?? ""}`}>
+      <div className={`${styles.workflowStatusIcon} ${styles[`workflowStatusIcon_${state}`] ?? ""}`}>
+        {state === "complete" ? (
+          <CheckCircle2 size={20} strokeWidth={2} />
+        ) : state === "running" ? (
+          <RefreshCw className={styles.processSpinner} size={20} strokeWidth={2} />
+        ) : (
+          <span className={styles.workflowStatusDot} />
+        )}
+      </div>
+
+      <div className={styles.workflowStatusCopy}>
+        <div className={styles.workflowStatusTitleRow}>
+          <strong>{title}</strong>
+          <span className={`${styles.processState} ${styles[`processState_${state}`] ?? ""}`}>
+            {state === "complete" && <CheckCircle2 size={14} />}
+            {state === "running" && <RefreshCw className={styles.processSpinner} size={14} />}
+            {stateLabel}
+          </span>
+        </div>
+        <p>{description}</p>
+      </div>
+    </div>
+  );
+}
+
+function ProcessProgress({ stages, activeOperation }) {
+  const order = ["prepare", "scrub", "deface"];
+  const labels = {
+    prepare: "Prepare NIfTI",
+    scrub: "Scrub Headers",
+    deface: "Deface",
+  };
+
+  const completedCount = order.filter(key => stages[key] === "complete").length;
+  const activeIndex = activeOperation ? order.indexOf(activeOperation) : -1;
+  const displayStep = activeIndex >= 0
+    ? activeIndex + 1
+    : Math.min(completedCount + 1, order.length);
+
+  return (
+    <div className={styles.processProgress}>
+      <div className={styles.processProgressHeader}>
+        <div>
+          <strong>
+            {activeOperation
+              ? `Step ${displayStep} of ${order.length}: ${labels[activeOperation]}`
+              : `${completedCount} of ${order.length} steps complete`}
+          </strong>
+          <span>
+            {activeOperation
+              ? "Processing is currently running."
+              : completedCount === order.length
+                ? "Processing is complete. Continue to image review."
+                : "Complete each step in order before finalizing the export."}
+          </span>
+        </div>
+        <span className={styles.processProgressCount}>
+          {completedCount}/{order.length}
+        </span>
+      </div>
+
+      <div className={styles.processProgressTrack}>
+        <div
+          className={styles.processProgressFill}
+          style={{ width: `${(completedCount / order.length) * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function ProcessAction({
   step,
   title,
   description,
+  state = "not_started",
   disabled,
   onClick,
 }) {
+  const stateLabel = {
+    not_started: "Not started",
+    running: "In progress",
+    complete: "Complete",
+    failed: "Needs attention",
+    stopped: "Stopped",
+  }[state];
+
   return (
-    <button className={styles.processAction} disabled={disabled} onClick={onClick}>
-      <span className={styles.processStep}>{step}</span>
+    <button
+      className={`${styles.processAction} ${styles[`processAction_${state}`] ?? ""}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <div className={styles.processActionTop}>
+        <span className={styles.processStep}>{step}</span>
+        <span className={`${styles.processState} ${styles[`processState_${state}`] ?? ""}`}>
+          {state === "complete" && <CheckCircle2 size={14} />}
+          {state === "running" && <RefreshCw className={styles.processSpinner} size={14} />}
+          {stateLabel}
+        </span>
+      </div>
       <strong>{title}</strong>
       <p>{description}</p>
+      <span className={styles.processActionLabel}>
+        {state === "complete"
+          ? "Reprocess"
+          : state === "failed" || state === "stopped"
+            ? "Try again"
+            : "Run"}
+      </span>
       <ArrowRight className={styles.processArrow} size={17} />
     </button>
   );
@@ -783,6 +1265,14 @@ function ImagingBidsStep({
   onPatientReview,
   onReload,
   onLog,
+  stageState,
+  completedSteps,
+  onStateRefresh,
+  resumeState,
+  autoValidate,
+  onCreateClinicalAssessment,
+  attentionSourceKey,
+  attentionRecordId,
 }) {
   const [records, setRecords] = useState([]);
   const [rules, setRules] = useState([]);
@@ -795,11 +1285,31 @@ function ImagingBidsStep({
   const [problems, setProblems] = useState([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const resumeAppliedRef = useRef(false);
+  const autoValidateStartedRef = useRef(false);
+  const attentionAppliedRef = useRef(false);
 
   useEffect(() => {
+    setRules(bidsState?.rules ?? []);
+
+    if (resumeState && !resumeAppliedRef.current) {
+      const resumedRecords = Array.isArray(resumeState.records)
+        ? resumeState.records
+        : [];
+
+      resumeAppliedRef.current = true;
+      setRecords(resumedRecords);
+      setSelectedIds(resumeState.selectedIds ?? []);
+      setActiveId(resumeState.activeId ?? resumedRecords[0]?.id ?? "");
+      setDraftMetadata({ ...(resumeState.draftMetadata ?? {}) });
+      setProject(resumeState.project ?? "");
+      setProjectDescription(resumeState.projectDescription ?? "");
+      setSessionId(resumeState.sessionId ?? "");
+      return;
+    }
+
     const nextRecords = bidsState?.records ?? [];
     setRecords(nextRecords);
-    setRules(bidsState?.rules ?? []);
 
     if (nextRecords.length > 0) {
       const first = nextRecords[0];
@@ -814,7 +1324,117 @@ function ImagingBidsStep({
       setProjectDescription("");
       setSessionId("");
     }
-  }, [bidsState]);
+  }, [bidsState, resumeState]);
+
+  useEffect(() => {
+    if (stageState === "complete") {
+      onReload?.();
+    }
+  }, [stageState]);
+
+  useEffect(() => {
+    if (
+      attentionAppliedRef.current ||
+      records.length === 0 ||
+      (!attentionSourceKey && !attentionRecordId)
+    ) {
+      return;
+    }
+
+    const target = records.find(record => {
+      if (
+        attentionSourceKey &&
+        record.source_key === attentionSourceKey
+      ) {
+        return true;
+      }
+
+      if (!attentionRecordId) {
+        return false;
+      }
+
+      return (
+        String(
+          record.cocanot_metadata?.["Image ID"] ?? ""
+        ) === String(attentionRecordId) ||
+        String(record.source_label ?? "") ===
+          String(attentionRecordId)
+      );
+    });
+
+    if (!target) {
+      return;
+    }
+
+    attentionAppliedRef.current = true;
+    setActiveId(target.id);
+    setSelectedIds([target.id]);
+    loadRecordIntoDraft(target);
+
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById("imaging-bids-editor")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    });
+  }, [
+    attentionSourceKey,
+    attentionRecordId,
+    records,
+  ]);
+
+  useEffect(() => {
+    if (!activeId) return;
+
+    setRecords(current =>
+      current.map(record =>
+        record.id === activeId
+          ? {
+              ...record,
+              project,
+              project_description: projectDescription,
+              session_id: sessionId,
+              cocanot_metadata: JSON.parse(JSON.stringify(draftMetadata)),
+            }
+          : record
+      )
+    );
+
+    const active = records.find(record => record.id === activeId);
+    const bridge = api();
+    if (!active?.source_key || !bridge?.imaging_bids_save_draft) return;
+
+    bridge.imaging_bids_save_draft({
+      source_key: active.source_key,
+      include: Boolean(active.include),
+      project,
+      project_description: projectDescription,
+      session_id: sessionId,
+      cocanot_metadata: JSON.parse(JSON.stringify(draftMetadata)),
+    }).catch(() => {});
+  }, [
+    activeId,
+    draftMetadata,
+    project,
+    projectDescription,
+    sessionId,
+  ]);
+
+  useEffect(() => {
+    if (
+      !autoValidate ||
+      autoValidateStartedRef.current ||
+      records.length === 0 ||
+      (resumeState && !resumeAppliedRef.current)
+    ) {
+      return;
+    }
+
+    autoValidateStartedRef.current = true;
+    reviewAndConvert();
+  }, [autoValidate, records]);
 
   function loadRecordIntoDraft(record) {
     setDraftMetadata({ ...(record?.cocanot_metadata ?? {}) });
@@ -843,14 +1463,77 @@ function ImagingBidsStep({
     );
   }
 
+  function persistRecordDraft(record) {
+    const bridge = api();
+
+    if (
+      !record?.source_key ||
+      !bridge?.imaging_bids_save_draft
+    ) {
+      return;
+    }
+
+    const isActive = record.id === activeId;
+
+    bridge.imaging_bids_save_draft({
+      source_key: record.source_key,
+      include: Boolean(record.include),
+      project: isActive
+        ? project
+        : record.project ?? "",
+      project_description: isActive
+        ? projectDescription
+        : record.project_description ?? "",
+      session_id: isActive
+        ? sessionId
+        : record.session_id ?? "",
+      cocanot_metadata: JSON.parse(
+        JSON.stringify(
+          isActive
+            ? draftMetadata
+            : record.cocanot_metadata ?? {}
+        )
+      ),
+    }).catch(() => {});
+  }
+
   function toggleInclude(id) {
+    const record = records.find(
+      item => item.id === id
+    );
+
+    if (!record) {
+      return;
+    }
+
+    const updated = {
+      ...record,
+      include: !record.include,
+    };
+
     setRecords(current =>
-      current.map(record =>
-        record.id === id
-          ? { ...record, include: !record.include }
-          : record
+      current.map(item =>
+        item.id === id
+          ? updated
+          : item
       )
     );
+
+    if (updated.include) {
+      setProblems(current =>
+        current.filter(
+          problem =>
+            !String(problem).toLowerCase().includes(
+              "choose at least one image to include"
+            ) &&
+            !String(problem).toLowerCase().includes(
+              "include at least one image"
+            )
+        )
+      );
+    }
+
+    persistRecordDraft(updated);
   }
 
   function setField(fieldName, value) {
@@ -928,13 +1611,48 @@ function ImagingBidsStep({
   }
 
   function includeSelected(include) {
-    setRecords(current =>
-      current.map(record =>
-        selectedIds.includes(record.id)
-          ? { ...record, include }
-          : record
-      )
+    const updatedRecords = records.map(record =>
+      selectedIds.includes(record.id)
+        ? { ...record, include }
+        : record
     );
+
+    setRecords(updatedRecords);
+
+    if (
+      include &&
+      updatedRecords.some(record => Boolean(record.include))
+    ) {
+      setProblems(current =>
+        current.filter(
+          problem =>
+            !String(problem).toLowerCase().includes(
+              "choose at least one image to include"
+            ) &&
+            !String(problem).toLowerCase().includes(
+              "include at least one image"
+            )
+        )
+      );
+    }
+
+    updatedRecords
+      .filter(record =>
+        selectedIds.includes(record.id)
+      )
+      .forEach(persistRecordDraft);
+  }
+
+  function buildResumeState() {
+    return {
+      records,
+      selectedIds,
+      activeId,
+      draftMetadata,
+      project,
+      projectDescription,
+      sessionId,
+    };
   }
 
   async function reviewAndConvert() {
@@ -945,12 +1663,35 @@ function ImagingBidsStep({
       return;
     }
 
+    const includedRecords = records.filter(
+      record => Boolean(record.include)
+    );
+
+    if (includedRecords.length === 0) {
+      setProblems([
+        "Choose at least one image to include before reviewing metadata and converting."
+      ]);
+      return;
+    }
+
     try {
       setBusy(true);
       const result = await bridge.imaging_bids_validate({ records, overwrite });
 
       if (!result?.ok) {
+        const missingClinical = result?.missing_clinical_assessments ?? [];
         setProblems(result?.problems ?? ["Metadata validation failed."]);
+
+        if (
+          missingClinical.length > 0 &&
+          onCreateClinicalAssessment
+        ) {
+          onCreateClinicalAssessment(
+            missingClinical[0].patient_id,
+            buildResumeState()
+          );
+        }
+
         return;
       }
 
@@ -986,9 +1727,7 @@ function ImagingBidsStep({
       onLog?.(
         `Started Imaging BIDS / CoCANoT conversion for ${result.record_count} image(s).`
       );
-      alert(
-        `Imaging BIDS / CoCANoT conversion started for ${result.record_count} image(s).`
-      );
+      await onStateRefresh?.();
     } catch (error) {
       setProblems([String(error)]);
       setConfirmOpen(false);
@@ -1008,6 +1747,12 @@ function ImagingBidsStep({
       onProcessImaging={onProcessImaging}
       onPatientReview={onPatientReview}
     >
+      <WorkflowStepper current={5} completed={completedSteps} />
+      <WorkflowStatusCard
+        title="Metadata & BIDS"
+        description="Complete the imaging metadata, confirm the included images, and create the final BIDS-compatible output."
+        state={stageState}
+      />
       <section className={styles.card}>
         <div className={styles.bidsHeading}>
           <div>
@@ -1088,14 +1833,14 @@ function ImagingBidsStep({
                     <td>
                       <span
                         className={
-                          record.existing_export
-                            ? styles.duplicateBadge
-                            : styles.newBadge
+                          record.record_state === "completed_recorded"
+                            ? styles.recordedBadge
+                            : record.record_state === "output_record_deleted"
+                              ? styles.orphanedBadge
+                              : styles.pendingBadge
                         }
                       >
-                        {record.existing_export
-                          ? "Already exported"
-                          : "New"}
+                        {record.status}
                       </span>
                     </td>
 
@@ -1118,10 +1863,15 @@ function ImagingBidsStep({
           {active.existing_export && (
             <section className={styles.existingExportBox}>
               <div>
-                <strong>Existing BIDS record detected</strong>
+                <strong>
+                  {active.record_state === "completed_recorded"
+                    ? "Completed BIDS output and CoCANoT record detected"
+                    : "Processed BIDS output detected without a CoCANoT record"}
+                </strong>
                 <p>
-                  This accepted image is an exact SHA-256 match for a NIfTI
-                  already in the BIDS output. It is excluded by default.
+                  {active.record_state === "completed_recorded"
+                    ? "Step 5 was completed and the matching Imaging record is still present in the local CoCANoT database."
+                    : "The processed BIDS files are still present in the final output folder, but the matching Imaging record is no longer present in the local CoCANoT database. Metadata stored with the existing output has been preloaded below so the record can be recreated without starting from scratch."}
                 </p>
               </div>
 
@@ -1129,17 +1879,14 @@ function ImagingBidsStep({
                 <span>
                   Existing output: {active.existing_export.nifti_path}
                 </span>
-                <span>
-                  Image ID: {active.existing_export.metadata?.ImageID ?? ""}
-                </span>
-                <span>
-                  Patient: {active.existing_export.metadata?.CoCANoTPatientID ?? ""}
-                </span>
               </div>
             </section>
           )}
 
-          <section className={styles.card}>
+          <section
+            id="imaging-bids-editor"
+            className={styles.card}
+          >
             <h3>CoCANoT Imaging Metadata</h3>
             <p className={styles.helpText}>
               Requiredness, input type, allowed values, conditional fields, prompts,
@@ -1332,7 +2079,6 @@ function MetadataField({ rule, value, onChange }) {
         ? [...new Set([...selected, option])]
         : selected.filter(item => item !== option);
 
-      // Preserve dictionary ordering just like the original Tkinter listbox.
       const ordered = allowed.filter(option => next.includes(option));
       onChange(ordered);
     }
@@ -1505,6 +2251,10 @@ function ImagingReview({
   onProcessImaging,
   onPatientReview,
   onContinue,
+  stageState,
+  completedSteps,
+  onStateRefresh,
+  onReviewSummary,
 }) {
   const [items, setItems] = useState([]);
   const [selectedId, setSelectedId] = useState("");
@@ -1513,6 +2263,8 @@ function ImagingReview({
   const [editField, setEditField] = useState("");
   const [editValue, setEditValue] = useState("");
   const [rejectOpen, setRejectOpen] = useState(false);
+  const reviewRequestRef = useRef(0);
+  const reviewCoordsRef = useRef({ x: 0, y: 0, z: 0, volume: 0 });
 
   useEffect(() => {
     loadItems();
@@ -1522,10 +2274,17 @@ function ImagingReview({
     const bridge = api();
     if (!bridge?.imaging_review_get_items) return;
     const result = await bridge.imaging_review_get_items();
-    setItems(result ?? []);
-    if (result?.length) {
-      setSelectedId(String(result[0].id));
-      await loadItem(String(result[0].id));
+    const nextItems = Array.isArray(result) ? result : [];
+    setItems(nextItems);
+
+    const accepted = nextItems.filter(
+      item => String(item.status ?? "").trim().toLowerCase() === "accepted"
+    ).length;
+    onReviewSummary?.({ total: nextItems.length, accepted });
+
+    if (nextItems.length) {
+      setSelectedId(String(nextItems[0].id));
+      await loadItem(String(nextItems[0].id));
     }
   }
 
@@ -1542,6 +2301,12 @@ function ImagingReview({
         coords.volume ?? null
       );
       setReview(data);
+      reviewCoordsRef.current = {
+        x: Number(data?.x ?? 0),
+        y: Number(data?.y ?? 0),
+        z: Number(data?.z ?? 0),
+        volume: Number(data?.volume ?? 0),
+      };
       setSelectedId(String(id));
       setEditField("");
       setEditValue("");
@@ -1554,12 +2319,41 @@ function ImagingReview({
 
   async function move(axis, value) {
     if (!review) return;
-    await loadItem(selectedId, {
-      x: axis === "x" ? Number(value) : review.x,
-      y: axis === "y" ? Number(value) : review.y,
-      z: axis === "z" ? Number(value) : review.z,
-      volume: axis === "volume" ? Number(value) : review.volume,
-    });
+
+    const bridge = api();
+    if (!bridge?.imaging_review_get_item) return;
+
+    const nextCoords = {
+      ...reviewCoordsRef.current,
+      [axis]: Number(value),
+    };
+    reviewCoordsRef.current = nextCoords;
+
+    const requestId = ++reviewRequestRef.current;
+
+    try {
+      const data = await bridge.imaging_review_get_item(
+        selectedId,
+        nextCoords.x,
+        nextCoords.y,
+        nextCoords.z,
+        nextCoords.volume
+      );
+
+      if (requestId !== reviewRequestRef.current) return;
+
+      setReview(data);
+      reviewCoordsRef.current = {
+        x: Number(data?.x ?? nextCoords.x),
+        y: Number(data?.y ?? nextCoords.y),
+        z: Number(data?.z ?? nextCoords.z),
+        volume: Number(data?.volume ?? nextCoords.volume),
+      };
+    } catch (error) {
+      if (requestId === reviewRequestRef.current) {
+        alert(String(error));
+      }
+    }
   }
 
   async function setStatus(status) {
@@ -1568,6 +2362,7 @@ function ImagingReview({
     await bridge.imaging_review_set_status(selectedId, status);
     setRejectOpen(false);
     await loadItems();
+    await onStateRefresh?.();
   }
 
   async function saveHeader() {
@@ -1590,6 +2385,7 @@ function ImagingReview({
         setRejectOpen(false);
         await loadItems();
         await loadItem(selectedId);
+        await onStateRefresh?.();
       }
     } catch (error) {
       alert(String(error));
@@ -1605,6 +2401,12 @@ function ImagingReview({
       onProcessImaging={onProcessImaging}
       onPatientReview={onPatientReview}
     >
+      <WorkflowStepper current={4} completed={completedSteps} />
+      <WorkflowStatusCard
+        title="Review de-identification"
+        description="Review each image and choose whether to accept it, replace it, place it on hold, or exclude it."
+        state={stageState}
+      />
       <div className={styles.reviewLayout}>
         <aside className={styles.reviewSidebar}>
           <h3>NIfTI files</h3>
@@ -1654,25 +2456,36 @@ function ImagingReview({
                 </div>
 
                 <div className={styles.headerEdit}>
-                  <label>
+                  <div className={styles.headerEditField}>
                     <span>Selected field</span>
-                    <input value={editField} readOnly />
-                  </label>
+                    <div className={styles.headerEditFieldValue}>
+                      {editField || "Select an editable header field above"}
+                    </div>
+                  </div>
+
                   <label className={styles.headerEditValue}>
                     <span>Scrubbed value</span>
                     <input
+                      type="text"
                       value={editValue}
+                      placeholder={editField ? "Enter scrubbed value" : "Select an editable field first"}
+                      onClick={event => event.stopPropagation()}
+                      onPointerDown={event => event.stopPropagation()}
                       onChange={event => setEditValue(event.target.value)}
                       disabled={!review.header_rows.find(row => row.field === editField)?.editable}
                     />
                   </label>
-                  <button
-                    className={styles.secondaryButton}
-                    disabled={!review.header_rows.find(row => row.field === editField)?.editable}
-                    onClick={saveHeader}
-                  >
-                    Save Header Edit
-                  </button>
+
+                  <div className={styles.headerEditActions}>
+                    <button
+                      type="button"
+                      className={styles.secondaryButton}
+                      disabled={!review.header_rows.find(row => row.field === editField)?.editable}
+                      onClick={saveHeader}
+                    >
+                      Save Header Edit
+                    </button>
+                  </div>
                 </div>
               </section>
 
@@ -1709,7 +2522,13 @@ function ImagingReview({
                 <div>
                   <button className={styles.secondaryButton} onClick={() => setRejectOpen(true)}>Reject</button>
                   <button className={styles.primaryButton} onClick={() => setStatus("Accepted")}>Accept</button>
-                  <button className={styles.primaryButton} onClick={onContinue}>Metadata & BIDS</button>
+                  <button
+                    className={styles.primaryButton}
+                    disabled={stageState !== "complete"}
+                    onClick={onContinue}
+                  >
+                    Continue to Step 5: Metadata & BIDS
+                  </button>
                 </div>
               </div>
             </>
@@ -1748,6 +2567,40 @@ function ImageView({ label, src }) {
 }
 
 function Slider({ label, value, max, onChange, disabled = false }) {
+  const [localValue, setLocalValue] = useState(Number(value ?? 0));
+  const timerRef = useRef(null);
+  const draggingRef = useRef(false);
+
+  useEffect(() => {
+    if (!draggingRef.current) {
+      setLocalValue(Number(value ?? 0));
+    }
+  }, [value]);
+
+  useEffect(() => () => {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+  }, []);
+
+  function queueChange(nextValue) {
+    const numericValue = Number(nextValue);
+    setLocalValue(numericValue);
+
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      onChange(numericValue);
+    }, 90);
+  }
+
+  function finishChange() {
+    draggingRef.current = false;
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+      onChange(localValue);
+    }
+  }
+
   return (
     <label className={styles.sliderRow}>
       <span>{label}</span>
@@ -1756,11 +2609,15 @@ function Slider({ label, value, max, onChange, disabled = false }) {
         min="0"
         max={Math.max(0, max)}
         step="1"
-        value={value}
+        value={localValue}
         disabled={disabled}
-        onChange={event => onChange(event.target.value)}
+        onPointerDown={() => { draggingRef.current = true; }}
+        onPointerUp={finishChange}
+        onPointerCancel={finishChange}
+        onBlur={finishChange}
+        onChange={event => queueChange(event.target.value)}
       />
-      <strong>{value} / {max}</strong>
+      <strong>{localValue} / {max}</strong>
     </label>
   );
 }

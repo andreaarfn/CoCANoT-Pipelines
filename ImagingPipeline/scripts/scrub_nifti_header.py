@@ -22,8 +22,8 @@ except ImportError as exc:
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 
-DEFAULT_INPUT_DIR = PROJECT_DIR / "derivatives" / "pydeface_deface"
-DEFAULT_OUTPUT_DIR = PROJECT_DIR / "derivatives" / "scrubbed_defaced_nifti"
+DEFAULT_INPUT_DIR = PROJECT_DIR / "derivatives" / "converted_nifti"
+DEFAULT_OUTPUT_DIR = PROJECT_DIR / "derivatives" / "scrubbed_header"
 
 
 SOURCE_KEYS_TO_KEEP = {
@@ -266,7 +266,7 @@ def scrub_json_metadata(
     ] = extract_imaging_file_metadata(
         nifti_path
     )
-    cleaned["Defaced"] = True
+    cleaned["Defaced"] = False
     cleaned["PHIScrubbed"] = True
     cleaned[
         "PHIScrubbedBy"
@@ -381,7 +381,7 @@ def create_json_without_input_sidecar(
                 input_nifti
             )
         ),
-        "Defaced": True,
+        "Defaced": False,
         "PHIScrubbed": True,
         "PHIScrubbedBy": (
             "scrub_nifti_header.py"

@@ -13,6 +13,24 @@ from .local_database import (
 )
 
 
+PATH_LIST_FIELDS = {
+    "derivative_paths",
+    "final_paths",
+}
+ROOT_LIST_FIELDS = {
+    "derivatives_roots",
+    "final_output_roots",
+}
+LEGACY_PATH_FIELDS = {
+    "bids_data_path",
+    "bids_sidecar_path",
+    "bids_channels_path",
+    "bids_electrodes_path",
+    "bids_coordsystem_path",
+    "cocanot_metadata_path",
+}
+
+
 class PatientDataLinkStore:
     """Persist final local data paths without placing binary data in SQLite."""
 
@@ -57,6 +75,68 @@ class PatientDataLinkStore:
                 )
                 """
             )
+
+    @staticmethod
+    def _normalized_path(value) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+
+        path = Path(text).expanduser()
+        try:
+            return str(path.resolve())
+        except OSError:
+            return str(path)
+
+    @classmethod
+    def _merge_path_values(cls, *values) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+
+        for value in values:
+            if value is None:
+                continue
+
+            items = value if isinstance(value, (list, tuple, set)) else [value]
+            for item in items:
+                normalized = cls._normalized_path(item)
+                if not normalized or normalized in seen:
+                    continue
+                seen.add(normalized)
+                merged.append(normalized)
+
+        return merged
+
+    @classmethod
+    def paths_from_payload(cls, payload) -> dict[str, list[str]]:
+        payload = dict(payload or {})
+
+        derivative_paths = cls._merge_path_values(
+            payload.get("derivative_paths", [])
+        )
+        final_paths = cls._merge_path_values(
+            payload.get("final_paths", []),
+            *(
+                payload.get(field, "")
+                for field in LEGACY_PATH_FIELDS
+            ),
+        )
+
+        derivatives_roots = cls._merge_path_values(
+            payload.get("derivatives_roots", []),
+            payload.get("derivatives_root", ""),
+        )
+        final_output_roots = cls._merge_path_values(
+            payload.get("final_output_roots", []),
+            payload.get("final_output_root", ""),
+        )
+
+        return {
+            "derivative_paths": derivative_paths,
+            "final_paths": final_paths,
+            "derivatives_roots": derivatives_roots,
+            "final_output_roots": final_output_roots,
+        }
 
     def save_link(
         self,
@@ -109,6 +189,22 @@ class PatientDataLinkStore:
             data
             or {}
         )
+        existing = self.get_link(
+            site_id,
+            patient_id,
+            table_name,
+            record_id,
+        )
+
+        existing_paths = self.paths_from_payload(existing)
+        new_paths = self.paths_from_payload(payload)
+
+        for field in PATH_LIST_FIELDS | ROOT_LIST_FIELDS:
+            payload[field] = self._merge_path_values(
+                existing_paths.get(field, []),
+                new_paths.get(field, []),
+            )
+
         now = datetime.now(
             timezone.utc
         ).isoformat()
@@ -244,3 +340,50 @@ class PatientDataLinkStore:
             if type(payload) is dict
             else {}
         )
+
+    def path_is_referenced_elsewhere(
+        self,
+        site_id,
+        patient_id,
+        table_name,
+        record_id,
+        path,
+    ) -> bool:
+        site_id = normalize_site_id(site_id)
+        target = self._normalized_path(path)
+
+        if not target:
+            return False
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    patient_id,
+                    table_name,
+                    record_id,
+                    data_json
+                FROM patient_data_links
+                WHERE UPPER(site_id) = ?
+                """,
+                (site_id,),
+            ).fetchall()
+
+        for row in rows:
+            if (
+                str(row["patient_id"]) == str(patient_id or "").strip()
+                and str(row["table_name"]) == str(table_name or "").strip()
+                and str(row["record_id"]) == str(record_id or "").strip()
+            ):
+                continue
+
+            try:
+                payload = json.loads(row["data_json"])
+            except json.JSONDecodeError:
+                continue
+
+            linked = self.paths_from_payload(payload)
+            if target in linked["derivative_paths"] or target in linked["final_paths"]:
+                return True
+
+        return False

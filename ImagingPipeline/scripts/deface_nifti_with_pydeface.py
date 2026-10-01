@@ -96,7 +96,7 @@ def load_configured_paths(
     input_dir = (
         input_override.expanduser().resolve()
         if input_override is not None
-        else imaging.converted_nifti_dir
+        else imaging.scrubbed_header_dir
     )
     output_dir = (
         output_override.expanduser().resolve()
@@ -130,6 +130,7 @@ def copy_and_update_json(
         return "JSON sidecar was not copied because it is not a JSON object."
 
     metadata["DefacingSoftware"] = "pydeface"
+    metadata["Defaced"] = True
     metadata["SourceFile"] = str(source_nifti.relative_to(input_dir))
 
     output_json.parent.mkdir(parents=True, exist_ok=True)
@@ -341,17 +342,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input-dir",
         type=Path,
-        help="Override <imaging.derivatives_dir>/converted_nifti.",
+        help="Override <imaging.derivatives_dir>/scrubbed_header.",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        help="Override <imaging.derivatives_dir>/pydeface_deface.",
+        help="Override <imaging.derivatives_dir>/scrubbed_defaced.",
     )
     parser.add_argument(
         "--log-dir",
         type=Path,
-        help="Override <imaging.derivatives_dir>/logs/pydeface_deface.",
+        help="Override <imaging.derivatives_dir>/logs/pydeface.",
     )
     parser.add_argument(
         "--overwrite",

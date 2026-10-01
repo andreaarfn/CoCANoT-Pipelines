@@ -5,9 +5,16 @@ import {
   FileText,
   Users,
 } from "lucide-react";
+import NeedsAttention from "./NeedsAttention";
 import styles from "./HomeDashboard.module.css";
 
-export default function HomeDashboard({ onNavigate }) {
+export default function HomeDashboard({
+  onNavigate,
+  attentionItems = [],
+  attentionLoading = false,
+  attentionError = "",
+  onRefreshAttention,
+}) {
   const cards = [
     {
       key: "imaging",
@@ -37,14 +44,31 @@ export default function HomeDashboard({ onNavigate }) {
 
   return (
     <div>
-      <section className={styles.heading}>
-        <span>COCANOT PIPELINES</span>
-        <h1>Data preparation workspace</h1>
-        <p>
-          De-identify, validate, review, and organize research
-          data from one application.
-        </p>
-      </section>
+      <div className={styles.topRow}>
+        <section className={styles.heading}>
+          <span>COCANOT PIPELINES</span>
+          <h1>Data preparation workspace</h1>
+          <p>
+            De-identify, validate, review, and organize research
+            data from one application.
+          </p>
+        </section>
+
+        <NeedsAttention
+          items={attentionItems}
+          loading={attentionLoading}
+          error={attentionError}
+          onRefresh={onRefreshAttention}
+          onOpenAll={() =>
+            onNavigate("needs-attention")
+          }
+          onOpenPatient={patientId =>
+            onNavigate("patient-review", {
+              patientId,
+            })
+          }
+        />
+      </div>
 
       <section className={styles.grid}>
         {cards.map(card => {

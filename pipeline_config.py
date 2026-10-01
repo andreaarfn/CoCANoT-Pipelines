@@ -68,8 +68,11 @@ class ImagingPaths:
     input_dirs: tuple[Path, ...]
     derivatives_dir: Path
     converted_nifti_dir: Path
+    scrubbed_header_dir: Path
     defaced_dir: Path
     scrubbed_defaced_dir: Path
+    external_defaced_dir: Path
+    pipeline_state_path: Path
     reports_dir: Path
     logs_dir: Path
     pydeface_logs_dir: Path
@@ -632,14 +635,23 @@ def load_imaging_config(
             converted_nifti_dir=(
                 derivatives_dir / "converted_nifti"
             ),
+            scrubbed_header_dir=(
+                derivatives_dir / "scrubbed_header"
+            ),
             defaced_dir=(
-                derivatives_dir / "pydeface_deface"
+                derivatives_dir / "scrubbed_defaced"
             ),
             scrubbed_defaced_dir=(
-                derivatives_dir / "scrubbed_defaced_nifti"
+                derivatives_dir / "scrubbed_defaced"
+            ),
+            external_defaced_dir=(
+                derivatives_dir / "external_defaced"
+            ),
+            pipeline_state_path=(
+                derivatives_dir / "imaging_pipeline_state.json"
             ),
             reports_dir=(
-                derivatives_dir / "reports"
+                derivatives_dir / "logs" / "reports"
             ),
             logs_dir=(
                 derivatives_dir / "logs"
@@ -647,7 +659,7 @@ def load_imaging_config(
             pydeface_logs_dir=(
                 derivatives_dir
                 / "logs"
-                / "pydeface_deface"
+                / "pydeface"
             ),
             bids_output_dir=bids_output_dir,
         ),
@@ -742,9 +754,9 @@ def create_imaging_output_directories(
     for path in (
         paths.derivatives_dir,
         paths.converted_nifti_dir,
-        paths.defaced_dir,
+        paths.scrubbed_header_dir,
         paths.scrubbed_defaced_dir,
-        paths.reports_dir,
+        paths.external_defaced_dir,
         paths.logs_dir,
         paths.pydeface_logs_dir,
         paths.bids_output_dir,

@@ -416,6 +416,7 @@ class MetadataRepository:
                     patient_id,
                     assessment_number,
                     assessment_id,
+                    dictionary_version,
                     data_json,
                     created_at,
                     updated_at
@@ -442,6 +443,10 @@ class MetadataRepository:
                 "patient_id": row[
                     "patient_id"
                 ],
+                "dictionary_version": str(
+                    row["dictionary_version"]
+                    or ""
+                ),
                 "metadata": json.loads(
                     row["data_json"]
                 ),

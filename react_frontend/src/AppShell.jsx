@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Activity,
+  AlertTriangle,
   Brain,
   CircleHelp,
   FileText,
@@ -8,7 +9,6 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  UploadCloud,
   Users,
 } from "lucide-react";
 import styles from "./AppShell.module.css";
@@ -24,11 +24,13 @@ const NAV = [
   { key: "ephys", label: "Electrophysiology", icon: Activity },
   { key: "metadata", label: "Metadata", icon: FileText },
   { key: "patient-review", label: "Patient Data Review", icon: Users },
+  { key: "needs-attention", label: "Needs Attention", icon: AlertTriangle },
 ];
 
 export default function AppShell({
   siteId,
   page,
+  attentionCount = 0,
   onNavigate,
   onSignOut,
   children,
@@ -60,7 +62,9 @@ export default function AppShell({
       ephys: "ephys",
       metadata: "metadata-home",
       "patient-review": "patient-review",
+      "needs-attention": "needs-attention",
     };
+
     onNavigate(targets[key]);
   }
 
@@ -116,7 +120,49 @@ export default function AppShell({
                   title={collapsed ? item.label : undefined}
                 >
                   <Icon size={19} strokeWidth={1.9} />
-                  {!collapsed && <span>{item.label}</span>}
+
+                  {!collapsed && (
+                    <>
+                      <span>{item.label}</span>
+
+                      {item.key === "needs-attention" &&
+                        attentionCount > 0 && (
+                          <span
+                            style={{
+                              marginLeft: "auto",
+                              minWidth: 22,
+                              height: 22,
+                              padding: "0 6px",
+                              display: "grid",
+                              placeItems: "center",
+                              borderRadius: 11,
+                              background: "#c93643",
+                              color: "#fff",
+                              fontSize: 10,
+                              fontWeight: 850,
+                            }}
+                          >
+                            {attentionCount}
+                          </span>
+                        )}
+                    </>
+                  )}
+
+                  {collapsed &&
+                    item.key === "needs-attention" &&
+                    attentionCount > 0 && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: 5,
+                          right: 5,
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: "#d6404d",
+                        }}
+                      />
+                    )}
                 </button>
 
                 {!collapsed &&
@@ -164,11 +210,13 @@ export default function AppShell({
                             ? styles.subItemActive
                             : ""
                         }`}
-                        onClick={() => onNavigate("metadata-patients")}
+                        onClick={() =>
+                          onNavigate("metadata-patients")
+                        }
                       >
-                        <Users size={15} />
                         Manage Patients
                       </button>
+
                       <button
                         className={`${styles.subItem} ${
                           page === "metadata-bulk"
@@ -179,7 +227,6 @@ export default function AppShell({
                           onNavigate("metadata-bulk")
                         }
                       >
-                        <UploadCloud size={15} />
                         Bulk Upload
                       </button>
                     </>
@@ -190,7 +237,20 @@ export default function AppShell({
         </nav>
 
         <div className={styles.sidebarFooter}>
-          <div className={styles.help}>
+          <div
+            className={styles.help}
+            role="button"
+            tabIndex={0}
+            onClick={() => onNavigate("help-support")}
+            onKeyDown={event => {
+              if (
+                event.key === "Enter" ||
+                event.key === " "
+              ) {
+                onNavigate("help-support");
+              }
+            }}
+          >
             <CircleHelp size={18} />
             {!collapsed && <span>Help & Support</span>}
           </div>
@@ -203,13 +263,18 @@ export default function AppShell({
             <span>ACTIVE SITE</span>
             <strong>{siteId}</strong>
           </div>
-          <button className={styles.signOut} onClick={onSignOut}>
+          <button
+            className={styles.signOut}
+            onClick={onSignOut}
+          >
             <LogOut size={17} />
             <span>Sign Out</span>
           </button>
         </header>
 
-        <main className={styles.content}>{children}</main>
+        <main className={styles.content}>
+          {children}
+        </main>
       </div>
     </div>
   );

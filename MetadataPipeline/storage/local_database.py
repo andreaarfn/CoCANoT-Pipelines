@@ -123,6 +123,21 @@ class LocalMetadataStore:
                 """
             )
 
+            clinical_columns = {
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA table_info(clinical_assessments)"
+                ).fetchall()
+            }
+
+            if "dictionary_version" not in clinical_columns:
+                connection.execute(
+                    """
+                    ALTER TABLE clinical_assessments
+                    ADD COLUMN dictionary_version TEXT NOT NULL DEFAULT ''
+                    """
+                )
+
             connection.execute(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS
@@ -369,6 +384,7 @@ class LocalMetadataStore:
                     patient_id,
                     assessment_number,
                     assessment_id,
+                    dictionary_version,
                     data_json,
                     created_at,
                     updated_at
@@ -415,6 +431,7 @@ class LocalMetadataStore:
                     patient_id,
                     assessment_number,
                     assessment_id,
+                    dictionary_version,
                     data_json,
                     created_at,
                     updated_at
@@ -467,6 +484,7 @@ class LocalMetadataStore:
                     patient_id,
                     assessment_number,
                     assessment_id,
+                    dictionary_version,
                     data_json,
                     created_at,
                     updated_at
@@ -538,6 +556,7 @@ class LocalMetadataStore:
         patient_id,
         records,
         replace_existing_ids=None,
+        dictionary_version="",
     ):
         """
         Insert or intentionally replace explicit Clinical Assessment IDs.
@@ -563,6 +582,10 @@ class LocalMetadataStore:
             raise ValueError(
                 "CoCANoT Patient ID cannot be blank."
             )
+
+        dictionary_version = str(
+            dictionary_version or ""
+        ).strip()
 
         replace_existing_ids = {
             str(
@@ -766,17 +789,19 @@ class LocalMetadataStore:
                         patient_id,
                         assessment_number,
                         assessment_id,
+                        dictionary_version,
                         data_json,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         site_id,
                         patient_id,
                         assessment_number,
                         assessment_id,
+                        dictionary_version,
                         self._dump(
                             clean_metadata
                         ),
@@ -830,12 +855,149 @@ class LocalMetadataStore:
             ) in prepared
         ]
 
+    def update_historical_clinical_assessment(
+        self,
+        site_id,
+        patient_id,
+        assessment_id,
+        metadata,
+    ):
+        site_id = normalize_site_id(
+            site_id
+        )
+        patient_id = str(
+            patient_id or ""
+        ).strip()
+        assessment_id = str(
+            assessment_id or ""
+        ).strip().upper()
+
+        if not site_id:
+            raise ValueError(
+                "Site ID cannot be blank."
+            )
+
+        if not patient_id:
+            raise ValueError(
+                "CoCANoT Patient ID cannot be blank."
+            )
+
+        if not assessment_id:
+            raise ValueError(
+                "Clinical Assessment ID cannot be blank."
+            )
+
+        target = self.clinical_assessment(
+            site_id,
+            patient_id,
+            assessment_id,
+        )
+
+        if target is None:
+            raise ValueError(
+                f"Clinical Assessment {assessment_id} was not found."
+            )
+
+        latest = self.latest_clinical_assessment(
+            site_id,
+            patient_id,
+        )
+
+        if latest is None:
+            raise ValueError(
+                "No Clinical Assessments were found for this patient."
+            )
+
+        if int(
+            target[
+                "assessment_number"
+            ]
+        ) >= int(
+            latest[
+                "assessment_number"
+            ]
+        ):
+            raise ValueError(
+                "Historical Clinical Assessment updates can only "
+                "modify an assessment older than the current one."
+            )
+
+        clean_metadata = dict(
+            metadata or {}
+        )
+        clean_metadata[
+            "CoCANoT Patient ID"
+        ] = patient_id
+        clean_metadata[
+            "Clinical Assessment ID"
+        ] = assessment_id
+
+        now = datetime.now(
+            timezone.utc
+        ).isoformat()
+
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE clinical_assessments
+                SET data_json = ?,
+                    updated_at = ?
+                WHERE UPPER(site_id) = ?
+                  AND patient_id = ?
+                  AND assessment_number = ?
+                  AND UPPER(assessment_id) = ?
+                """,
+                (
+                    self._dump(
+                        clean_metadata
+                    ),
+                    now,
+                    site_id,
+                    patient_id,
+                    int(
+                        target[
+                            "assessment_number"
+                        ]
+                    ),
+                    assessment_id,
+                ),
+            )
+
+        saved = self.clinical_assessment(
+            site_id,
+            patient_id,
+            assessment_id,
+        )
+
+        return {
+            "action": "corrected_historical",
+            "assessment_id": assessment_id,
+            "metadata": (
+                saved[
+                    "metadata"
+                ]
+                if saved is not None
+                else clean_metadata
+            ),
+            "dictionary_version": str(
+                target.get(
+                    "dictionary_version",
+                    "",
+                )
+                or ""
+            ),
+            "dictionary_version_changed": False,
+            "changed_tracked_fields": [],
+            "changed_patient_level_fields": [],
+        }
+
     def save_clinical_assessment(
         self,
         site_id,
         patient_id,
         metadata,
         tracked_fields,
+        dictionary_version="",
     ):
         """
         Save the patient's current Clinical Assessment.
@@ -872,6 +1034,9 @@ class LocalMetadataStore:
         clean_metadata = dict(
             metadata
         )
+        dictionary_version = str(
+            dictionary_version or ""
+        ).strip()
 
         clean_metadata[
             "CoCANoT Patient ID"
@@ -909,17 +1074,19 @@ class LocalMetadataStore:
                         patient_id,
                         assessment_number,
                         assessment_id,
+                        dictionary_version,
                         data_json,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         site_id,
                         patient_id,
                         assessment_number,
                         assessment_id,
+                        dictionary_version,
                         self._dump(
                             clean_metadata
                         ),
@@ -932,6 +1099,8 @@ class LocalMetadataStore:
                 "action": "created",
                 "assessment_id": assessment_id,
                 "metadata": clean_metadata,
+                "dictionary_version": dictionary_version,
+                "dictionary_version_changed": False,
                 "changed_tracked_fields": [],
                 "changed_patient_level_fields": [],
             }
@@ -959,6 +1128,18 @@ class LocalMetadataStore:
                 )
             )
         ]
+
+        dictionary_version_changed = (
+            bool(dictionary_version)
+            and dictionary_version
+            != str(
+                latest.get(
+                    "dictionary_version",
+                    "",
+                )
+                or ""
+            ).strip()
+        )
 
         # --------------------------------------------------
         # Determine whether a patient-level field was
@@ -988,7 +1169,10 @@ class LocalMetadataStore:
             # A tracked clinical change creates a new CA.
             # ----------------------------------------------
 
-            if changed_tracked_fields:
+            if (
+                changed_tracked_fields
+                or dictionary_version_changed
+            ):
                 assessment_number = (
                     int(
                         latest[
@@ -1013,17 +1197,19 @@ class LocalMetadataStore:
                         patient_id,
                         assessment_number,
                         assessment_id,
+                        dictionary_version,
                         data_json,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         site_id,
                         patient_id,
                         assessment_number,
                         assessment_id,
+                        dictionary_version,
                         self._dump(
                             clean_metadata
                         ),
@@ -1125,6 +1311,17 @@ class LocalMetadataStore:
                 ]
                 if saved is not None
                 else clean_metadata
+            ),
+            "dictionary_version": (
+                saved.get(
+                    "dictionary_version",
+                    dictionary_version,
+                )
+                if saved is not None
+                else dictionary_version
+            ),
+            "dictionary_version_changed": (
+                dictionary_version_changed
             ),
             "changed_tracked_fields": (
                 changed_tracked_fields
@@ -1322,6 +1519,9 @@ class LocalMetadataStore:
             ],
             "assessment_id": row[
                 "assessment_id"
+            ],
+            "dictionary_version": row[
+                "dictionary_version"
             ],
             "metadata": json.loads(
                 row[

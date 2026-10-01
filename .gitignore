@@ -28,3 +28,6 @@ dist/
 
 # Conda
 conda-bld/
+
+# Local test data
+ANDREATEST/

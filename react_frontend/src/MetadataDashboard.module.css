@@ -1,1 +1,52 @@
-.heading{margin:0 0 18px}.heading>span{display:block;color:#47728b;font-size:11px;font-weight:850;letter-spacing:.09em}.heading h1{margin:5px 0 3px;font-size:31px;letter-spacing:-.025em}.heading p{margin:0;color:#66788d;font-size:15px}.breadcrumb{margin-bottom:12px;display:flex;align-items:center;gap:8px;color:#6b7b8f;font-size:11px}.breadcrumb button{padding:0;display:flex;align-items:center;gap:5px;border:0;background:transparent;color:#1767b1;font-weight:700}.homeCards,.bulkGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.homeCards button,.actionCard{min-height:175px;padding:22px;display:grid;align-content:start;gap:9px;border:1px solid #d9e3ec;border-radius:10px;background:#fff;color:#29465f;text-align:left}.homeCards strong,.actionCard strong{font-size:17px}.homeCards span,.actionCard span{color:#67798d;line-height:1.45}.patientLookup{margin-bottom:12px;padding:14px;display:grid;grid-template-columns:minmax(300px,1fr) auto auto auto;gap:9px;align-items:end;border:1px solid #d9e3ec;border-radius:9px;background:#fff}.patientLookup label{display:grid;gap:5px;color:#334a64;font-size:11px;font-weight:750}.patientSelect{min-height:39px;display:flex;align-items:center;gap:8px;padding:0 9px;border:1px solid #c8d4df;border-radius:7px}.patientSelect svg{color:#63788c}.patientSelect select{width:100%;border:0;outline:0;background:transparent;color:#263a52}.primary,.outlinePrimary,.iconButton,.primarySmall,.outlineSmall,.dangerSmall{min-height:37px;padding:0 12px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:7px;font-weight:750}.primary,.primarySmall{border:1px solid #1764ad;background:#1764ad;color:#fff}.outlinePrimary,.outlineSmall,.iconButton{border:1px solid #2e75b6;background:#fff;color:#1764ad}.dangerSmall{border:1px solid #f0b9bd;background:#fff7f7;color:#d9414d}.primarySmall,.outlineSmall,.dangerSmall{min-height:32px;padding:0 10px;font-size:10px}.primary:disabled,.primarySmall:disabled,.outlineSmall:disabled,.dangerSmall:disabled{opacity:.45;cursor:not-allowed}.recordSections{display:grid;gap:10px}.recordSection{padding:11px;border:1px solid #d9e3ec;border-radius:9px;background:#fff}.sectionHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.sectionTitle{display:flex;align-items:center;gap:8px;color:#153f72}.sectionTitle h2{margin:0;color:#182b45;font-size:14px}.sectionActions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.tableWrap{overflow:auto;border:1px solid #e0e7ed;border-radius:6px}.table{width:100%;border-collapse:collapse;font-size:10px}.table th{padding:7px 9px;background:#f1f5f8;color:#53667a;text-align:left}.table td{padding:6px 9px;border-top:1px solid #e6edf2;color:#42576e}.checkColumn{width:35px}.emptyRow{padding:18px!important;text-align:center;color:#8190a0!important}.emptyState{padding:32px;border:1px dashed #bdcbd7;border-radius:9px;background:#fafcfd;color:#788798;text-align:center}.message{margin-top:12px;padding:11px;border:1px solid #c9dce8;border-radius:7px;background:#eef7fc;color:#365b72;font-size:11px}.modalBackdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:25px;background:rgba(13,29,47,.45)}.modal{width:min(920px,100%);max-height:calc(100vh - 50px);overflow:auto;padding:20px;border-radius:11px;background:#fff}.modalHeader,.modalActions{display:flex;justify-content:space-between;align-items:center;gap:8px}.modalHeader{margin-bottom:15px}.modalHeader span{color:#47728b;font-size:10px;font-weight:850;letter-spacing:.08em}.modalHeader h2{margin:3px 0 0}.modalHeader button,.modalActions button{min-height:35px;padding:0 11px;border:1px solid #c9d5df;border-radius:7px;background:#fff;color:#314961;font-weight:700}.modalActions{justify-content:flex-end;margin-top:16px}.modalActions .primary{border-color:#1764ad;background:#1764ad;color:#fff}@media(max-width:1050px){.patientLookup{grid-template-columns:1fr 1fr}.sectionHeader{align-items:flex-start;flex-direction:column}}@media(max-width:800px){.homeCards,.bulkGrid,.patientLookup{grid-template-columns:1fr}.sectionActions{width:100%}}
+.heading{margin:0 0 18px}.heading>span{display:block;color:#47728b;font-size:11px;font-weight:850;letter-spacing:.09em}.heading h1{margin:5px 0 3px;font-size:31px;letter-spacing:-.025em}.heading p{margin:0;color:#66788d;font-size:15px}.breadcrumb{margin-bottom:12px;display:flex;align-items:center;gap:8px;color:#6b7b8f;font-size:11px}.breadcrumb button{padding:0;display:flex;align-items:center;gap:5px;border:0;background:transparent;color:#1767b1;font-weight:700}.homeCards,.bulkGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.homeCards button,.actionCard{min-height:175px;padding:22px;display:grid;align-content:start;gap:9px;border:1px solid #d9e3ec;border-radius:10px;background:#fff;color:#29465f;text-align:left}.homeCards strong,.actionCard strong{font-size:17px}.homeCards span,.actionCard span{color:#67798d;line-height:1.45}.patientLookup{margin-bottom:12px;padding:14px;display:grid;grid-template-columns:minmax(300px,1fr) auto auto auto;gap:9px;align-items:end;border:1px solid #d9e3ec;border-radius:9px;background:#fff}.patientLookup label{display:grid;gap:5px;color:#334a64;font-size:11px;font-weight:750}.patientSelect{min-height:39px;display:flex;align-items:center;gap:8px;padding:0 9px;border:1px solid #c8d4df;border-radius:7px}.patientSelect svg{color:#63788c}.patientSelect select{width:100%;border:0;outline:0;background:transparent;color:#263a52}.primary,.outlinePrimary,.iconButton,.primarySmall,.outlineSmall,.dangerSmall{min-height:37px;padding:0 12px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:7px;font-weight:750}.primary,.primarySmall{border:1px solid #1764ad;background:#1764ad;color:#fff}.outlinePrimary,.outlineSmall,.iconButton{border:1px solid #2e75b6;background:#fff;color:#1764ad}.dangerSmall{border:1px solid #f0b9bd;background:#fff7f7;color:#d9414d}.primarySmall,.outlineSmall,.dangerSmall{min-height:32px;padding:0 10px;font-size:10px}.primary:disabled,.primarySmall:disabled,.outlineSmall:disabled,.dangerSmall:disabled{opacity:.45;cursor:not-allowed}.recordSections{display:grid;gap:10px}.recordSection{padding:11px;border:1px solid #d9e3ec;border-radius:9px;background:#fff}.sectionHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.sectionTitle{display:flex;align-items:center;gap:8px;color:#153f72}.sectionTitle h2{margin:0;color:#182b45;font-size:14px}.sectionActions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.tableWrap{overflow:auto;border:1px solid #e0e7ed;border-radius:6px}.table{width:100%;border-collapse:collapse;font-size:10px}.table th{padding:7px 9px;background:#f1f5f8;color:#53667a;text-align:left}.table td{padding:6px 9px;border-top:1px solid #e6edf2;color:#42576e}.checkColumn{width:35px}.emptyRow{padding:18px!important;text-align:center;color:#8190a0!important}.emptyState{padding:32px;border:1px dashed #bdcbd7;border-radius:9px;background:#fafcfd;color:#788798;text-align:center}.message{margin-top:12px;padding:11px;border:1px solid #c9dce8;border-radius:7px;background:#eef7fc;color:#365b72;font-size:11px}.modalBackdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:25px;background:rgba(13,29,47,.45)}.modal{width:min(920px,100%);max-height:calc(100vh - 50px);overflow:auto;padding:20px;border-radius:11px;background:#fff}.modalHeader,.modalActions{display:flex;justify-content:space-between;align-items:center;gap:8px}.modalHeader{margin-bottom:15px}.modalHeader span{color:#47728b;font-size:10px;font-weight:850;letter-spacing:.08em}.modalHeader h2{margin:3px 0 0}.modalHeader button,.modalActions button{min-height:35px;padding:0 11px;border:1px solid #c9d5df;border-radius:7px;background:#fff;color:#314961;font-weight:700}.modalActions{justify-content:flex-end;margin-top:16px}.modalActions .primary{border-color:#1764ad;background:#1764ad;color:#fff}.localOnlyCard{margin-bottom:16px;padding:14px;border:1px solid #d7e4ec;border-radius:9px;background:#f6fafc}.localOnlyHeading{display:flex;align-items:center;gap:9px;color:#315e76}.localOnlyHeading>div{display:grid;gap:2px}.localOnlyHeading strong{font-size:13px}.localOnlyHeading span{color:#5b788a;font-size:9px;font-weight:850;letter-spacing:.08em}.localOnlyCard p{margin:9px 0 12px;color:#61788a;font-size:11px;line-height:1.45}.localOnlyCard label{display:grid;gap:5px;color:#334a64;font-size:11px;font-weight:750}.localOnlyCard input{min-height:38px;padding:0 10px;border:1px solid #c8d4df;border-radius:7px;background:#fff;color:#263a52}@media(max-width:1050px){.patientLookup{grid-template-columns:1fr 1fr}.sectionHeader{align-items:flex-start;flex-direction:column}}@media(max-width:800px){.homeCards,.bulkGrid,.patientLookup{grid-template-columns:1fr}.sectionActions{width:100%}}
+
+.editorError{margin-top:16px;padding:13px 14px;border:1px solid #e6aeb3;border-radius:8px;background:#fff6f6;color:#8f2731}
+.editorError strong{display:block;margin-bottom:6px;font-size:12px}
+.editorError pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:11px;line-height:1.5;color:#8f2731}
+
+
+.needsReviewRow{
+  background:#fffafa;
+}
+
+.needsReviewRow:hover{
+  background:#fff6f6;
+}
+
+.reviewStatusWrap{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+
+.needsReviewBadge,
+.reviewOkBadge{
+  display:inline-flex;
+  align-items:center;
+  min-height:22px;
+  padding:0 7px;
+  border-radius:11px;
+  font-size:9px;
+  font-weight:850;
+  white-space:nowrap;
+}
+
+.needsReviewBadge{
+  background:#fde9eb;
+  color:#b12d38;
+  border:1px solid #efc0c5;
+}
+
+.reviewOkBadge{
+  background:#edf7f0;
+  color:#36724c;
+  border:1px solid #cde5d4;
+}
+
+.reviewIssueCount{
+  color:#8d4a50;
+  font-size:9px;
+  font-weight:700;
+  cursor:help;
+}
