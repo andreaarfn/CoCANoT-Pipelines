@@ -1,4340 +1,2185 @@
 .heading {
 
-
-
   margin: 0 0 24px;
 
-
-
 }
-
-
 
 .heading > span {
 
-
-
   display: block;
-
-
 
   color: #47728b;
 
-
-
   font-size: 10px;
 
-
-
   font-weight: 850;
-
-
 
   letter-spacing: .09em;
 
-
-
   text-transform: uppercase;
 
-
-
 }
-
-
 
 .heading h1 {
 
-
-
   margin: 5px 0 6px;
 
-
-
   color: #17233a;
-
-
 
   font-size: 30px;
 
-
-
   line-height: 1.15;
-
-
 
   letter-spacing: -.025em;
 
-
-
 }
-
-
 
 .heading p {
 
-
-
   max-width: 1000px;
 
-
-
   margin: 0;
-
-
 
   color: #66788d;
 
-
-
   font-size: 13px;
-
-
 
   line-height: 1.55;
 
-
-
 }
-
-
 
 .backLink {
 
-
-
   margin: 0 0 14px;
-
-
 
   padding: 0;
 
-
-
   display: inline-flex;
-
-
 
   align-items: center;
 
-
-
   gap: 6px;
-
-
 
   border: 0;
 
-
-
   background: transparent;
-
-
 
   color: #1767b1;
 
-
-
   font: inherit;
-
-
 
   font-size: 12px;
 
-
-
   font-weight: 750;
-
-
 
   cursor: pointer;
 
-
-
 }
-
-
 
 .homeCards {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: repeat(2, minmax(0, 1fr));
 
-
-
   gap: 16px;
 
-
-
 }
-
-
 
 .homeCards button {
 
-
-
   min-height: 180px;
-
-
 
   padding: 22px;
 
-
-
   display: grid;
-
-
 
   align-content: start;
 
-
-
   gap: 9px;
-
-
 
   border: 1px solid #d9e3ec;
 
-
-
   border-radius: 12px;
 
-
-
   background: #fff;
-
-
 
   color: #24405b;
 
-
-
   text-align: left;
-
-
 
   font: inherit;
 
-
-
   cursor: pointer;
 
-
-
 }
-
-
 
 .homeCards strong {
 
-
-
   font-size: 17px;
 
-
-
 }
-
-
 
 .homeCards span {
 
-
-
   color: #67798d;
 
-
-
 }
-
-
 
 .stepper {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: repeat(5, minmax(0, 1fr));
 
-
-
   gap: 0;
-
-
 
   margin: 0 0 22px;
 
-
-
   padding: 18px 16px;
-
-
 
   border: 1px solid #dce5ed;
 
-
-
   border-radius: 12px;
-
-
 
   background: #fff;
 
-
-
 }
-
-
 
 .stepItem {
 
-
-
   position: relative;
-
-
 
   display: flex;
 
-
-
   flex-direction: column;
-
-
 
   align-items: center;
 
-
-
   gap: 7px;
 
-
-
   min-width: 0;
-
-
 
   color: #8292a1;
 
-
-
   text-align: center;
-
-
 
   font-size: 10px;
 
-
-
   font-weight: 750;
 
-
-
 }
-
-
 
 .stepCircle {
 
-
-
   position: relative;
-
-
 
   z-index: 2;
 
-
-
   width: 30px;
-
-
 
   height: 30px;
 
-
-
   display: grid;
 
-
-
   place-items: center;
-
-
 
   border: 2px solid #cfd9e2;
 
-
-
   border-radius: 50%;
 
-
-
   background: #fff;
-
-
 
   color: #8191a0;
 
-
-
   font-size: 11px;
-
-
 
   font-weight: 850;
 
-
-
 }
-
-
 
 .stepActive {
 
-
-
   border-color: #2470ae;
-
-
 
   background: #2470ae;
 
-
-
   color: #fff;
 
-
-
 }
-
-
 
 .stepDone {
 
-
-
   border-color: #4d9a72;
-
-
 
   background: #eaf6ef;
 
-
-
   color: #2f7754;
 
-
-
 }
-
-
 
 .stepLabelDone {
 
-
-
   color: #2f7754 !important;
 
-
-
 }
-
-
 
 .stepLine {
 
-
-
   position: absolute;
-
-
 
   z-index: 1;
 
-
-
   top: 14px;
-
-
 
   left: calc(50% + 17px);
 
-
-
   width: calc(100% - 34px);
-
-
 
   height: 2px;
 
-
-
   background: #dce4ea;
 
-
-
 }
-
-
 
 .stepLineDone {
 
-
-
   background: #b7d7c3;
 
-
-
 }
-
-
 
 .workflowSection {
 
-
-
   margin-bottom: 14px;
 
-
-
   overflow: hidden;
-
-
 
   border: 1px solid #d8e2ea;
 
-
-
   border-radius: 12px;
 
-
-
   background: #fff;
-
-
 
   box-shadow: 0 4px 16px rgba(31, 55, 79, .025);
 
-
-
 }
-
-
 
 .workflowOpen {
 
-
-
   border-color: #bed2e1;
-
-
 
   box-shadow: 0 7px 22px rgba(33, 69, 100, .05);
 
-
-
 }
-
-
 
 .workflowComplete {
 
-
-
   border-color: #c5ddce;
 
-
-
 }
-
-
 
 .workflowHeader {
 
-
-
   width: 100%;
-
-
 
   min-height: 76px;
 
-
-
   padding: 14px 18px;
 
-
-
   display: grid;
-
-
 
   grid-template-columns: 42px minmax(0, 1fr) auto 22px;
 
-
-
   gap: 13px;
-
-
 
   align-items: center;
 
-
-
   border: 0;
 
-
-
   background: #fff;
-
-
 
   color: #17233a;
 
-
-
   text-align: left;
-
-
 
   font: inherit;
 
-
-
   cursor: pointer;
 
-
-
 }
-
-
 
 .workflowOpen .workflowHeader {
 
-
-
   border-bottom: 1px solid #e4ebf1;
-
-
 
   background: #f9fbfd;
 
-
-
 }
-
-
 
 .sectionNumber {
 
-
-
   width: 36px;
-
-
 
   height: 36px;
 
-
-
   display: grid;
-
-
 
   place-items: center;
 
-
-
   border-radius: 9px;
-
-
 
   background: #eaf3f9;
 
-
-
   color: #2c688b;
-
-
 
   font-size: 12px;
 
-
-
   font-weight: 900;
 
-
-
 }
-
-
 
 .sectionNumberDone {
 
-
-
   background: #eaf6ef;
-
-
 
   color: #2f7754;
 
-
-
 }
-
-
 
 .workflowTitle {
 
-
-
   display: grid;
-
-
 
   gap: 4px;
 
-
-
   min-width: 0;
 
-
-
 }
-
-
 
 .workflowTitle strong {
 
-
-
   font-size: 15px;
 
-
-
 }
-
-
 
 .workflowTitle small {
 
-
-
   overflow: hidden;
-
-
 
   color: #708295;
 
-
-
   font-size: 11px;
-
-
 
   line-height: 1.45;
 
-
-
   text-overflow: ellipsis;
 
-
-
 }
-
-
 
 .goButton,
 
-
-
 .completeLabel {
-
-
 
   font-size: 10px;
 
-
-
   font-weight: 800;
 
-
-
 }
-
-
 
 .goButton {
 
-
-
   color: #3776a0;
 
-
-
 }
-
-
 
 .completeLabel {
 
-
-
   color: #2f7754;
 
-
-
 }
-
-
 
 .chevronOpen {
 
-
-
   transform: rotate(180deg);
 
-
-
 }
-
-
 
 .workflowBody {
 
-
-
   padding: 20px;
 
-
-
 }
-
-
 
 .uploadGridSingle {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: minmax(0, 1fr);
 
-
-
 }
-
-
 
 .uploadCard {
 
-
-
   min-height: 150px;
 
-
-
   display: grid;
-
-
 
   grid-template-columns: 48px minmax(0, 1fr);
 
-
-
   gap: 14px;
 
-
-
   padding: 18px;
-
-
 
   border: 1px dashed #aebfcd;
 
-
-
   border-radius: 11px;
-
-
 
   background: #fafcfe;
 
-
-
 }
-
-
 
 .uploadIcon {
 
-
-
   width: 44px;
-
-
 
   height: 44px;
 
-
-
   display: grid;
-
-
 
   place-items: center;
 
-
-
   border-radius: 10px;
-
-
 
   background: #e8f2f8;
 
-
-
   color: #2f6d91;
 
-
-
 }
-
-
 
 .uploadCopy {
 
-
-
   display: flex;
-
-
 
   flex-direction: column;
 
-
-
   align-items: flex-start;
-
-
 
   min-width: 0;
 
-
-
 }
-
-
 
 .uploadCopy strong {
 
-
-
   color: #24364f;
-
-
 
   font-size: 14px;
 
-
-
 }
-
-
 
 .uploadCopy p {
 
-
-
   margin: 5px 0 0;
-
-
 
   color: #6a7d8f;
 
-
-
   font-size: 11px;
-
-
 
   line-height: 1.45;
 
-
-
 }
-
-
 
 .uploadActions {
 
-
-
   display: flex;
-
-
 
   flex-wrap: wrap;
 
-
-
   gap: 10px;
 
-
-
   align-items: center;
-
-
 
   margin-top: auto;
 
-
-
   padding-top: 14px;
 
-
-
 }
-
-
 
 .uploadPrimary,
 
-
-
 .uploadLink,
 
-
-
 .primary,
-
-
 
 .secondary,
 
-
-
 .annotationHeader button,
-
-
 
 .annotationEdit button,
 
-
-
 .reviewActions button {
-
-
 
   font: inherit;
 
-
-
   cursor: pointer;
 
-
-
 }
-
-
 
 .uploadPrimary {
 
-
-
   min-height: 36px;
-
-
 
   padding: 0 13px;
 
-
-
   border: 1px solid #2470ae;
-
-
 
   border-radius: 7px;
 
-
-
   background: #2470ae;
-
-
 
   color: #fff;
 
-
-
   font-size: 11px;
-
-
 
   font-weight: 800;
 
-
-
 }
-
-
 
 .uploadLink {
 
-
-
   min-height: 36px;
-
-
 
   padding: 0 10px;
 
-
-
   border: 0;
 
-
-
   background: transparent;
-
-
 
   color: #206a9f;
 
-
-
   font-size: 11px;
-
-
 
   font-weight: 800;
 
-
-
 }
-
-
 
 .selectedBar {
 
-
-
   position: relative;
-
-
 
   margin-top: 15px;
 
-
-
   padding: 14px 15px;
-
-
 
   display: grid;
 
-
-
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-
-
+  grid-template-columns: 54px minmax(0, 1fr) auto;
 
   align-items: center;
 
-
-
   gap: 12px;
-
-
 
   border: 1px solid #d9e3eb;
 
-
-
   border-radius: 10px;
-
-
 
   background: #fff;
 
-
-
 }
-
-
 
 .selectedBar > svg {
 
-
-
   width: 40px;
-
-
 
   height: 40px;
 
-
-
   padding: 9px;
 
-
-
   border-radius: 9px;
-
-
 
   background: #eff5f9;
 
-
-
   color: #436f8b;
 
-
-
 }
-
-
 
 .selectedBar strong {
 
-
-
   display: block;
-
-
 
   color: #26384f;
 
-
-
   font-size: 13px;
 
-
-
 }
-
-
 
 .selectedBar span {
 
-
-
   color: #718395;
-
-
 
   font-size: 11px;
 
-
-
 }
-
-
 
 .selectedBar em {
 
-
-
   margin: 0 8px;
-
-
 
   color: #bdc8d1;
 
-
-
   font-style: normal;
 
-
-
 }
-
-
 
 .selectedDetails > summary {
 
-
-
   list-style: none;
-
-
 
   color: #236b9e;
 
-
-
   font-size: 11px;
-
-
 
   font-weight: 800;
 
-
-
   cursor: pointer;
 
-
-
 }
-
-
 
 .selectedDetails > summary::-webkit-details-marker {
 
-
-
   display: none;
 
-
-
 }
-
-
 
 .selectedDetails[open] {
 
-
-
   grid-column: 1 / -1;
 
-
-
 }
-
-
 
 .selectedPopover {
 
-
-
   margin-top: 14px;
-
-
 
   padding-top: 14px;
 
-
-
   border-top: 1px solid #e3e9ee;
 
-
-
 }
-
-
 
 .selectedPopover section {
 
-
-
   margin-bottom: 12px;
 
-
-
   padding: 13px;
-
-
 
   border: 1px solid #e1e7ec;
 
-
-
   border-radius: 9px;
-
-
 
   background: #fbfcfd;
 
-
-
 }
-
-
 
 .selectedPopover label {
 
-
-
   display: flex;
 
-
-
   gap: 8px;
-
-
 
   padding: 5px 0;
 
-
-
   color: #53667a;
-
-
 
   font-size: 10px;
 
-
-
 }
-
-
 
 .popoverHeader {
 
-
-
   display: flex;
-
-
 
   justify-content: space-between;
 
-
-
   align-items: center;
 
-
-
   gap: 12px;
-
-
 
   margin-bottom: 8px;
 
-
-
 }
-
-
 
 .popoverHeader button {
 
-
-
   border: 0;
-
-
 
   background: transparent;
 
-
-
   color: #1764ad;
-
-
 
   font-size: 10px;
 
-
-
   font-weight: 800;
-
-
 
   cursor: pointer;
 
-
-
 }
-
-
 
 .sectionFooter {
 
-
-
   margin-top: 18px;
-
-
 
   padding-top: 15px;
 
-
-
   display: flex;
-
-
 
   justify-content: space-between;
 
-
-
   align-items: center;
 
-
-
   gap: 12px;
-
-
 
   border-top: 1px solid #e7edf2;
 
-
-
 }
-
-
 
 .primary,
 
-
-
 .secondary {
-
-
 
   min-height: 38px;
 
-
-
   padding: 0 13px;
-
-
 
   display: inline-flex;
 
-
-
   align-items: center;
-
-
 
   justify-content: center;
 
-
-
   gap: 7px;
-
-
 
   border-radius: 8px;
 
-
-
   font-size: 11px;
-
-
 
   font-weight: 800;
 
-
-
 }
-
-
 
 .primary {
 
-
-
   border: 1px solid #2470ae;
-
-
 
   background: #2470ae;
 
-
-
   color: #fff;
 
-
-
 }
-
-
 
 .secondary {
 
-
-
   border: 1px solid #c8d5df;
-
-
 
   background: #fff;
 
-
-
   color: #355068;
 
-
-
 }
-
-
 
 .primary:disabled,
 
-
-
 .secondary:disabled {
-
-
 
   cursor: not-allowed;
 
-
-
   opacity: .5;
 
-
-
 }
-
-
 
 .folderStack {
 
-
-
   display: grid;
-
-
 
   gap: 11px;
 
-
-
 }
-
-
 
 .folderField {
 
-
-
   display: grid;
-
-
 
   gap: 7px;
 
-
-
   color: #3c5167;
-
-
 
   font-size: 11px;
 
-
-
   font-weight: 800;
 
-
-
 }
-
-
 
 .folderField > div {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: minmax(0, 1fr) auto;
 
-
-
   gap: 8px;
 
-
-
 }
-
-
 
 .folderField input,
 
-
-
 .orgGrid input,
-
-
 
 .table input:not([type=checkbox]),
 
-
-
 .annotationEdit input {
-
-
 
   width: 100%;
 
-
-
   min-width: 0;
-
-
 
   min-height: 38px;
 
-
-
   padding: 0 10px;
-
-
 
   border: 1px solid #cbd7e1;
 
-
-
   border-radius: 7px;
 
-
-
   background: #fff;
-
-
 
   color: #22354c;
 
-
-
   font: inherit;
 
-
-
   font-size: 12px;
-
-
 
   outline: none;
 
-
-
 }
-
-
 
 .folderField button {
 
-
-
   min-height: 38px;
-
-
 
   padding: 0 13px;
 
-
-
   display: inline-flex;
-
-
 
   align-items: center;
 
-
-
   gap: 6px;
-
-
 
   border: 1px solid #c8d5df;
 
-
-
   border-radius: 8px;
 
-
-
   background: #fff;
-
-
 
   color: #355068;
 
-
-
   font: inherit;
-
-
 
   font-size: 11px;
 
-
-
   font-weight: 800;
-
-
 
   cursor: pointer;
 
-
-
 }
-
-
 
 .folderDescription {
 
-
-
   padding: 10px 12px;
-
-
 
   border: 1px solid #dce5ec;
 
-
-
   border-radius: 8px;
 
-
-
   background: #f7fafc;
-
-
 
   color: #61778b;
 
-
-
   font-size: 11px;
-
-
 
   line-height: 1.5;
 
-
-
 }
-
-
 
 .processGridSingle {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: minmax(0, 1fr);
 
-
-
   max-width: 520px;
 
-
-
 }
-
-
 
 .processCard {
 
-
-
   position: relative;
-
-
 
   min-height: 155px;
 
-
-
   padding: 16px;
 
-
-
   display: flex;
-
-
 
   flex-direction: column;
 
-
-
   align-items: flex-start;
-
-
 
   border: 1px solid #d6e0e8;
 
-
-
   border-radius: 10px;
 
-
-
   background: #fff;
-
-
 
   color: #23364d;
 
-
-
   text-align: left;
-
-
 
   font: inherit;
 
-
-
   cursor: pointer;
 
-
-
 }
-
-
 
 .processCard:hover {
 
-
-
   border-color: #8bb5d0;
-
-
 
   box-shadow: 0 7px 18px rgba(38, 79, 110, .07);
 
-
-
 }
-
-
 
 .processCard > span {
 
-
-
   color: #4f7b97;
 
-
-
   font-size: 10px;
-
-
 
   font-weight: 900;
 
-
-
   letter-spacing: .06em;
 
-
-
 }
-
-
 
 .processCard strong {
 
-
-
   display: block;
-
-
 
   margin: 18px 0 6px;
 
-
-
   font-size: 14px;
 
-
-
 }
-
-
 
 .processCard p {
 
-
-
   margin: 0 0 15px;
-
-
 
   color: #6b7f91;
 
-
-
   font-size: 10px;
-
-
 
   line-height: 1.45;
 
-
-
 }
-
-
 
 .processCard svg {
 
-
-
   position: absolute;
-
-
 
   right: 15px;
 
-
-
   bottom: 15px;
-
-
 
   color: #7294aa;
 
-
-
 }
-
-
 
 .overwrite {
 
-
-
   display: flex;
-
-
 
   align-items: flex-start;
 
-
-
   gap: 8px;
 
-
-
   margin-top: 14px;
-
-
 
   color: #677d90;
 
-
-
   font-size: 10px;
-
-
 
   line-height: 1.45;
 
-
-
 }
-
-
 
 .statusPanel {
 
-
-
   margin-top: 14px;
 
-
-
   overflow: hidden;
-
-
 
   border: 1px solid #d7e1e9;
 
-
-
   border-radius: 10px;
-
-
 
   background: #fff;
 
-
-
 }
-
-
 
 .statusHeader {
 
-
-
   padding: 12px 14px;
-
-
 
   border-bottom: 1px solid #e4eaf0;
 
-
-
   background: #f9fbfc;
 
-
-
 }
-
-
 
 .statusHeader > div {
 
-
-
   display: grid;
-
-
 
   gap: 2px;
 
-
-
 }
-
-
 
 .statusHeader strong {
 
-
-
   color: #2c3f55;
-
-
 
   font-size: 11px;
 
-
-
 }
-
-
 
 .statusHeader span {
 
-
-
   color: #718496;
-
-
 
   font-size: 10px;
 
-
-
 }
-
-
 
 .log {
 
-
-
   max-height: 220px;
-
-
 
   margin: 0;
 
-
-
   padding: 14px;
 
-
-
   overflow: auto;
-
-
 
   background: #172433;
 
-
-
   color: #d5e0e8;
-
-
 
   font-size: 10px;
 
-
-
   line-height: 1.55;
-
-
 
   white-space: pre-wrap;
 
-
-
   word-break: break-word;
 
-
-
 }
-
-
 
 .workflowStatusCard {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: 42px minmax(0, 1fr);
 
-
-
   gap: 12px;
 
-
-
   align-items: start;
-
-
 
   margin-bottom: 15px;
 
-
-
   padding: 14px;
-
-
 
   border: 1px solid #dbe4eb;
 
-
-
   border-radius: 10px;
-
-
 
   background: #fff;
 
-
-
 }
-
-
 
 .workflowStatusComplete {
 
-
-
   border-color: #bfd9c9;
-
-
 
   background: #fbfefc;
 
-
-
 }
-
-
 
 .workflowStatusIcon {
 
-
-
   width: 38px;
-
-
 
   height: 38px;
 
-
-
   display: grid;
-
-
 
   place-items: center;
 
-
-
   border-radius: 9px;
-
-
 
   background: #eef3f6;
 
-
-
   color: #6d8091;
 
-
-
 }
-
-
 
 .workflowStatusIconComplete {
 
-
-
   background: #e9f5ee;
-
-
 
   color: #347b58;
 
-
-
 }
-
-
 
 .workflowStatusCopy {
 
-
-
   min-width: 0;
 
-
-
 }
-
-
 
 .workflowStatusTitleRow {
 
-
-
   display: flex;
-
-
 
   align-items: center;
 
-
-
   justify-content: space-between;
-
-
 
   gap: 12px;
 
-
-
 }
-
-
 
 .workflowStatusTitleRow strong {
 
-
-
   color: #2c3f55;
-
-
 
   font-size: 12px;
 
-
-
 }
-
-
 
 .workflowStatusCopy p {
 
-
-
   margin: 5px 0 0;
-
-
 
   color: #6d8092;
 
-
-
   font-size: 10px;
-
-
 
   line-height: 1.5;
 
-
-
 }
-
-
 
 .workflowStatusBadge {
 
-
-
   display: inline-flex;
-
-
 
   align-items: center;
 
-
-
   gap: 4px;
-
-
 
   min-height: 22px;
 
-
-
   padding: 0 7px;
 
-
-
   border-radius: 999px;
-
-
 
   background: #edf2f5;
 
-
-
   color: #667a8c;
-
-
 
   font-size: 9px;
 
-
-
   font-weight: 850;
-
-
 
   white-space: nowrap;
 
-
-
 }
-
-
 
 .workflowStatusBadgeComplete {
 
-
-
   background: #eaf6ef;
-
-
 
   color: #2f7754;
 
-
-
 }
-
-
 
 .workflowStatus_complete {
 
-
-
   border-color: #bfd9c9;
-
-
 
   background: #fbfefc;
 
-
-
 }
-
-
 
 .workflowStatus_running {
 
-
-
   border-color: #b8d4e6;
-
-
 
   background: #f8fcfe;
 
-
-
 }
-
-
 
 .workflowStatus_failed {
 
-
-
   border-color: #e2b7bb;
-
-
 
   background: #fffafa;
 
-
-
 }
-
-
 
 .workflowStatusIcon_complete {
 
-
-
   background: #e9f5ee;
-
-
 
   color: #347b58;
 
-
-
 }
-
-
 
 .workflowStatusIcon_running {
 
-
-
   background: #e8f3fa;
-
-
 
   color: #2d709a;
 
-
-
 }
-
-
 
 .workflowStatusIcon_failed {
 
-
-
   background: #fbecee;
-
-
 
   color: #a13e49;
 
-
-
 }
-
-
 
 .workflowStatusDot {
 
-
-
   width: 9px;
-
-
 
   height: 9px;
 
-
-
   border-radius: 50%;
-
-
 
   background: #94a4b2;
 
-
-
 }
-
-
 
 .workflowStatusBadge_complete {
 
-
-
   background: #eaf6ef;
-
-
 
   color: #2f7754;
 
-
-
 }
-
-
 
 .workflowStatusBadge_running {
 
-
-
   background: #e8f3fa;
-
-
 
   color: #286c98;
 
-
-
 }
 
 
+.workflowStatusSpinner {
+  animation: workflowStatusSpin 0.9s linear infinite;
+}
+
+@keyframes workflowStatusSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 .workflowStatusBadge_failed {
 
-
-
   background: #fbecee;
-
-
 
   color: #a03c47;
 
-
-
 }
-
-
 
 .helpBar {
 
-
-
   margin-top: 18px;
-
-
 
   padding: 13px 15px;
 
-
-
   display: flex;
-
-
 
   align-items: center;
 
-
-
   gap: 9px;
-
-
 
   border: 1px solid #dde5ec;
 
-
-
   border-radius: 10px;
 
-
-
   background: #fff;
-
-
 
   color: #607589;
 
-
-
   font-size: 10px;
 
-
-
 }
-
-
 
 .helpBar strong {
 
-
-
   color: #344a60;
 
-
-
 }
-
-
 
 .card {
 
-
-
   margin-bottom: 14px;
-
-
 
   padding: 18px;
 
-
-
   border: 1px solid #d9e3ec;
-
-
 
   border-radius: 10px;
 
-
-
   background: #fff;
 
-
-
 }
-
-
 
 .card h2 {
 
-
-
   margin: 0 0 12px;
-
-
 
   font-size: 17px;
 
-
-
 }
-
-
 
 .table {
 
-
-
   width: 100%;
-
-
 
   border-collapse: collapse;
 
-
-
   background: #fff;
-
-
 
   color: #3b4f63;
 
-
-
   font-size: 10px;
 
-
-
 }
-
-
 
 .table th {
 
-
-
   padding: 10px;
-
-
 
   border-bottom: 1px solid #dfe6ec;
 
-
-
   background: #f6f9fb;
-
-
 
   color: #596f82;
 
-
-
   text-align: left;
-
-
 
   font-size: 9px;
 
-
-
   font-weight: 850;
-
-
 
   letter-spacing: .03em;
 
-
-
   white-space: nowrap;
 
-
-
 }
-
-
 
 .table td {
 
-
-
   padding: 10px;
 
-
-
   border-bottom: 1px solid #edf1f4;
-
-
 
   vertical-align: top;
 
-
-
 }
-
-
 
 .reviewLayout {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: 290px minmax(0, 1fr);
 
-
-
   gap: 14px;
-
-
 
   align-items: start;
 
-
-
 }
-
-
 
 .pairList {
 
-
-
   position: sticky;
-
-
 
   top: 18px;
 
-
-
   padding: 14px;
-
-
 
   border: 1px solid #d9e3ec;
 
-
-
   border-radius: 10px;
-
-
 
   background: #fff;
 
-
-
 }
-
-
 
 .pairList h3 {
 
-
-
   margin: 0 0 10px;
-
-
 
   color: #30445a;
 
-
-
   font-size: 12px;
 
-
-
 }
-
-
 
 .pairListStack {
 
-
-
   display: grid;
 
-
-
   gap: 6px;
-
-
 
   max-height: 68vh;
 
-
-
   overflow: auto;
 
-
-
 }
-
-
 
 .pairList button {
 
-
-
   width: 100%;
-
-
 
   padding: 9px 10px;
 
-
-
   display: grid;
-
-
 
   gap: 3px;
 
-
-
   border: 1px solid #e0e7ed;
-
-
 
   border-radius: 7px;
 
-
-
   background: #fff;
-
-
 
   color: #607487;
 
-
-
   text-align: left;
-
-
 
   font: inherit;
 
-
-
   font-size: 9px;
-
-
 
   line-height: 1.35;
 
-
-
   cursor: pointer;
-
-
 
   overflow-wrap: anywhere;
 
-
-
 }
-
-
 
 .pairList button:hover {
 
-
-
   background: #f8fafc;
 
-
-
 }
-
-
 
 .pairStatus {
 
-
-
   color: #347757;
-
-
 
   font-weight: 800;
 
-
-
 }
-
-
 
 .activePair {
 
-
-
   border-color: #8ab4cf !important;
 
-
-
   background: #eef6fb !important;
-
-
 
   color: #2c5f7e !important;
 
-
-
 }
-
-
 
 .reviewMain {
 
-
-
   min-width: 0;
-
-
 
   display: grid;
 
-
-
   gap: 14px;
 
-
-
 }
-
-
 
 .reviewOverview {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: repeat(4, minmax(0, 1fr));
 
-
-
   gap: 9px;
 
-
-
 }
-
-
 
 .reviewOverview > div {
 
-
-
   min-width: 0;
-
-
 
   padding: 11px 12px;
 
-
-
   display: grid;
-
-
 
   gap: 4px;
 
-
-
   border: 1px solid #dbe4eb;
-
-
 
   border-radius: 9px;
 
-
-
   background: #fff;
 
-
-
 }
-
-
 
 .reviewOverview span {
 
-
-
   color: #738698;
-
-
 
   font-size: 9px;
 
-
-
 }
-
-
 
 .reviewOverview strong {
 
-
-
   overflow: hidden;
-
-
 
   color: #2e4359;
 
-
-
   font-size: 11px;
-
-
 
   text-overflow: ellipsis;
 
-
-
   white-space: nowrap;
 
-
-
 }
-
-
 
 .reviewCardHeading {
 
-
-
   display: flex;
-
-
 
   align-items: flex-start;
 
-
-
   justify-content: space-between;
 
-
-
   gap: 14px;
-
-
 
   margin-bottom: 13px;
 
-
-
 }
-
-
 
 .reviewCardHeading h2 {
 
-
-
   margin: 0;
 
-
-
 }
-
-
 
 .reviewCardHeading p {
 
-
-
   margin: 5px 0 0;
-
-
 
   color: #6b7f91;
 
-
-
   font-size: 10px;
-
-
 
   line-height: 1.5;
 
-
-
 }
-
-
 
 .annotationGrid {
 
-
-
   display: grid;
 
-
-
   grid-template-columns: 1fr 1fr;
-
-
 
   gap: 11px;
 
-
-
 }
-
-
 
 .annotationGrid h3 {
 
-
-
   margin: 0 0 9px;
-
-
 
   color: #30445a;
 
-
-
   font-size: 11px;
 
-
-
 }
-
-
 
 .annotationRow {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: 80px 80px 1fr;
 
-
-
   gap: 6px;
-
-
 
   padding: 7px 6px;
 
-
-
   border-bottom: 1px solid #edf1f4;
-
-
 
   color: #566c80;
 
-
-
   font-size: 10px;
 
-
-
 }
-
-
 
 .annotationHeader {
 
-
-
   display: flex;
 
-
-
   justify-content: space-between;
-
-
 
   gap: 10px;
 
-
-
   align-items: center;
 
-
-
 }
-
-
 
 .annotationEdit {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: 85px 85px minmax(0, 1fr) auto;
 
-
-
   gap: 5px;
-
-
 
   margin-bottom: 5px;
 
-
-
 }
-
-
 
 .annotationHeader button,
 
-
-
 .annotationEdit button {
-
-
 
   min-height: 34px;
 
-
-
   padding: 0 10px;
-
-
 
   border: 1px solid #c9d5df;
 
-
-
   border-radius: 6px;
 
-
-
   background: #fff;
-
-
 
   color: #314961;
 
-
-
   font: inherit;
 
-
-
   font-size: 10px;
-
-
 
   font-weight: 700;
 
-
-
   cursor: pointer;
 
-
-
 }
-
-
 
 .annotationEmpty {
 
-
-
   padding: 14px;
-
-
 
   border: 1px dashed #d4dde5;
 
-
-
   border-radius: 8px;
-
-
 
   color: #8293a2;
 
-
-
   font-size: 10px;
-
-
 
   text-align: center;
 
-
-
 }
-
-
 
 .reviewDecisionFooter {
 
-
-
   display: flex;
-
-
 
   align-items: center;
 
-
-
   justify-content: space-between;
-
-
 
   gap: 14px;
 
-
-
   padding: 14px;
-
-
 
   border: 1px solid #dbe4eb;
 
-
-
   border-radius: 10px;
-
-
 
   background: #fff;
 
-
-
 }
-
-
 
 .reviewDecisionFooter > div:first-child {
 
-
-
   min-width: 0;
 
-
-
   display: grid;
-
-
 
   gap: 4px;
 
-
-
 }
-
-
 
 .reviewDecisionFooter strong {
 
-
-
   overflow: hidden;
-
-
 
   color: #425970;
 
-
-
   font-size: 10px;
-
-
 
   text-overflow: ellipsis;
 
-
-
 }
-
-
 
 .reviewDecisionFooter span {
 
-
-
   color: #738698;
-
-
 
   font-size: 10px;
 
-
-
 }
-
-
 
 .reviewDecisionActions {
 
-
-
   display: flex;
-
-
 
   flex-wrap: wrap;
 
-
-
   justify-content: flex-end;
-
-
 
   gap: 8px;
 
-
-
 }
-
-
 
 .reviewHint {
 
-
-
   padding: 11px 13px;
-
-
 
   border: 1px solid #d8e4ec;
 
-
-
   border-radius: 8px;
-
-
 
   background: #f7fafc;
 
-
-
   color: #60778a;
 
-
-
   font-size: 10px;
-
-
 
   line-height: 1.5;
 
-
-
 }
-
-
 
 .modalBackdrop {
 
-
-
   position: fixed;
-
-
 
   z-index: 1000;
 
-
-
   inset: 0;
 
-
-
   display: grid;
-
-
 
   place-items: center;
 
-
-
   padding: 22px;
-
-
 
   background: rgba(18, 32, 47, .52);
 
-
-
 }
-
-
 
 .reviewModal {
 
-
-
   width: min(520px, 100%);
-
-
 
   padding: 20px;
 
-
-
   border-radius: 12px;
-
-
 
   background: #fff;
 
-
-
   box-shadow: 0 24px 70px rgba(12, 27, 41, .26);
 
-
-
 }
-
-
 
 .reviewModal h3 {
 
-
-
   margin: 0;
-
-
 
   color: #25394f;
 
-
-
   font-size: 17px;
 
-
-
 }
-
-
 
 .reviewModal p {
 
-
-
   margin: 8px 0 18px;
-
-
 
   color: #6a7e90;
 
-
-
   font-size: 11px;
-
-
 
   line-height: 1.55;
 
-
-
 }
-
-
 
 .modalActions {
 
-
-
   display: flex;
-
-
 
   justify-content: flex-end;
 
-
-
   gap: 8px;
 
-
-
 }
-
-
 
 .rejectButton {
 
-
-
   min-height: 38px;
-
-
 
   padding: 0 13px;
 
-
-
   border: 1px solid #b94b55;
 
-
-
   border-radius: 8px;
-
-
 
   background: #b94b55;
 
-
-
   color: #fff;
-
-
 
   font: inherit;
 
-
-
   font-size: 11px;
-
-
 
   font-weight: 800;
 
-
-
   cursor: pointer;
 
-
-
 }
-
-
 
 .orgGrid {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: 1fr 1fr;
 
-
-
   gap: 9px;
 
-
-
 }
-
-
 
 .orgGrid label {
 
-
-
   display: grid;
-
-
 
   gap: 5px;
 
-
-
   color: #425970;
-
-
 
   font-size: 11px;
 
-
-
   font-weight: 750;
 
-
-
 }
-
-
 
 .full {
 
-
-
   grid-column: 1 / -1;
 
-
-
 }
-
-
 
 .activeRow {
 
-
-
   background: #eef5f9;
 
-
-
 }
-
-
 
 .errorBox {
 
-
-
   padding: 13px;
-
-
 
   border: 1px solid #d99fa5;
 
-
-
   border-radius: 8px;
-
-
 
   background: #fff5f6;
 
-
-
   color: #7c3038;
 
-
-
 }
-
-
 
 .empty {
 
-
-
   padding: 30px;
-
-
 
   color: #738396;
 
-
-
   text-align: center;
 
-
-
 }
-
-
 
 @media (max-width: 900px) {
 
-
-
   .homeCards,
-
-
 
   .annotationGrid,
 
-
-
   .orgGrid,
-
-
 
   .reviewLayout,
 
-
-
   .reviewOverview {
-
-
 
     grid-template-columns: 1fr;
 
-
-
   }
-
-
 
   .stepper {
 
-
-
     grid-template-columns: 1fr;
-
-
 
     gap: 8px;
 
-
-
   }
-
-
 
   .stepItem {
 
-
-
     display: grid;
-
-
 
     grid-template-columns: 30px 1fr;
 
-
-
     justify-items: start;
-
-
 
     align-items: center;
 
-
-
     text-align: left;
 
-
-
   }
-
-
 
   .stepLine {
 
-
-
     display: none;
 
-
-
   }
-
-
 
   .workflowHeader {
 
-
-
     grid-template-columns: 38px minmax(0, 1fr) 18px;
 
-
-
   }
-
-
 
   .goButton,
 
-
-
   .completeLabel {
-
-
 
     display: none;
 
-
-
   }
-
-
 
   .workflowBody {
 
-
-
     padding: 14px;
 
-
-
   }
-
-
 
   .selectedBar {
 
-
-
-    grid-template-columns: 40px minmax(0, 1fr);
-
-
+    grid-template-columns: 54px minmax(0, 1fr);
 
   }
-
-
 
   .selectedDetails {
 
-
-
     grid-column: 1 / -1;
 
-
-
   }
-
-
 
   .sectionFooter,
 
-
-
   .reviewDecisionFooter,
-
-
 
   .reviewCardHeading,
 
-
-
   .workflowStatusTitleRow {
-
-
 
     align-items: stretch;
 
-
-
     flex-direction: column;
 
-
-
   }
-
-
 
   .sectionFooter > div:empty {
 
-
-
     display: none;
-
-
 
   }
 
-
-
 }
-
-
 
 @media (max-width: 560px) {
 
-
-
   .folderField > div,
-
-
 
   .annotationEdit {
 
-
-
     grid-template-columns: 1fr;
-
-
 
   }
 
-
-
 }
-
-
 
 .eyebrow {
 
-
-
   display: inline-block;
-
-
 
   margin-bottom: 6px;
 
-
-
   color: #2f6f95;
-
-
 
   font-size: 10px;
 
-
-
   font-weight: 850;
-
-
 
   letter-spacing: .1em;
 
-
-
   text-transform: uppercase;
 
-
-
 }
-
-
 
 .muted,
 
-
-
 .helpText {
-
-
 
   color: #677d91;
 
-
-
 }
-
-
 
 .muted {
 
-
-
   margin: 7px 0 0;
-
-
 
   font-size: 13px;
 
-
-
   line-height: 1.55;
 
-
-
 }
-
-
 
 .helpText {
 
-
-
   margin: 8px 0 0;
-
-
 
   font-size: 12px;
 
-
-
   line-height: 1.55;
 
-
-
 }
-
-
 
 .bidsHeading {
 
-
-
   display: flex;
-
-
 
   align-items: flex-start;
 
-
-
   justify-content: space-between;
-
-
 
   gap: 16px;
 
-
-
   margin-bottom: 14px;
 
-
-
 }
-
-
 
 .bidsHeading h2 {
 
-
-
   margin: 0;
-
-
 
   color: #20334b;
 
-
-
   font-size: 21px;
 
-
-
 }
-
-
 
 .databaseStatus {
 
-
-
   margin: 10px 0 0;
-
-
 
   color: #708294;
 
-
-
   font-size: 10px;
 
-
-
 }
-
-
 
 .databaseStatus strong {
 
-
-
   color: #395d76;
 
-
-
 }
-
-
 
 .bidsTableWrap {
 
-
-
   width: 100%;
-
-
 
   overflow: auto;
 
-
-
   border: 1px solid #dfe6ec;
-
-
 
   border-radius: 9px;
 
-
-
 }
-
-
 
 .activeBidsRow {
 
-
-
   background: #eef6fb !important;
-
-
 
 }
 
-
-
 .recordedBadge,
+
 .orphanedBadge,
+
 .pendingBadge {
-
-
 
   display: inline-flex;
 
-
-
   align-items: center;
-
-
 
   min-height: 21px;
 
-
-
   padding: 0 7px;
-
-
 
   border-radius: 999px;
 
-
-
   font-size: 9px;
-
-
 
   font-weight: 850;
 
-
-
   white-space: nowrap;
 
-
-
 }
-
-
 
 .recordedBadge {
 
@@ -4360,655 +2205,329 @@
 
 }
 
-
-
 .existingExportBox {
-
-
 
   margin: 15px 0;
 
-
-
   padding: 14px;
-
-
 
   border: 1px solid #dfcfa9;
 
-
-
   border-radius: 10px;
-
-
 
   background: #fffaf0;
 
-
-
 }
-
-
 
 .existingExportBox strong {
 
-
-
   color: #674e20;
-
-
 
   font-size: 12px;
 
-
-
 }
-
-
 
 .existingExportBox p {
 
-
-
   margin: 5px 0 0;
-
-
 
   color: #806b42;
 
-
-
   font-size: 10px;
-
-
 
   line-height: 1.5;
 
-
-
 }
-
-
 
 .existingExportDetails {
 
-
-
   display: grid;
-
-
 
   gap: 3px;
 
-
-
   margin-top: 10px;
-
-
 
   color: #7a6949;
 
-
-
   font-size: 9px;
-
-
 
   overflow-wrap: anywhere;
 
-
-
 }
-
-
 
 .metadataForm {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: minmax(0, 1fr);
 
-
-
   gap: 18px;
-
-
 
   margin-top: 18px;
 
-
-
 }
-
-
 
 .metadataField,
 
-
-
 .multiField,
-
-
 
 .repeatField {
 
-
-
   width: 100%;
 
-
-
 }
-
-
 
 .metadataField {
 
-
-
   padding: 0 0 18px;
-
-
 
   display: grid;
 
-
-
   gap: 7px;
-
-
 
   border-bottom: 1px solid #edf1f4;
 
-
-
 }
-
-
 
 .metadataField > span,
 
-
-
 .multiLegendRow legend,
 
-
-
 .repeatField > legend {
-
-
 
   color: #3c5167;
 
-
-
   font-size: 12px;
 
-
-
   font-weight: 800;
-
-
 
   line-height: 1.45;
 
-
-
 }
-
-
 
 .metadataField input,
 
-
-
 .metadataField select,
-
-
 
 .repeatRow input,
 
-
-
 .datasetGrid input {
-
-
 
   width: 100%;
 
-
-
   max-width: 760px;
 
-
-
   min-width: 0;
-
-
 
   height: 38px;
 
-
-
   padding: 0 10px;
-
-
 
   border: 1px solid #cbd7e1;
 
-
-
   border-radius: 7px;
 
-
-
   background: #fff;
-
-
 
   color: #22354c;
 
-
-
   font: inherit;
-
-
 
   font-size: 12px;
 
-
-
   outline: none;
 
-
-
 }
-
-
 
 .metadataField input:focus,
 
-
-
 .metadataField select:focus,
-
-
 
 .repeatRow input:focus,
 
-
-
 .datasetGrid input:focus {
-
-
 
   border-color: #5c96bf;
 
-
-
   box-shadow: 0 0 0 3px rgba(75, 137, 180, .12);
 
-
-
 }
-
-
 
 .metadataField small,
 
-
-
 .multiField small,
-
-
 
 .repeatField small {
 
-
-
   color: #7a93a6;
-
-
 
   cursor: help;
 
-
-
 }
-
-
 
 .multiField,
 
-
-
 .repeatField {
-
-
 
   min-width: 0;
 
-
-
   margin: 0;
-
-
 
   padding: 16px;
 
-
-
   border: 1px solid #d6e0e8;
-
-
 
   border-radius: 10px;
 
-
-
   background: #fbfcfd;
 
-
-
 }
-
-
 
 .multiLegendRow {
 
-
-
   display: flex;
-
-
 
   align-items: center;
 
-
-
   justify-content: space-between;
-
-
 
   gap: 10px;
 
-
-
 }
-
-
 
 .multiLegendRow legend,
 
-
-
 .repeatField > legend {
-
-
 
   padding: 0;
 
-
-
 }
-
-
 
 .multiCount {
 
-
-
   color: #7a8d9e;
 
-
-
   font-size: 9px;
-
-
 
   white-space: nowrap;
 
-
-
 }
-
-
 
 .multiToolbar {
 
-
-
   display: flex;
-
-
 
   gap: 6px;
 
-
-
   margin: 10px 0;
 
-
-
 }
-
-
 
 .multiUtilityButton {
 
-
-
   min-height: 29px;
-
-
 
   padding: 0 9px;
 
-
-
   border: 1px solid #d1dce4;
-
-
 
   border-radius: 6px;
 
-
-
   background: #f8fafb;
-
-
 
   color: #496176;
 
-
-
   font: inherit;
 
-
-
   font-size: 9px;
-
-
 
   font-weight: 800;
 
-
-
   cursor: pointer;
 
-
-
 }
-
-
 
 .multiUtilityButton:disabled {
 
-
-
   cursor: not-allowed;
-
-
 
   opacity: .5;
 
-
-
 }
-
-
 
 .multiOptions {
 
-
-
   display: grid;
-
-
 
   grid-template-columns: repeat(2, minmax(0, 1fr));
 
-
-
   gap: 8px;
 
-
-
 }
-
-
 
 .multiOptions label {
 
-
-
   min-height: 42px;
-
-
 
   padding: 9px 10px;
 
-
-
   display: flex;
-
-
 
   align-items: flex-start;
 
-
-
   gap: 7px;
-
-
 
   border: 1px solid #e1e7ec;
 
-
-
   border-radius: 7px;
-
-
 
   background: #fff;
 
-
-
   color: #5c7184;
-
-
 
   font-size: 9px;
 
-
-
   line-height: 1.35;
 
-
-
 }
-
-
 
 .multiOptionSelected {
 
-
-
   border-color: #9fc4da !important;
-
-
 
   background: #f1f8fc !important;
 
-
-
   color: #335f7a !important;
 
-
-
 }
-
-
 
 .repeatRows {
 
-
-
   display: grid;
-
-
 
   gap: 12px;
 
-
-
   margin-top: 12px;
 
-
-
 }
-
-
 
 .repeatRow {
 
-
-
   display: grid;
-
-
 
   gap: 7px;
 
-
-
 }
-
-
 
 .repeatRow > span {
 
-
-
   color: #53697d;
-
-
 
   font-size: 10px;
 
-
-
   font-weight: 750;
 
-
-
 }
-
-
 
 .datasetGrid {
 
@@ -5025,8 +2544,6 @@
   max-width: 1200px;
 
 }
-
-
 
 .datasetGrid label {
 
@@ -5046,10 +2563,6 @@
 
 }
 
-
-
-
-
 .datasetGrid input {
 
   width: 100%;
@@ -5062,8 +2575,6 @@
 
 }
 
-
-
 .datasetGrid .full {
 
   grid-column: 1 / -1;
@@ -5072,284 +2583,143 @@
 
 }
 
-
-
 .bidsActions {
-
-
 
   margin: 15px 0;
 
-
-
   display: flex;
-
-
 
   align-items: center;
 
-
-
   justify-content: space-between;
-
-
 
   gap: 12px;
 
-
-
 }
-
-
 
 .bidsActions > div {
 
-
-
   display: flex;
-
-
 
   flex-wrap: wrap;
 
-
-
   gap: 8px;
 
-
-
 }
-
-
 
 .confirmModal {
 
-
-
   width: min(560px, 100%);
-
-
 
   max-height: min(84vh, 760px);
 
-
-
   overflow: auto;
-
-
 
   padding: 20px;
 
-
-
   border-radius: 12px;
-
-
 
   background: #fff;
 
-
-
   box-shadow: 0 24px 70px rgba(12, 27, 41, .26);
 
-
-
 }
-
-
 
 .confirmModal h3 {
 
-
-
   margin: 0;
-
-
 
   color: #25394f;
 
-
-
   font-size: 17px;
 
-
-
 }
-
-
 
 .confirmModal p {
 
-
-
   margin: 8px 0 15px;
-
-
 
   color: #6a7e90;
 
-
-
   font-size: 11px;
-
-
 
   line-height: 1.5;
 
-
-
 }
-
-
 
 .confirmList {
 
-
-
   display: grid;
-
-
 
   gap: 8px;
 
-
-
   max-height: 380px;
-
-
 
   overflow: auto;
 
-
-
   margin-bottom: 16px;
 
-
-
 }
-
-
 
 .confirmRecord {
 
-
-
   display: grid;
-
-
 
   gap: 3px;
 
-
-
   padding: 10px 11px;
-
-
 
   border: 1px solid #e0e7ed;
 
-
-
   border-radius: 8px;
-
-
 
   background: #fafcfd;
 
-
-
   color: #63788b;
-
-
 
   font-size: 9px;
 
-
-
 }
-
-
 
 .confirmRecord strong {
 
-
-
   color: #33495f;
-
-
 
   font-size: 10px;
 
-
-
 }
-
-
 
 .errorBox ul {
 
-
-
   margin: 8px 0 0;
-
-
 
   padding-left: 18px;
 
-
-
   font-size: 10px;
-
-
 
   line-height: 1.5;
 
-
-
 }
-
-
 
 @media (max-width: 900px) {
 
-
-
   .datasetGrid,
-
-
 
   .multiOptions {
 
-
-
     grid-template-columns: 1fr;
 
-
-
   }
-
-
 
   .bidsActions,
 
-
-
   .multiLegendRow {
-
-
 
     align-items: stretch;
 
-
-
     flex-direction: column;
-
-
 
   }
 
-
-
 }
-
 

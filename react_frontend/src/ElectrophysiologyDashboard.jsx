@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
 
@@ -26,6 +26,8 @@ import {
 
   Play,
 
+  RefreshCw,
+
   Save,
 
   Upload,
@@ -34,11 +36,7 @@ import {
 
 import styles from "./ElectrophysiologyDashboard.module.css";
 
-
-
 const api = () => window.pywebview?.api ?? null;
-
-
 
 export default function ElectrophysiologyDashboard({
 
@@ -48,11 +46,19 @@ export default function ElectrophysiologyDashboard({
 
   onRouteChange,
 
+  resumeBidsState = null,
+
+  autoValidateBids = false,
+
+  onCreateClinicalAssessment,
+
 }) {
 
   const [view, setView] = useState(
 
-    initialView === "processing" ? "processing" : "home"
+    ["processing", "review", "bids"].includes(initialView)
+      ? initialView
+      : "home"
 
   );
 
@@ -97,8 +103,8 @@ export default function ElectrophysiologyDashboard({
     metadata_bids: "not_started",
 
   });
-
-
+  const outputSettingsDirtyRef = useRef(false);
+  const bidsRecordsRef = useRef([]);
 
   function showEphysHome() {
 
@@ -108,8 +114,6 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   function showEphysProcessing() {
 
     setView("processing");
@@ -118,19 +122,30 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   useEffect(() => {
+
+    let cancelled = false;
 
     if (view === "processing") {
 
-      loadState();
+      async function loadProcessingOverview() {
 
-      refreshReviewPairs();
+        const nextState = await loadState();
 
-      refreshBidsAwareness();
+        if (cancelled) return;
 
+        const pairs = await refreshReviewPairs();
 
+        if (cancelled) return;
+
+        await refreshBidsAwareness(
+          nextState ?? state,
+          pairs ?? []
+        );
+
+      }
+
+      loadProcessingOverview();
 
       const interval = window.setInterval(() => {
 
@@ -138,23 +153,48 @@ export default function ElectrophysiologyDashboard({
 
       }, 750);
 
-
-
-      return () => window.clearInterval(interval);
+      return () => {
+        cancelled = true;
+        window.clearInterval(interval);
+      };
 
     }
-
-
 
     if (view === "review") loadReview();
 
     if (view === "bids") loadBids();
 
-    return undefined;
+    return () => {
+      cancelled = true;
+    };
 
   }, [view]);
 
+  function deriveMetadataBidsStage(
+    records = bidsRecordsRef.current,
+    fallback = "not_started"
+  ) {
+    if (!Array.isArray(records) || records.length === 0) {
+      return fallback;
+    }
 
+    const allCompleted = records.every(
+      record => record.record_state === "completed_recorded"
+    );
+
+    if (allCompleted) {
+      return "complete";
+    }
+
+    const hasRealProblem = records.some(record =>
+      [
+        "output_record_deleted",
+        "recorded_export_missing",
+      ].includes(record.record_state)
+    );
+
+    return hasRealProblem ? "failed" : "running";
+  }
 
   async function loadState() {
 
@@ -162,31 +202,57 @@ export default function ElectrophysiologyDashboard({
 
     if (!next) return;
 
-    setState(next);
-
+    setState(current => ({
+      ...next,
+      derivatives_dir: outputSettingsDirtyRef.current
+        ? current.derivatives_dir
+        : (next.derivatives_dir ?? ""),
+      bids_output_dir: outputSettingsDirtyRef.current
+        ? current.bids_output_dir
+        : (next.bids_output_dir ?? ""),
+    }));
     setRecords(next.records ?? []);
-
     setProcessRunning(Boolean(next.process_running));
 
     if (next.process_stages) {
 
-      setProcessStages(current => ({ ...current, ...next.process_stages }));
+      const nextStages = {
+        ...next.process_stages,
+      };
+
+      if (
+        nextStages.metadata_bids === "not_started" &&
+        bidsRecordsRef.current.length > 0
+      ) {
+        nextStages.metadata_bids =
+          deriveMetadataBidsStage(
+            bidsRecordsRef.current,
+            "not_started"
+          );
+      }
+
+      setProcessStages(current => ({
+        ...current,
+        ...nextStages,
+      }));
 
     }
 
+    return next;
+
   }
-
-
 
   async function refreshReviewPairs() {
 
     const pairs = await api()?.ephys_review_get_pairs?.();
 
-    setReviewPairs(pairs ?? []);
+    const nextPairs = pairs ?? [];
+
+    setReviewPairs(nextPairs);
+
+    return nextPairs;
 
   }
-
-
 
   async function refreshProcessState() {
 
@@ -194,53 +260,62 @@ export default function ElectrophysiologyDashboard({
 
     if (!bridge?.ephys_get_state) return;
 
-
-
     try {
 
       const next = await bridge.ephys_get_state();
 
       if (!next) return;
 
-
-
       setState(current => ({
-
-        ...current,
-
-        input_dirs: next.input_dirs ?? current.input_dirs,
-
-        derivatives_dir: next.derivatives_dir ?? current.derivatives_dir,
-
-        bids_output_dir: next.bids_output_dir ?? current.bids_output_dir,
-
-        logs: next.logs ?? current.logs,
-
-        status: next.status ?? current.status,
-
-        process_running: Boolean(next.process_running),
-
-      }));
-
-
+      ...current,
+      input_dirs: next.input_dirs ?? current.input_dirs,
+      derivatives_dir: outputSettingsDirtyRef.current
+        ? current.derivatives_dir
+        : (next.derivatives_dir ?? current.derivatives_dir),
+      bids_output_dir: outputSettingsDirtyRef.current
+        ? current.bids_output_dir
+        : (next.bids_output_dir ?? current.bids_output_dir),
+      logs: next.logs ?? current.logs,
+      status: next.status ?? current.status,
+      process_running: Boolean(next.process_running),
+    }));
 
       if (next.process_stages) {
 
-        setProcessStages(current => ({ ...current, ...next.process_stages }));
+        const nextStages = {
+          ...next.process_stages,
+        };
+
+        if (
+          nextStages.metadata_bids === "not_started" &&
+          bidsRecordsRef.current.length > 0
+        ) {
+          nextStages.metadata_bids =
+            deriveMetadataBidsStage(
+              bidsRecordsRef.current,
+              "not_started"
+            );
+        }
+
+        setProcessStages(current => ({
+          ...current,
+          ...nextStages,
+        }));
 
       }
-
-
 
       const running = Boolean(next.process_running);
 
       setProcessRunning(running);
 
-
-
       if (!running) {
 
-        await refreshReviewPairs();
+        const pairs = await refreshReviewPairs();
+
+        await refreshBidsAwareness(
+          next,
+          pairs ?? []
+        );
 
       }
 
@@ -258,8 +333,6 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   async function choose(kind) {
 
     const bridge = api();
@@ -272,8 +345,6 @@ export default function ElectrophysiologyDashboard({
 
         : await bridge?.ephys_choose_folders?.();
 
-
-
     if (next) {
 
       setState(next);
@@ -284,15 +355,11 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   async function removeSources() {
 
     const ids = selectedSources.map(index => `source:${index}`);
 
     const next = await api()?.ephys_remove_sources?.(ids);
-
-
 
     if (next) {
 
@@ -306,145 +373,195 @@ export default function ElectrophysiologyDashboard({
 
   }
 
+  async function refreshBidsAwareness(
+    nextState = state,
+    pairsOverride = reviewPairs
+  ) {
+    const inputDirs = Array.isArray(nextState?.input_dirs)
+      ? nextState.input_dirs.filter(Boolean)
+      : [];
+    const derivativesDir = String(
+      nextState?.derivatives_dir ?? ""
+    ).trim();
+    const bidsOutputDir = String(
+      nextState?.bids_output_dir ?? ""
+    ).trim();
+    const pairs = Array.isArray(pairsOverride)
+      ? pairsOverride
+      : [];
+    const hasAcceptedRecording = pairs.some(
+      pair => String(pair?.status ?? "") === "Accepted"
+    );
 
-
-  async function refreshBidsAwareness() {
+    if (
+      inputDirs.length === 0 ||
+      !derivativesDir ||
+      !bidsOutputDir ||
+      !hasAcceptedRecording
+    ) {
+      bidsRecordsRef.current = [];
+      setBidsState(null);
+      return;
+    }
 
     try {
-
       const next = await api()?.ephys_bids_get_state?.();
 
       if (next) {
-
         setBidsState(next);
 
         const outputRecords = next.records ?? [];
+        bidsRecordsRef.current = outputRecords;
 
-        const completedRecorded =
-
-          outputRecords.length > 0 &&
-
-          outputRecords.every(
-
-            record => record.record_state === "completed_recorded"
-
+        const derivedMetadataStage =
+          deriveMetadataBidsStage(
+            outputRecords,
+            next.process_stages?.metadata_bids ??
+              "not_started"
           );
 
         setProcessStages(current => ({
-
           ...current,
-
           ...(next.process_stages ?? {}),
-
-          metadata_bids:
-
-            next.process_stages?.metadata_bids ??
-
-            (completedRecorded ? "complete" : "not_started"),
-
+          metadata_bids: derivedMetadataStage,
         }));
-
       }
-
     } catch {
-
       setBidsState(null);
 
       setProcessStages(current => ({
-
         ...current,
-
         metadata_bids:
-
           current.metadata_bids === "running"
-
             ? "running"
-
             : "not_started",
-
       }));
-
     }
-
   }
-
-
 
   async function persistOutputSettings(nextState) {
+    const inputDirs = Array.isArray(nextState?.input_dirs)
+      ? nextState.input_dirs.filter(Boolean)
+      : [];
+    const derivativesDir = String(
+      nextState?.derivatives_dir ?? ""
+    ).trim();
+    const bidsOutputDir = String(
+      nextState?.bids_output_dir ?? ""
+    ).trim();
 
-    const saved = await api()?.ephys_save_settings?.({
-
-      input_dirs: nextState.input_dirs,
-
-      derivatives_dir: nextState.derivatives_dir,
-
-      bids_output_dir: nextState.bids_output_dir,
-
-    });
-
-
-
-    if (saved) {
-
-      setState(current => ({
-
-        ...current,
-
-        ...saved,
-
-      }));
-
+    if (
+      inputDirs.length === 0 ||
+      !derivativesDir ||
+      !bidsOutputDir
+    ) {
+      return null;
     }
 
+    const saved = await api()?.ephys_save_settings?.({
+      input_dirs: nextState.input_dirs,
+      derivatives_dir: derivativesDir,
+      bids_output_dir: bidsOutputDir,
+    });
 
+    if (saved) {
+      outputSettingsDirtyRef.current = false;
 
-    await refreshBidsAwareness();
+      const mergedState = {
+        ...nextState,
+        ...saved,
+        derivatives_dir:
+          saved.derivatives_dir ?? derivativesDir,
+        bids_output_dir:
+          saved.bids_output_dir ?? bidsOutputDir,
+      };
+
+      setState(current => ({
+        ...current,
+        ...mergedState,
+      }));
+
+      await refreshBidsAwareness(mergedState);
+    }
 
     return saved;
-
   }
 
-
-
   async function browseOutput(key) {
-
     const selected = await api()?.choose_folder?.();
-
     if (!selected) return;
 
-
+    outputSettingsDirtyRef.current = true;
 
     const nextState = {
-
       ...state,
-
       [key]: selected,
-
     };
-
-
 
     setState(nextState);
 
-    await persistOutputSettings(nextState);
+    const hasInputs =
+      Array.isArray(nextState.input_dirs) &&
+      nextState.input_dirs.some(Boolean);
+    const hasBothFolders = Boolean(
+      String(nextState.derivatives_dir ?? "").trim() &&
+      String(nextState.bids_output_dir ?? "").trim()
+    );
 
+    if (!hasInputs || !hasBothFolders) {
+      return;
+    }
+
+    try {
+      await persistOutputSettings(nextState);
+    } catch (error) {
+      setState(current => ({
+        ...current,
+        status: `Could not save output folders: ${String(error)}`,
+      }));
+    }
   }
-
-
 
   async function saveSettings() {
+    outputSettingsDirtyRef.current = true;
 
-    await persistOutputSettings(state);
+    const hasInputs =
+      Array.isArray(state.input_dirs) &&
+      state.input_dirs.some(Boolean);
+    const hasBothFolders = Boolean(
+      String(state.derivatives_dir ?? "").trim() &&
+      String(state.bids_output_dir ?? "").trim()
+    );
 
+    if (!hasInputs) {
+      setState(current => ({
+        ...current,
+        status: "Add at least one EDF file or folder before saving output settings.",
+      }));
+      return;
+    }
+
+    if (!hasBothFolders) {
+      setState(current => ({
+        ...current,
+        status: "Select both output folders before saving.",
+      }));
+      return;
+    }
+
+    try {
+      await persistOutputSettings(state);
+    } catch (error) {
+      setState(current => ({
+        ...current,
+        status: `Could not save output folders: ${String(error)}`,
+      }));
+    }
   }
-
-
 
   async function run(operation) {
 
     const bridge = api();
-
-
 
     if (!bridge?.ephys_run_operation) {
 
@@ -453,8 +570,6 @@ export default function ElectrophysiologyDashboard({
       return;
 
     }
-
-
 
     if (operation === "scrub") {
 
@@ -466,8 +581,6 @@ export default function ElectrophysiologyDashboard({
 
       }
 
-
-
       if (!state.derivatives_dir || !state.bids_output_dir) {
 
         alert("Select and save both output folders before running Step 3A.");
@@ -475,8 +588,6 @@ export default function ElectrophysiologyDashboard({
         return;
 
       }
-
-
 
       setProcessRunning(true);
 
@@ -490,13 +601,9 @@ export default function ElectrophysiologyDashboard({
 
     }
 
-
-
     try {
 
       await persistOutputSettings(state);
-
-
 
       const result = await bridge.ephys_run_operation({
 
@@ -511,8 +618,6 @@ export default function ElectrophysiologyDashboard({
         overwrite,
 
       });
-
-
 
       if (result?.status || result?.log) {
 
@@ -532,8 +637,6 @@ export default function ElectrophysiologyDashboard({
 
       }
 
-
-
       if (operation === "review" && result?.ok) {
 
         setView("review");
@@ -542,8 +645,6 @@ export default function ElectrophysiologyDashboard({
 
       }
 
-
-
       if (operation === "bids" && result?.ok) {
 
         setView("bids");
@@ -551,8 +652,6 @@ export default function ElectrophysiologyDashboard({
         return;
 
       }
-
-
 
       await refreshProcessState();
 
@@ -580,8 +679,6 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   function toggleRecord(id, include) {
 
     setRecords(current =>
@@ -600,15 +697,11 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   async function loadReview() {
 
     const pairs = await api()?.ephys_review_get_pairs?.();
 
     setReviewPairs(pairs ?? []);
-
-
 
     if (pairs?.length) {
 
@@ -622,21 +715,15 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   async function selectPair(id) {
 
     setReview(await api()?.ephys_review_get_pair?.(id));
 
   }
 
-
-
   async function saveReview() {
 
     if (!review) return;
-
-
 
     setReview(
 
@@ -654,13 +741,9 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   async function setReviewStatus(status) {
 
     if (!review) return;
-
-
 
     const next = await api()?.ephys_review_set_status?.(
 
@@ -670,31 +753,50 @@ export default function ElectrophysiologyDashboard({
 
     );
 
-
-
     if (next) {
 
       setReview(next);
 
     }
 
-
-
     const pairs = await api()?.ephys_review_get_pairs?.();
 
     setReviewPairs(pairs ?? []);
 
+    const acceptedExists = (pairs ?? []).some(
+      pair => String(pair?.status ?? "") === "Accepted"
+    );
 
+    if (acceptedExists) {
+      await refreshBidsAwareness(state);
+    } else {
+      setBidsState(null);
+    }
 
     const currentState = await api()?.ephys_get_state?.();
 
     if (currentState?.process_stages) {
 
+      const nextStages = {
+        ...currentState.process_stages,
+      };
+
+      if (
+        nextStages.metadata_bids === "not_started" &&
+        bidsRecordsRef.current.length > 0
+      ) {
+        nextStages.metadata_bids =
+          deriveMetadataBidsStage(
+            bidsRecordsRef.current,
+            "not_started"
+          );
+      }
+
       setProcessStages(current => ({
 
         ...current,
 
-        ...currentState.process_stages,
+        ...nextStages,
 
       }));
 
@@ -702,15 +804,11 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   async function loadBids() {
 
     await refreshBidsAwareness();
 
   }
-
-
 
   const includedCount = useMemo(
 
@@ -720,13 +818,9 @@ export default function ElectrophysiologyDashboard({
 
   );
 
-
-
   const existingBidsOutputComplete = useMemo(() => {
 
     const outputRecords = bidsState?.records ?? [];
-
-
 
     return (
 
@@ -737,8 +831,6 @@ export default function ElectrophysiologyDashboard({
     );
 
   }, [bidsState]);
-
-
 
   const workflowCompletion = useMemo(() => ({
 
@@ -774,8 +866,6 @@ export default function ElectrophysiologyDashboard({
 
   ]);
 
-
-
   if (view === "home") {
 
     return (
@@ -792,8 +882,6 @@ export default function ElectrophysiologyDashboard({
 
         />
 
-
-
         <div className={styles.homeCards}>
 
           <button onClick={showEphysProcessing}>
@@ -805,8 +893,6 @@ export default function ElectrophysiologyDashboard({
             <span>Open the complete EDF de-identification workflow.</span>
 
           </button>
-
-
 
           <button onClick={() => onNavigate("patient-review")}>
 
@@ -825,8 +911,6 @@ export default function ElectrophysiologyDashboard({
     );
 
   }
-
-
 
   if (view === "review") {
 
@@ -860,8 +944,6 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   if (view === "bids") {
 
     return (
@@ -877,6 +959,12 @@ export default function ElectrophysiologyDashboard({
         stageState={workflowCompletion[5] ? "complete" : processStages.metadata_bids}
 
         onBack={() => setView("review")}
+
+        resumeState={resumeBidsState}
+
+        autoValidate={autoValidateBids}
+
+        onCreateClinicalAssessment={onCreateClinicalAssessment}
 
         onStarted={() => {
 
@@ -904,8 +992,6 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-
-
   return (
 
     <div>
@@ -924,8 +1010,6 @@ export default function ElectrophysiologyDashboard({
 
       </button>
 
-
-
       <PageHeading
 
         title="Process Recordings"
@@ -934,11 +1018,7 @@ export default function ElectrophysiologyDashboard({
 
       />
 
-
-
       <WorkflowStepper current={openSection} completed={workflowCompletion} />
-
-
 
       <WorkflowSection
 
@@ -972,8 +1052,6 @@ export default function ElectrophysiologyDashboard({
 
         </div>
 
-
-
         <div className={styles.selectedBar}>
 
           <Database size={24} />
@@ -994,8 +1072,6 @@ export default function ElectrophysiologyDashboard({
 
           </div>
 
-
-
           <details className={styles.selectedDetails}>
 
             <summary>View Selected Data</summary>
@@ -1015,8 +1091,6 @@ export default function ElectrophysiologyDashboard({
                   </button>
 
                 </div>
-
-
 
                 {(state.input_dirs ?? []).map((source, index) => (
 
@@ -1051,8 +1125,6 @@ export default function ElectrophysiologyDashboard({
                 ))}
 
               </section>
-
-
 
               <table className={styles.table}>
 
@@ -1112,8 +1184,6 @@ export default function ElectrophysiologyDashboard({
 
         </div>
 
-
-
         <div className={styles.sectionFooter}>
 
           <div />
@@ -1137,8 +1207,6 @@ export default function ElectrophysiologyDashboard({
         </div>
 
       </WorkflowSection>
-
-
 
       <WorkflowSection
 
@@ -1164,23 +1232,17 @@ export default function ElectrophysiologyDashboard({
 
             value={state.derivatives_dir}
 
-            onChange={value =>
-
-              setState(current => ({
-
-                ...current,
-
-                derivatives_dir: value,
-
-              }))
-
-            }
+            onChange={value => {
+            outputSettingsDirtyRef.current = true;
+            setState(current => ({
+              ...current,
+              derivatives_dir: value,
+            }));
+          }}
 
             onBrowse={() => browseOutput("derivatives_dir")}
 
           />
-
-
 
           <div className={styles.folderDescription}>
 
@@ -1188,31 +1250,23 @@ export default function ElectrophysiologyDashboard({
 
           </div>
 
-
-
           <FolderField
 
             label="Final output folder"
 
             value={state.bids_output_dir}
 
-            onChange={value =>
-
-              setState(current => ({
-
-                ...current,
-
-                bids_output_dir: value,
-
-              }))
-
-            }
+            onChange={value => {
+            outputSettingsDirtyRef.current = true;
+            setState(current => ({
+              ...current,
+              bids_output_dir: value,
+            }));
+          }}
 
             onBrowse={() => browseOutput("bids_output_dir")}
 
           />
-
-
 
           <div className={styles.folderDescription}>
 
@@ -1221,8 +1275,6 @@ export default function ElectrophysiologyDashboard({
           </div>
 
         </div>
-
-
 
         <div className={styles.sectionFooter}>
 
@@ -1233,8 +1285,6 @@ export default function ElectrophysiologyDashboard({
             Save Folder Settings
 
           </button>
-
-
 
           <button
 
@@ -1255,8 +1305,6 @@ export default function ElectrophysiologyDashboard({
         </div>
 
       </WorkflowSection>
-
-
 
       <WorkflowSection
 
@@ -1294,8 +1342,6 @@ export default function ElectrophysiologyDashboard({
 
         </div>
 
-
-
         <label className={styles.overwrite}>
 
           <input
@@ -1311,8 +1357,6 @@ export default function ElectrophysiologyDashboard({
           Overwrite existing staged, scrubbed, or exact BIDS outputs
 
         </label>
-
-
 
         <div className={styles.statusPanel}>
 
@@ -1335,8 +1379,6 @@ export default function ElectrophysiologyDashboard({
           </pre>
 
         </div>
-
-
 
         <div className={styles.sectionFooter}>
 
@@ -1361,8 +1403,6 @@ export default function ElectrophysiologyDashboard({
         </div>
 
       </WorkflowSection>
-
-
 
       <WorkflowSection
 
@@ -1390,8 +1430,6 @@ export default function ElectrophysiologyDashboard({
 
         />
 
-
-
         <div className={styles.sectionFooter}>
 
           <button className={styles.secondary} onClick={() => setOpenSection(3)}>
@@ -1399,8 +1437,6 @@ export default function ElectrophysiologyDashboard({
             Back to Processing
 
           </button>
-
-
 
           <button className={styles.primary} onClick={() => run("review")}>
 
@@ -1413,8 +1449,6 @@ export default function ElectrophysiologyDashboard({
         </div>
 
       </WorkflowSection>
-
-
 
       <WorkflowSection
 
@@ -1442,8 +1476,6 @@ export default function ElectrophysiologyDashboard({
 
         />
 
-
-
         {(processStages.metadata_bids === "running" || processStages.metadata_bids === "failed" || workflowCompletion[5]) && (
 
           <div className={styles.statusPanel}>
@@ -1470,8 +1502,6 @@ export default function ElectrophysiologyDashboard({
 
         )}
 
-
-
         <div className={styles.sectionFooter}>
 
           <button className={styles.secondary} onClick={() => setOpenSection(4)}>
@@ -1480,13 +1510,11 @@ export default function ElectrophysiologyDashboard({
 
           </button>
 
-
-
           <button
 
             className={styles.primary}
 
-            disabled={processStages.metadata_bids === "running"}
+            disabled={processRunning}
 
             onClick={() => run("bids")}
 
@@ -1501,8 +1529,6 @@ export default function ElectrophysiologyDashboard({
         </div>
 
       </WorkflowSection>
-
-
 
       <div className={styles.helpBar}>
 
@@ -1524,8 +1550,6 @@ export default function ElectrophysiologyDashboard({
 
 }
 
-
-
 function WorkflowStepper({ current, completed = {} }) {
 
   const steps = [
@@ -1542,8 +1566,6 @@ function WorkflowStepper({ current, completed = {} }) {
 
   ];
 
-
-
   return (
 
     <div className={styles.stepper}>
@@ -1553,8 +1575,6 @@ function WorkflowStepper({ current, completed = {} }) {
         const isComplete = Boolean(completed[number]);
 
         const isActive = number === current;
-
-
 
         return (
 
@@ -1602,8 +1622,6 @@ function WorkflowStepper({ current, completed = {} }) {
 
 }
 
-
-
 function WorkflowSection({
 
   number,
@@ -1650,8 +1668,6 @@ function WorkflowSection({
 
         </span>
 
-
-
         {!open && (
 
           <span className={complete ? styles.completeLabel : styles.goButton}>
@@ -1672,8 +1688,6 @@ function WorkflowSection({
 
       </button>
 
-
-
       {open && <div className={styles.workflowBody}>{children}</div>}
 
     </section>
@@ -1681,8 +1695,6 @@ function WorkflowSection({
   );
 
 }
-
-
 
 function UploadCard({
 
@@ -1736,8 +1748,6 @@ function UploadCard({
 
 }
 
-
-
 function WorkflowStatusCard({ title, description, state = "not_started" }) {
 
   const label = {
@@ -1752,8 +1762,6 @@ function WorkflowStatusCard({ title, description, state = "not_started" }) {
 
   }[state] ?? "Not started";
 
-
-
   return (
 
     <div className={`${styles.workflowStatusCard} ${styles[`workflowStatus_${state}`] ?? ""}`}>
@@ -1766,7 +1774,11 @@ function WorkflowStatusCard({ title, description, state = "not_started" }) {
 
         ) : state === "running" ? (
 
-          <Activity size={20} strokeWidth={2} />
+          <RefreshCw
+            className={styles.workflowStatusSpinner}
+            size={20}
+            strokeWidth={2}
+          />
 
         ) : (
 
@@ -1786,6 +1798,13 @@ function WorkflowStatusCard({ title, description, state = "not_started" }) {
 
             {state === "complete" && <CheckCircle2 size={14} />}
 
+            {state === "running" && (
+              <RefreshCw
+                className={styles.workflowStatusSpinner}
+                size={13}
+              />
+            )}
+
             {label}
 
           </span>
@@ -1801,8 +1820,6 @@ function WorkflowStatusCard({ title, description, state = "not_started" }) {
   );
 
 }
-
-
 
 function ProcessCard({
 
@@ -1831,8 +1848,6 @@ function ProcessCard({
         ? "Reprocess"
 
         : "Run";
-
-
 
   return (
 
@@ -1868,8 +1883,6 @@ function ProcessCard({
 
 }
 
-
-
 function PageHeading({ eyebrow, title, text }) {
 
   return (
@@ -1887,8 +1900,6 @@ function PageHeading({ eyebrow, title, text }) {
   );
 
 }
-
-
 
 function FolderField({ label, value, onChange, onBrowse }) {
 
@@ -1924,8 +1935,6 @@ function FolderField({ label, value, onChange, onBrowse }) {
 
 }
 
-
-
 function EDFReview({
 
   pairs,
@@ -1952,8 +1961,6 @@ function EDFReview({
 
   const [rejectOpen, setRejectOpen] = useState(false);
 
-
-
   const acceptedCount = pairs.filter(
 
     pair => pair.status === "Accepted"
@@ -1975,8 +1982,6 @@ function EDFReview({
   const reviewComplete = pairs.length > 0 && pendingCount === 0;
 
   const canContinue = reviewComplete && acceptedCount > 0;
-
-
 
   function setHeader(field, value) {
 
@@ -2002,15 +2007,11 @@ function EDFReview({
 
   }
 
-
-
   function updateAnnotation(index, key, value) {
 
     const next = [...review.scrubbed.annotations];
 
     next[index] = { ...next[index], [key]: value };
-
-
 
     onChange({
 
@@ -2027,8 +2028,6 @@ function EDFReview({
     });
 
   }
-
-
 
   function addAnnotation() {
 
@@ -2054,8 +2053,6 @@ function EDFReview({
 
   }
 
-
-
   function removeAnnotation(index) {
 
     onChange({
@@ -2078,15 +2075,11 @@ function EDFReview({
 
   }
 
-
-
   async function acceptCurrent() {
 
     await onSetStatus("Accepted");
 
   }
-
-
 
   async function rejectCurrent() {
 
@@ -2095,8 +2088,6 @@ function EDFReview({
     setRejectOpen(false);
 
   }
-
-
 
   return (
 
@@ -2110,8 +2101,6 @@ function EDFReview({
 
       </button>
 
-
-
       <PageHeading
 
         title="Electrophysiology De-identification Review"
@@ -2120,11 +2109,7 @@ function EDFReview({
 
       />
 
-
-
       <WorkflowStepper current={4} completed={completedSteps} />
-
-
 
       <WorkflowStatusCard
 
@@ -2135,8 +2120,6 @@ function EDFReview({
         state={reviewComplete ? "complete" : stageState}
 
       />
-
-
 
       <div className={styles.reviewLayout}>
 
@@ -2173,8 +2156,6 @@ function EDFReview({
           </div>
 
         </aside>
-
-
 
         <div className={styles.reviewMain}>
 
@@ -2222,8 +2203,6 @@ function EDFReview({
 
               </section>
 
-
-
               <section className={styles.card}>
 
                 <div className={styles.reviewCardHeading}>
@@ -2245,8 +2224,6 @@ function EDFReview({
                   </button>
 
                 </div>
-
-
 
                 <table className={styles.table}>
 
@@ -2283,8 +2260,6 @@ function EDFReview({
                       .map(field => {
 
                         const editable = review.editable_header_fields?.includes(field);
-
-
 
                         return (
 
@@ -2326,8 +2301,6 @@ function EDFReview({
 
               </section>
 
-
-
               <section className={styles.card}>
 
                 <h2>Annotations</h2>
@@ -2362,8 +2335,6 @@ function EDFReview({
 
                   </div>
 
-
-
                   <div>
 
                     <div className={styles.annotationHeader}>
@@ -2373,8 +2344,6 @@ function EDFReview({
                       <button onClick={addAnnotation}>Add</button>
 
                     </div>
-
-
 
                     {(review.scrubbed.annotations ?? []).length === 0 ? (
 
@@ -2428,8 +2397,6 @@ function EDFReview({
 
               </section>
 
-
-
               <div className={styles.reviewDecisionFooter}>
 
                 <div>
@@ -2439,8 +2406,6 @@ function EDFReview({
                   <span>Review status: {review.status ?? "Pending"}</span>
 
                 </div>
-
-
 
                 <div className={styles.reviewDecisionActions}>
 
@@ -2468,8 +2433,6 @@ function EDFReview({
 
               </div>
 
-
-
               {!reviewComplete && (
 
                 <div className={styles.reviewHint}>
@@ -2479,8 +2442,6 @@ function EDFReview({
                 </div>
 
               )}
-
-
 
               {reviewComplete && acceptedCount === 0 && (
 
@@ -2499,8 +2460,6 @@ function EDFReview({
         </div>
 
       </div>
-
-
 
       {rejectOpen && review && (
 
@@ -2540,8 +2499,6 @@ function EDFReview({
 
 }
 
-
-
 function EphysBids({
 
   state,
@@ -2555,6 +2512,12 @@ function EphysBids({
   onBack,
 
   onStarted,
+
+  resumeState,
+
+  autoValidate,
+
+  onCreateClinicalAssessment,
 
 }) {
 
@@ -2580,41 +2543,66 @@ function EphysBids({
 
   const [busy, setBusy] = useState(false);
 
+  const resumeAppliedRef = useRef(false);
 
+  const autoValidateStartedRef = useRef(false);
 
   useEffect(() => {
+
+    setRules(state?.rules ?? []);
+
+    if (resumeState && !resumeAppliedRef.current) {
+
+      const resumedRecords = Array.isArray(resumeState.records)
+        ? resumeState.records
+        : [];
+
+      resumeAppliedRef.current = true;
+      setRecords(resumedRecords);
+      setSelectedIds(resumeState.selectedIds ?? []);
+      setActiveId(
+        resumeState.activeId ?? resumedRecords[0]?.id ?? ""
+      );
+      setDraft({ ...(resumeState.draft ?? {}) });
+      setProject(resumeState.project ?? "");
+      setProjectDescription(
+        resumeState.projectDescription ?? ""
+      );
+      setSessionId(resumeState.sessionId ?? "");
+      return;
+    }
 
     const nextRecords = state?.records ?? [];
 
     setRecords(nextRecords);
 
-    setRules(state?.rules ?? []);
-
-
-
     if (nextRecords.length > 0) {
-
       selectRecord(nextRecords[0]);
-
     } else {
-
       setActiveId("");
-
       setSelectedIds([]);
-
       setDraft({});
-
       setProject("");
-
       setProjectDescription("");
-
       setSessionId("");
-
     }
 
-  }, [state]);
+  }, [state, resumeState]);
 
+  useEffect(() => {
 
+    if (
+      !autoValidate ||
+      autoValidateStartedRef.current ||
+      records.length === 0
+    ) {
+      return;
+    }
+
+    autoValidateStartedRef.current = true;
+    reviewMetadata();
+
+  }, [autoValidate, records]);
 
   function selectRecord(record) {
 
@@ -2636,8 +2624,6 @@ function EphysBids({
 
   }
 
-
-
   function toggleSelected(id) {
 
     setSelectedIds(current =>
@@ -2651,8 +2637,6 @@ function EphysBids({
     );
 
   }
-
-
 
   function toggleInclude(id) {
 
@@ -2671,8 +2655,6 @@ function EphysBids({
     );
 
   }
-
-
 
   function preparedRecords() {
 
@@ -2700,8 +2682,6 @@ function EphysBids({
 
   }
 
-
-
   function applySelected() {
 
     if (selectedIds.length === 0) {
@@ -2715,8 +2695,6 @@ function EphysBids({
     setProblems([]);
 
   }
-
-
 
   function includeSelected(include) {
 
@@ -2736,8 +2714,6 @@ function EphysBids({
 
   }
 
-
-
   function conditionMatches(rule) {
 
     if (!rule.required_if_field) {
@@ -2746,15 +2722,11 @@ function EphysBids({
 
     }
 
-
-
     const current = draft[rule.required_if_field];
 
     const expected = rule.required_if_value;
 
     const operator = String(rule.required_if_operator ?? "").toLowerCase();
-
-
 
     const currentValues = Array.isArray(current)
 
@@ -2762,19 +2734,13 @@ function EphysBids({
 
       : [String(current ?? "").trim()].filter(Boolean);
 
-
-
     const expectedValues = Array.isArray(expected)
 
       ? expected.map(value => String(value).trim()).filter(Boolean)
 
       : [String(expected ?? "").trim()].filter(Boolean);
 
-
-
     const anyMatch = expectedValues.some(value => currentValues.includes(value));
-
-
 
     if (
 
@@ -2790,13 +2756,23 @@ function EphysBids({
 
     }
 
-
-
     return anyMatch;
 
   }
 
+  function buildResumeState(nextRecords = records) {
 
+    return {
+      records: nextRecords,
+      selectedIds,
+      activeId,
+      draft: structuredClone(draft),
+      project,
+      projectDescription,
+      sessionId,
+    };
+
+  }
 
   async function reviewMetadata() {
 
@@ -2805,8 +2781,6 @@ function EphysBids({
     setRecords(nextRecords);
 
     setBusy(true);
-
-
 
     try {
 
@@ -2818,17 +2792,28 @@ function EphysBids({
 
       });
 
-
-
       if (!validation?.ok) {
 
-        setProblems(validation?.problems ?? ["Validation failed."]);
+        const missingClinical =
+          validation?.missing_clinical_assessments ?? [];
+
+        setProblems(
+          validation?.problems ?? ["Validation failed."]
+        );
+
+        if (
+          missingClinical.length > 0 &&
+          onCreateClinicalAssessment
+        ) {
+          onCreateClinicalAssessment(
+            missingClinical[0].patient_id,
+            buildResumeState(nextRecords)
+          );
+        }
 
         return;
 
       }
-
-
 
       setProblems([]);
 
@@ -2848,13 +2833,9 @@ function EphysBids({
 
   }
 
-
-
   async function confirmAndConvert() {
 
     setBusy(true);
-
-
 
     try {
 
@@ -2866,8 +2847,6 @@ function EphysBids({
 
       });
 
-
-
       if (!result?.ok) {
 
         setProblems(result?.problems ?? ["Conversion could not start."]);
@@ -2877,8 +2856,6 @@ function EphysBids({
         return;
 
       }
-
-
 
       setProblems([]);
 
@@ -2900,8 +2877,6 @@ function EphysBids({
 
   }
 
-
-
   const active = records.find(record => record.id === activeId);
 
   const derivedFields = new Set(state?.derived_fields ?? []);
@@ -2916,8 +2891,6 @@ function EphysBids({
 
   );
 
-
-
   return (
 
     <div>
@@ -2930,8 +2903,6 @@ function EphysBids({
 
       </button>
 
-
-
       <PageHeading
 
         title="Electrophysiology Metadata & BIDS Review"
@@ -2940,11 +2911,7 @@ function EphysBids({
 
       />
 
-
-
       <WorkflowStepper current={5} completed={completedSteps} />
-
-
 
       <WorkflowStatusCard
 
@@ -2955,8 +2922,6 @@ function EphysBids({
         state={stageState}
 
       />
-
-
 
       <section className={styles.card}>
 
@@ -2975,8 +2940,6 @@ function EphysBids({
               Questions are shown in dictionary order. Project and Session ID are used for BIDS dataset organization.
 
             </p>
-
-
 
             {state?.local_database && (
 
@@ -3001,8 +2964,6 @@ function EphysBids({
           </div>
 
         </div>
-
-
 
         <div className={styles.bidsTableWrap}>
 
@@ -3142,8 +3103,6 @@ function EphysBids({
 
       </section>
 
-
-
       {active && (
 
         <>
@@ -3190,8 +3149,6 @@ function EphysBids({
 
           )}
 
-
-
           <section className={styles.card}>
 
             <h2>CoCANoT Electrophysiology Metadata</h2>
@@ -3201,8 +3158,6 @@ function EphysBids({
               Requiredness, input type, allowed values, conditional fields, prompts, and help text come from the active machine-readable dictionary.
 
             </p>
-
-
 
             <div className={styles.metadataForm}>
 
@@ -3238,8 +3193,6 @@ function EphysBids({
 
           </section>
 
-
-
           <section className={styles.card}>
 
             <h2>Dataset Organization</h2>
@@ -3260,8 +3213,6 @@ function EphysBids({
 
               </label>
 
-
-
               <label>
 
                 <span>Session ID *</span>
@@ -3275,8 +3226,6 @@ function EphysBids({
                 />
 
               </label>
-
-
 
               <label className={styles.full}>
 
@@ -3295,8 +3244,6 @@ function EphysBids({
             </div>
 
           </section>
-
-
 
           <section className={styles.bidsActions}>
 
@@ -3322,8 +3269,6 @@ function EphysBids({
 
             </div>
 
-
-
             <button
 
               className={styles.primary}
@@ -3343,8 +3288,6 @@ function EphysBids({
         </>
 
       )}
-
-
 
       {problems.length > 0 && (
 
@@ -3366,8 +3309,6 @@ function EphysBids({
 
       )}
 
-
-
       {confirmOpen && (
 
         <div className={styles.modalBackdrop}>
@@ -3381,8 +3322,6 @@ function EphysBids({
               Confirm the included recordings below. Conversion will create the final electrophysiology BIDS output using the metadata shown here.
 
             </p>
-
-
 
             <div className={styles.confirmList}>
 
@@ -3415,8 +3354,6 @@ function EphysBids({
                 ))}
 
             </div>
-
-
 
             <div className={styles.modalActions}>
 
@@ -3460,8 +3397,6 @@ function EphysBids({
 
 }
 
-
-
 function EphysMetadataField({ rule, values, value, onChange }) {
 
   const label = `${rule.ui_prompt}${
@@ -3477,8 +3412,6 @@ function EphysMetadataField({ rule, values, value, onChange }) {
         : ""
 
   }`;
-
-
 
   if (rule.repeat_for_each_field) {
 
@@ -3504,15 +3437,11 @@ function EphysMetadataField({ rule, values, value, onChange }) {
 
       : {};
 
-
-
     if (applicable.length === 0) {
 
       return null;
 
     }
-
-
 
     return (
 
@@ -3535,8 +3464,6 @@ function EphysMetadataField({ rule, values, value, onChange }) {
               .replaceAll("{value}", item)
 
               .replaceAll("{item}", item);
-
-
 
             return (
 
@@ -3576,8 +3503,6 @@ function EphysMetadataField({ rule, values, value, onChange }) {
 
   }
 
-
-
   if (rule.input_type === "single_select") {
 
     return (
@@ -3610,8 +3535,6 @@ function EphysMetadataField({ rule, values, value, onChange }) {
 
   }
 
-
-
   if (rule.input_type === "multi_select") {
 
     const allowed = rule.allowed_values ?? [];
@@ -3628,13 +3551,9 @@ function EphysMetadataField({ rule, values, value, onChange }) {
 
     const exclusive = new Set(rule.exclusive_values ?? []);
 
-
-
     function setOption(option, checked) {
 
       let next;
-
-
 
       if (checked && exclusive.has(option)) {
 
@@ -3650,15 +3569,11 @@ function EphysMetadataField({ rule, values, value, onChange }) {
 
       }
 
-
-
       const ordered = allowed.filter(option => next.includes(option));
 
       onChange(ordered);
 
     }
-
-
 
     return (
 
@@ -3677,8 +3592,6 @@ function EphysMetadataField({ rule, values, value, onChange }) {
           <span className={styles.multiCount}>{selected.length} selected</span>
 
         </div>
-
-
 
         <div className={styles.multiToolbar}>
 
@@ -3716,8 +3629,6 @@ function EphysMetadataField({ rule, values, value, onChange }) {
 
         </div>
 
-
-
         <div className={styles.multiOptions}>
 
           {allowed.map(option => (
@@ -3753,8 +3664,6 @@ function EphysMetadataField({ rule, values, value, onChange }) {
     );
 
   }
-
-
 
   return (
 

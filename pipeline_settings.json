@@ -6,17 +6,10 @@
     "selected_sources": []
   },
   "imaging": {
-    "input_dirs": [
-      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/dicom_files/Patient1/SER_0004",
-      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/nifti_output/Patient4"
-    ],
-    "derivatives_dir": "/Users/arifi020/Documents/CoCANoT-Pipelines/ANDREATEST/IMG_DERIVATIVE",
-    "bids_output_dir": "/Users/arifi020/Documents/CoCANoT-Pipelines/ANDREATEST/IMG_FINALOUTPUT",
-    "dicom_input_dirs": [
-      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/dicom_files/Patient1/SER_0004"
-    ],
-    "nifti_input_dirs": [
-      "/Users/arifi020/Documents/MockPipelines/ImagingPipeline-PyDeface/nifti_output/Patient4"
-    ]
+    "input_dirs": [],
+    "derivatives_dir": "",
+    "bids_output_dir": "",
+    "dicom_input_dirs": [],
+    "nifti_input_dirs": []
   }
 }

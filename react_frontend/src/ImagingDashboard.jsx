@@ -74,6 +74,7 @@ export default function ImagingDashboard({
   const [completionNotice, setCompletionNotice] = useState(false);
   const outputSettingsDirtyRef = useRef(false);
   const metadataBidsTerminalRefreshRef = useRef("");
+  const bidsRecordsRef = useRef([]);
 
   function showImagingHome() {
     setView("home");
@@ -87,7 +88,7 @@ export default function ImagingDashboard({
   }
 
   useEffect(() => {
-    if (view === "metadata") {
+    if (["processing", "metadata"].includes(view)) {
       loadBidsState();
     }
 
@@ -163,9 +164,36 @@ export default function ImagingDashboard({
     }
 
     if (state.process_stages && typeof state.process_stages === "object") {
+      const nextStages = {
+        ...state.process_stages,
+      };
+
+      if (
+        ["processing", "metadata"].includes(view) &&
+        nextStages.metadata_bids === "not_started" &&
+        bidsRecordsRef.current.length > 0
+      ) {
+        const allCompleted = bidsRecordsRef.current.every(
+          record => record.record_state === "completed_recorded"
+        );
+
+        const hasRealProblem = bidsRecordsRef.current.some(record =>
+          [
+            "output_record_deleted",
+            "recorded_export_missing",
+          ].includes(record.record_state)
+        );
+
+        nextStages.metadata_bids = allCompleted
+          ? "complete"
+          : hasRealProblem
+            ? "failed"
+            : "running";
+      }
+
       setProcessStages(current => ({
         ...current,
-        ...state.process_stages,
+        ...nextStages,
       }));
     }
 
@@ -309,17 +337,39 @@ export default function ImagingDashboard({
     try {
       const state = await bridge.imaging_bids_get_state();
       const records = state?.records ?? [];
+      bidsRecordsRef.current = records;
       setBidsState(state);
       setAcceptedImages(records);
       setHeldImageCount(Number(state?.held_count ?? 0));
 
-      if (records.length > 0 && records.every(record => record.record_state === "completed_recorded")) {
+      if (records.length > 0) {
+        const allCompleted = records.every(
+          record => record.record_state === "completed_recorded"
+        );
+
+        const hasRealProblem = records.some(record =>
+          [
+            "output_record_deleted",
+            "recorded_export_missing",
+          ].includes(record.record_state)
+        );
+
         setProcessStages(current => ({
           ...current,
-          metadata_bids: "complete",
+          metadata_bids: allCompleted
+            ? "complete"
+            : hasRealProblem
+              ? "failed"
+              : "running",
+        }));
+      } else {
+        setProcessStages(current => ({
+          ...current,
+          metadata_bids: "not_started",
         }));
       }
     } catch (error) {
+      bidsRecordsRef.current = [];
       setBidsState(null);
       appendLog(String(error));
       alert(String(error));

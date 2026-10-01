@@ -159,14 +159,21 @@ export default function App() {
   function openAttentionItem(patientId, item = {}) {
 
     if (
+
       item?.workflow === "imaging" ||
+
       item?.category === "imaging_step5"
+
     ) {
 
       navigate("imaging-processing", {
+
         imagingView: "metadata",
+
         attentionSourceKey: item?.source_key ?? "",
+
         attentionRecordId: item?.record_id ?? "",
+
       });
 
       return;
@@ -174,7 +181,9 @@ export default function App() {
     }
 
     navigate("patient-review", {
+
       patientId,
+
     });
 
   }
@@ -615,10 +624,34 @@ export default function App() {
 
           page === "ephys-processing"
 
-            ? "processing"
+            ? navigationContext.ephysView ?? "processing"
 
             : "home"
 
+        }
+
+        resumeBidsState={
+          navigationContext.resumeEphysBidsState ?? null
+        }
+
+        autoValidateBids={Boolean(
+          navigationContext.autoValidateEphysBids
+        )}
+
+        onCreateClinicalAssessment={(
+          patientId,
+          resumeEphysBidsState
+        ) =>
+          navigate("metadata-patients", {
+            patientId,
+            autoOpenClinical: true,
+            returnPage: "ephys-processing",
+            returnContext: {
+              ephysView: "bids",
+              resumeEphysBidsState,
+              autoValidateEphysBids: true,
+            },
+          })
         }
 
         onNavigate={navigate}

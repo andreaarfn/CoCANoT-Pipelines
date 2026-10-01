@@ -2151,6 +2151,9 @@ class CoCANoTAPI:
         )
 
         problems: list[str] = []
+        missing_clinical_assessments: list[
+            dict[str, str]
+        ] = []
         normalized_records: list[
             dict[str, Any]
         ] = []
@@ -2221,6 +2224,18 @@ class CoCANoTAPI:
                         "has no Clinical Assessment in the "
                         "local database."
                     )
+
+                    if not any(
+                        item.get("patient_id") == patient_id
+                        for item in missing_clinical_assessments
+                    ):
+                        missing_clinical_assessments.append(
+                            {
+                                "patient_id": patient_id,
+                                "source_label": source_label,
+                            }
+                        )
+
                     continue
 
                 metadata[
@@ -2345,6 +2360,9 @@ class CoCANoTAPI:
                 normalized_records
                 if not problems
                 else records
+            ),
+            "missing_clinical_assessments": (
+                missing_clinical_assessments
             ),
         }
 
@@ -11609,12 +11627,17 @@ class CoCANoTAPI:
         record: dict[str, Any] | None,
     ) -> dict[str, list[str]]:
         """
-        Remove the Imaging workflow state/files that belong to a deleted
-        Imaging metadata record.
+        Remove the complete Imaging workflow footprint for a deleted record.
 
-        Without this cleanup, the old Step 4 "Accepted" review entry survives
-        deletion and imaging_bids_get_state() immediately recreates the image
-        as "Ready for Step 5".
+        When the user chooses "delete record and processed files", this removes:
+        - Step 4 review state
+        - Step 5 draft state
+        - derivative files for the exact reviewed image
+        - the matching final BIDS NIfTI and its sidecars from the selected
+          final-output folder
+
+        All file deletion is restricted to the currently configured derivatives
+        and BIDS output roots (or recorded roots for the same record).
         """
         result = {
             "deleted_paths": [],
@@ -11625,12 +11648,39 @@ class CoCANoTAPI:
         if not isinstance(record, dict):
             return result
 
+        metadata = record.get(
+            "metadata",
+            {},
+        )
+        if not isinstance(metadata, dict):
+            metadata = {}
+
         context = record.get(
             "context",
             {},
         )
         if not isinstance(context, dict):
             context = {}
+
+        patient_id = str(
+            metadata.get(
+                "CoCANoT Patient ID",
+                "",
+            )
+            or ""
+        ).strip()
+
+        image_id = str(
+            metadata.get(
+                "Image ID",
+                "",
+            )
+            or record.get(
+                "record_id",
+                "",
+            )
+            or ""
+        ).strip()
 
         source_key = str(
             context.get(
@@ -11653,38 +11703,65 @@ class CoCANoTAPI:
             config
         )
 
-        # Locate the exact review item before changing review_state.
+        derivatives_root = (
+            config.imaging.derivatives_dir
+            .expanduser()
+        )
+        bids_root = (
+            config.imaging.bids_output_dir
+            .expanduser()
+        )
+
+        try:
+            derivatives_root = (
+                derivatives_root.resolve()
+            )
+        except OSError:
+            pass
+
+        try:
+            bids_root = bids_root.resolve()
+        except OSError:
+            pass
+
+        # --------------------------------------------------------------
+        # 1. Find the exact Step 4 review item for this record.
+        # --------------------------------------------------------------
         review_items, review_state_path = (
             self._imaging_review_items()
         )
 
         target_item = None
 
+        stored_path = None
+        if stored_nifti:
+            stored_path = Path(
+                stored_nifti
+            ).expanduser()
+            try:
+                stored_path = (
+                    stored_path.resolve()
+                )
+            except OSError:
+                pass
+
         for item in review_items:
+            item_key = str(
+                item.get(
+                    "key",
+                    "",
+                )
+                or ""
+            ).strip()
+
             if (
                 source_key
-                and str(
-                    item.get(
-                        "key",
-                        "",
-                    )
-                    or ""
-                ).strip() == source_key
+                and item_key == source_key
             ):
                 target_item = item
                 break
 
-            if stored_nifti:
-                stored_path = Path(
-                    stored_nifti
-                ).expanduser()
-                try:
-                    stored_path = (
-                        stored_path.resolve()
-                    )
-                except OSError:
-                    pass
-
+            if stored_path is not None:
                 for field in (
                     "accepted_defaced_path",
                     "review_defaced_path",
@@ -11699,12 +11776,14 @@ class CoCANoTAPI:
                         )
                         or ""
                     ).strip()
+
                     if not candidate_text:
                         continue
 
                     candidate = Path(
                         candidate_text
                     ).expanduser()
+
                     try:
                         candidate = (
                             candidate.resolve()
@@ -11718,12 +11797,6 @@ class CoCANoTAPI:
 
                 if target_item is not None:
                     break
-
-        # Clear the Step 4 review decision so this source can no longer be
-        # returned by imaging_get_accepted_files().
-        review_state = self._load_review_state(
-            review_state_path
-        )
 
         review_key = (
             str(
@@ -11740,17 +11813,33 @@ class CoCANoTAPI:
             else source_key
         )
 
+        # --------------------------------------------------------------
+        # 2. Remove Step 4 review state and Step 5 draft state.
+        # --------------------------------------------------------------
+        review_state = self._load_review_state(
+            review_state_path
+        )
+
         if review_key:
             review_state.pop(
                 review_key,
                 None,
             )
-            self._save_review_state(
-                review_state_path,
-                review_state,
+
+        if (
+            source_key
+            and source_key != review_key
+        ):
+            review_state.pop(
+                source_key,
+                None,
             )
 
-        # Clear any Step 5 draft for the same source.
+        self._save_review_state(
+            review_state_path,
+            review_state,
+        )
+
         draft_path = stages[
             "bids_drafts"
         ]
@@ -11778,9 +11867,109 @@ class CoCANoTAPI:
             drafts,
         )
 
-        # "Delete record and processed files" should also remove the local
-        # derivative chain for this exact source, not just the final BIDS copy.
-        paths_to_delete: list[Path] = []
+        # --------------------------------------------------------------
+        # Utility: safely delete a file and its directly-associated sidecars,
+        # but only when it is under one of the supplied allowed roots.
+        # --------------------------------------------------------------
+        seen: set[str] = set()
+
+        def under_allowed_root(
+            path: Path,
+            roots: list[Path],
+        ) -> bool:
+            try:
+                resolved = path.resolve()
+            except OSError:
+                resolved = path
+
+            for root in roots:
+                try:
+                    root_resolved = (
+                        root.expanduser().resolve()
+                    )
+                except OSError:
+                    root_resolved = (
+                        root.expanduser()
+                    )
+
+                try:
+                    resolved.relative_to(
+                        root_resolved
+                    )
+                    return True
+                except ValueError:
+                    continue
+
+            return False
+
+        def delete_one(
+            path: Path,
+            roots: list[Path],
+        ) -> None:
+            path = path.expanduser()
+
+            try:
+                resolved = path.resolve()
+            except OSError:
+                resolved = path
+
+            key = str(
+                resolved
+            )
+
+            if key in seen:
+                return
+
+            seen.add(
+                key
+            )
+
+            if not under_allowed_root(
+                resolved,
+                roots,
+            ):
+                result[
+                    "errors"
+                ].append(
+                    "Refused to delete file outside the selected "
+                    f"Imaging output folders: {resolved}"
+                )
+                return
+
+            if not resolved.exists():
+                result[
+                    "missing_paths"
+                ].append(
+                    str(resolved)
+                )
+                return
+
+            if not resolved.is_file():
+                result[
+                    "errors"
+                ].append(
+                    f"Tracked Imaging path is not a file: {resolved}"
+                )
+                return
+
+            try:
+                resolved.unlink()
+                result[
+                    "deleted_paths"
+                ].append(
+                    str(resolved)
+                )
+            except OSError as exc:
+                result[
+                    "errors"
+                ].append(
+                    f"Could not delete {resolved}: {exc}"
+                )
+
+        # --------------------------------------------------------------
+        # 3. Delete the derivative chain for this exact reviewed image.
+        # --------------------------------------------------------------
+        derivative_paths: list[Path] = []
 
         if isinstance(
             target_item,
@@ -11800,47 +11989,43 @@ class CoCANoTAPI:
                     )
                     or ""
                 ).strip()
+
                 if value:
-                    paths_to_delete.append(
+                    derivative_paths.append(
                         Path(
                             value
-                        ).expanduser()
+                        )
                     )
 
-        seen: set[str] = set()
-
-        for path in paths_to_delete:
-            try:
-                resolved = path.resolve()
-            except OSError:
-                resolved = path
-
-            key = str(
-                resolved
-            )
-            if key in seen:
-                continue
-            seen.add(
-                key
-            )
-
-            # Only delete files inside this Imaging derivatives tree.
-            try:
-                resolved.relative_to(
-                    config.imaging.derivatives_dir.resolve()
+        if stored_nifti:
+            derivative_paths.append(
+                Path(
+                    stored_nifti
                 )
-            except (
-                OSError,
-                ValueError,
+            )
+
+        for path in derivative_paths:
+            if not under_allowed_root(
+                path,
+                [
+                    derivatives_root,
+                ],
             ):
                 continue
 
-            related = [
-                resolved,
-            ]
+            delete_one(
+                path,
+                [
+                    derivatives_root,
+                ],
+            )
+
+            # Remove same-base metadata/gradient files in derivatives too.
+            base_path = path.expanduser()
+            related = []
 
             sidecar = _matching_json(
-                resolved
+                base_path
             )
             if sidecar is not None:
                 related.append(
@@ -11849,43 +12034,263 @@ class CoCANoTAPI:
 
             related.extend(
                 _matching_extra_sidecars(
-                    resolved
+                    base_path
                 )
             )
 
-            for candidate in related:
-                candidate_key = str(
-                    candidate
-                )
-                if candidate_key in seen and candidate != resolved:
-                    continue
-                seen.add(
-                    candidate_key
+            cocanot_sidecar = base_path.with_name(
+                f"{self._strip_nifti_suffix(base_path)}_cocanot.json"
+            )
+            if cocanot_sidecar.exists():
+                related.append(
+                    cocanot_sidecar
                 )
 
-                try:
-                    if candidate.is_file():
-                        candidate.unlink()
-                        result[
-                            "deleted_paths"
-                        ].append(
-                            str(candidate)
+            for candidate in related:
+                delete_one(
+                    candidate,
+                    [
+                        derivatives_root,
+                    ],
+                )
+
+        # --------------------------------------------------------------
+        # 4. Delete the final BIDS output for this record.
+        #
+        # Prefer recorded/link paths. If this is an older record without a
+        # durable link, locate the BIDS file in the selected output folder by
+        # stable CoCANoT Patient ID + Image ID.
+        # --------------------------------------------------------------
+        final_candidates: list[Path] = []
+        final_roots: list[Path] = [
+            bids_root,
+        ]
+
+        for field in (
+            "bids_output_dir",
+            "final_output_root",
+        ):
+            value = str(
+                context.get(
+                    field,
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if value:
+                final_roots.append(
+                    Path(
+                        value
+                    ).expanduser()
+                )
+
+        for field in (
+            "bids_data_path",
+            "nifti_bids_path",
+            "output_path",
+        ):
+            value = str(
+                context.get(
+                    field,
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if value:
+                final_candidates.append(
+                    Path(
+                        value
+                    ).expanduser()
+                )
+
+        for value in (
+            context.get(
+                "final_paths",
+                [],
+            )
+            or []
+        ):
+            value_text = str(
+                value or ""
+            ).strip()
+            if value_text:
+                final_candidates.append(
+                    Path(
+                        value_text
+                    ).expanduser()
+                )
+
+        data_links = PatientDataLinkStore()
+
+        if patient_id and image_id:
+            link = data_links.get_link(
+                self.get_site_id(),
+                patient_id,
+                "Imaging",
+                image_id,
+            )
+
+            if isinstance(
+                link,
+                dict,
+            ) and link:
+                linked = (
+                    data_links.paths_from_payload(
+                        link
+                    )
+                )
+
+                final_candidates.extend(
+                    Path(value).expanduser()
+                    for value in linked.get(
+                        "final_paths",
+                        [],
+                    )
+                    if str(value).strip()
+                )
+
+                final_roots.extend(
+                    Path(value).expanduser()
+                    for value in linked.get(
+                        "final_output_roots",
+                        [],
+                    )
+                    if str(value).strip()
+                )
+
+        # Legacy recovery: scan the selected BIDS output folder and match this
+        # exact patient/image identity.
+        if (
+            patient_id
+            and image_id
+            and bids_root.exists()
+        ):
+            try:
+                bids_index = (
+                    self._index_existing_bids(
+                        bids_root
+                    )
+                )
+                matched = (
+                    self._existing_bids_export_by_identity(
+                        bids_index,
+                        patient_id,
+                        image_id,
+                    )
+                )
+            except Exception:
+                matched = None
+
+            if isinstance(
+                matched,
+                dict,
+            ):
+                matched_nifti = str(
+                    matched.get(
+                        "nifti_path",
+                        "",
+                    )
+                    or ""
+                ).strip()
+
+                if matched_nifti:
+                    final_candidates.append(
+                        Path(
+                            matched_nifti
                         )
-                    else:
-                        result[
-                            "missing_paths"
-                        ].append(
-                            str(candidate)
-                        )
-                except OSError as exc:
-                    result[
-                        "errors"
-                    ].append(
-                        f"{candidate}: {exc}"
                     )
 
-        # Recalculate review stage and reset Step 5 completion because the
-        # exported Imaging record was intentionally removed.
+        # Delete each final NIfTI and all same-base BIDS sidecars.
+        for path in final_candidates:
+            if not _is_nifti(
+                path
+            ):
+                continue
+
+            allowed_roots = [
+                root
+                for root in final_roots
+                if str(root).strip()
+            ]
+
+            if not under_allowed_root(
+                path,
+                allowed_roots,
+            ):
+                continue
+
+            delete_one(
+                path,
+                allowed_roots,
+            )
+
+            base_path = path.expanduser()
+
+            sidecar = _matching_json(
+                base_path
+            )
+            if sidecar is not None:
+                delete_one(
+                    sidecar,
+                    allowed_roots,
+                )
+
+            for candidate in (
+                _matching_extra_sidecars(
+                    base_path
+                )
+            ):
+                delete_one(
+                    candidate,
+                    allowed_roots,
+                )
+
+            cocanot_sidecar = base_path.with_name(
+                f"{self._strip_nifti_suffix(base_path)}_cocanot.json"
+            )
+            if cocanot_sidecar.exists():
+                delete_one(
+                    cocanot_sidecar,
+                    allowed_roots,
+                )
+
+        # --------------------------------------------------------------
+        # 5. Remove empty per-image/per-session directories, but never remove
+        # the selected output roots themselves.
+        # --------------------------------------------------------------
+        for deleted_text in list(
+            result[
+                "deleted_paths"
+            ]
+        ):
+            deleted_path = Path(
+                deleted_text
+            )
+
+            roots = (
+                [
+                    derivatives_root,
+                ]
+                if under_allowed_root(
+                    deleted_path,
+                    [
+                        derivatives_root,
+                    ],
+                )
+                else final_roots
+            )
+
+            try:
+                self._remove_empty_parent_directories(
+                    deleted_path,
+                    roots,
+                )
+            except Exception:
+                pass
+
+        # Recalculate workflow state after the source was intentionally removed.
         try:
             self._refresh_imaging_review_stage()
         except Exception:
