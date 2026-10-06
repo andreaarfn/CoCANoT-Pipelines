@@ -1,0 +1,80 @@
+name: CoCANoT-Pipelines
+version: "0.2.0"
+
+installer_type: pkg
+installer_filename: CoCANoT-Pipelines-0.2.0-macOS-arm64.pkg
+
+environment_file: ../../environment/environment-macos.yaml
+
+company: CoCANoT
+reverse_domain_identifier: org.cocanot.pipelines
+
+# Per-user private runtime:
+#   ~/Library/CoCANoT/runtime
+#
+# Using "runtime" as pkg_name deliberately avoids the developer environment:
+#   ~/Library/cocanot-pipelines
+pkg_name: runtime
+default_location_pkg: /Library/CoCANoT
+
+# Current-user installation only. No system-wide installation and no
+# arbitrary-volume installation.
+pkg_domains:
+  enable_anywhere: false
+  enable_currentUserHome: true
+  enable_localSystem: false
+
+initialize_conda: false
+keep_pkgs: false
+progress_notifications: true
+register_envs: false
+
+welcome_text: |
+  Welcome to the CoCANoT installer.
+
+  This installer provides the unified CoCANoT de-identification and
+  validation application together with its private runtime dependencies.
+
+readme_text: |
+  CoCANoT includes:
+
+  - Unified React + PyWebView application
+  - Imaging de-identification workflow
+  - Electrophysiology de-identification workflow
+  - Clinical and surgical metadata management
+  - Python runtime and required Python packages
+  - dcm2niix
+  - FSL / FLIRT components required by PyDeface
+  - PyDeface
+
+  The installed runtime is private to the current macOS user and is stored
+  under that user's Library folder. It does not modify Homebrew, system
+  Python, Node, npm, Conda, or other users' accounts.
+
+  An "Uninstall CoCANoT" application is also installed for the current user.
+  It removes the
+  CoCANoT application, its private runtime, local CoCANoT application data,
+  caches, preferences, logs, and installer receipts. User-selected source,
+  derivatives, and BIDS output folders are not deleted.
+
+conclusion_text: |
+  CoCANoT was installed successfully.
+
+  Open "CoCANoT" from your user Applications folder.
+
+  "Uninstall CoCANoT" is also available in your user Applications folder.
+
+extra_files:
+  - ../../stage/app_payload.tar.gz: payload/app_payload.tar.gz
+  - ../../stage/pip_packages.tar.gz: payload/pip_packages.tar.gz
+  - ../../../assets/logo/logo.icns: payload/logo.icns
+  - ../../scripts/uninstall_macos.sh: payload/uninstall_macos.sh
+
+pre_install: ../../scripts/pre_install_macos.sh
+post_install: ../../scripts/post_install_macos.sh
+
+build_outputs:
+  - hash
+  - info.json
+  - lockfile
+  - pkgs_list
