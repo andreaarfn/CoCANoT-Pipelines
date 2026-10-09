@@ -131,8 +131,14 @@ def get_project_root() -> Path:
 
 
 def get_settings_path() -> Path:
-    """Return the shared pipeline settings path."""
-    return get_project_root() / "pipeline_settings.json"
+    """
+    Return the per-user CoCANoT pipeline settings path.
+
+    Runtime settings must remain writable after the application is installed,
+    so they are stored with the rest of CoCANoT's local user data instead of
+    inside the installed application payload.
+    """
+    return Path.home() / ".cocanot" / "pipeline_settings.json"
 
 
 def merge_settings(

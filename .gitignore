@@ -1,33 +1,20 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# Private site credentials
+config/site_access.csv
 
-# Virtual environments
-.venv/
-env/
+# Node dependencies
+node_modules/
 
-# macOS
-.DS_Store
+# Constructor generated files
+info.json
+lockfile.base.txt
+pkg-list.base.txt
+packaging/stage/
 
-# Constructor installer output
-CoCANoT-Pipelines-*.pkg
+# Installer outputs
+*.pkg
 
-# Build directories
-dist/
-
-# Temporary
-*.log
-
-# VS Code
-.vscode/
-
-# PyCharm
-.idea/
-
-# Conda
-conda-bld/
+# Temporary Microsoft Office files
+~$*
 
 # Local test data
 ANDREATEST/

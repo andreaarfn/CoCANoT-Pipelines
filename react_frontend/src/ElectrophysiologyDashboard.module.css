@@ -76,6 +76,53 @@
 
 }
 
+.localTopbar {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.localBack {
+  min-height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: #1767b1;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.localBack:hover {
+  color: #0f548f;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.localBack svg {
+  flex: 0 0 auto;
+  stroke-width: 2.2;
+}
+
+.localBreadcrumbChevron {
+  color: #93a1af;
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.localBreadcrumbCurrent {
+  color: #65758a;
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .homeCards {
 
   display: grid;
@@ -1296,15 +1343,20 @@
 
 }
 
-
 .workflowStatusSpinner {
+
   animation: workflowStatusSpin 0.9s linear infinite;
+
 }
 
 @keyframes workflowStatusSpin {
+
   to {
+
     transform: rotate(360deg);
+
   }
+
 }
 
 .workflowStatusBadge_failed {

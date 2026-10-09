@@ -872,6 +872,24 @@ export default function ElectrophysiologyDashboard({
 
       <div>
 
+        <div className={styles.localTopbar}>
+          <button
+            className={styles.localBack}
+            onClick={() => onNavigate?.("home")}
+          >
+            <ArrowLeft size={16} />
+            Home
+          </button>
+
+          <span className={styles.localBreadcrumbChevron}>
+            ›
+          </span>
+
+          <span className={styles.localBreadcrumbCurrent}>
+            Electrophysiology
+          </span>
+        </div>
+
         <PageHeading
 
           eyebrow="ELECTROPHYSIOLOGY PIPELINE"
@@ -996,19 +1014,23 @@ export default function ElectrophysiologyDashboard({
 
     <div>
 
-      <button
+      <div className={styles.localTopbar}>
+        <button
+          className={styles.localBack}
+          onClick={showEphysHome}
+        >
+          <ArrowLeft size={16} />
+          Electrophysiology
+        </button>
 
-        className={styles.backLink}
+        <span className={styles.localBreadcrumbChevron}>
+          ›
+        </span>
 
-        onClick={showEphysHome}
-
-      >
-
-        <ArrowLeft size={16} />
-
-        Back to Electrophysiology
-
-      </button>
+        <span className={styles.localBreadcrumbCurrent}>
+          Process Recordings
+        </span>
+      </div>
 
       <PageHeading
 

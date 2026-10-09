@@ -565,14 +565,34 @@ export default function ImagingDashboard({
 
   if (view === "home") {
     return (
-      <Shell
-        title="Imaging"
-        siteId={siteId}
-        onBack={onBack}
-        onHome={onHome}
-        onProcessImaging={showImagingProcessing}
-        onPatientReview={onPatientReview}
-      >
+      <div>
+        <div className={styles.localTopbar}>
+          <button
+            className={styles.localBack}
+            onClick={onBack}
+          >
+            <ArrowLeft size={16} />
+            Home
+          </button>
+
+          <span className={styles.localBreadcrumbChevron}>
+            ›
+          </span>
+
+          <span className={styles.localBreadcrumbCurrent}>
+            Imaging
+          </span>
+        </div>
+
+        <header className={styles.homeHeading}>
+          <span>IMAGING PIPELINE</span>
+          <h1>Prepare imaging data for research use</h1>
+          <p>
+            Convert DICOM to NIfTI, prepare existing NIfTI inputs, scrub headers,
+            deface images, review the results, and convert accepted files to BIDS.
+          </p>
+        </header>
+
         {completionNotice && (
           <section className={styles.completionBanner}>
             <CheckCircle2 size={22} strokeWidth={2} />
@@ -585,32 +605,20 @@ export default function ImagingDashboard({
           </section>
         )}
 
-        <section className={styles.hero}>
-          <div className={styles.heroIcon}><Images size={30} strokeWidth={1.8} /></div>
-          <div>
-            <span className={styles.eyebrow}>Imaging Pipeline</span>
-            <h2>Prepare imaging data for research use</h2>
-            <p>
-              Convert DICOM to NIfTI, prepare existing NIfTI inputs, scrub headers,
-              deface images, review the results, and convert accepted files to BIDS.
-            </p>
-          </div>
-        </section>
-
-        <section className={styles.optionGrid}>
-          <button className={styles.optionCard} onClick={showImagingProcessing}>
-            <span>01</span>
+        <div className={styles.homeCards}>
+          <button onClick={showImagingProcessing}>
+            <Images size={28} />
             <strong>Process imaging data</strong>
-            <p>Open the complete five-step Imaging DeID workflow.</p>
+            <span>Open the complete five-step Imaging DeID workflow.</span>
           </button>
 
-          <button className={styles.optionCard} onClick={onPatientReview}>
-            <span>02</span>
+          <button onClick={onPatientReview}>
+            <Database size={28} />
             <strong>Review patient data</strong>
-            <p>Review locally stored imaging and metadata records by patient.</p>
+            <span>Review locally stored imaging and metadata records by patient.</span>
           </button>
-        </section>
-      </Shell>
+        </div>
+      </div>
     );
   }
 
@@ -668,6 +676,8 @@ export default function ImagingDashboard({
       title="Process Imaging"
       siteId={siteId}
       onBack={showImagingHome}
+      backLabel="Imaging"
+      currentLabel="Process Imaging"
       onHome={onHome}
       onProcessImaging={showImagingProcessing}
       onPatientReview={onPatientReview}
@@ -2676,16 +2686,31 @@ function Shell({
   title,
   subtitle,
   onBack,
+  backLabel = "Back",
+  currentLabel = "",
   children,
 }) {
   return (
     <div>
       <div className={styles.localTopbar}>
         {onBack && (
-          <button className={styles.localBack} onClick={onBack}>
-            <ArrowLeft size={16} />
-            Back
-          </button>
+          <>
+            <button className={styles.localBack} onClick={onBack}>
+              <ArrowLeft size={16} />
+              {backLabel}
+            </button>
+
+            {currentLabel && (
+              <>
+                <span className={styles.localBreadcrumbChevron}>
+                  ›
+                </span>
+                <span className={styles.localBreadcrumbCurrent}>
+                  {currentLabel}
+                </span>
+              </>
+            )}
+          </>
         )}
       </div>
 

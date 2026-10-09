@@ -15,6 +15,9 @@ import subprocess
 import sys
 import threading
 import uuid
+import webbrowser
+from urllib import request as urllib_request
+from urllib.error import HTTPError, URLError
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime, timezone
 from pathlib import Path
@@ -162,9 +165,10 @@ from MetadataPipeline.storage.data_link_store import PatientDataLinkStore
 from MetadataPipeline.storage.record_deletion import RecordDeletionService
 from MetadataPipeline.storage.record_repository import MetadataRepository
 from MetadataPipeline.validation import MetadataValidator, load_dictionary
-from app.site_access import normalize_site_id, validate_site_access
+from app.site_access import normalize_site_id
 
 from pipeline_config import (
+    PipelineConfigError,
     build_imaging_settings_dict,
     build_settings_dict,
     load_imaging_config,
@@ -595,6 +599,7 @@ class CoCANoTAPI:
     def __init__(self) -> None:
         self.window = None
         self.authenticated_site_id = ""
+        self._reporting_session_token = ""
         self._pending_metadata_documents: dict[str, dict[str, Any]] = {}
 
         self.store = LocalMetadataStore()
@@ -689,43 +694,140 @@ class CoCANoTAPI:
     def get_site_id(self) -> str:
         return self.authenticated_site_id
 
+    REPORTING_ENDPOINT = "https://script.google.com/macros/s/AKfycbzSRMdCIybLtilIdpETNNeoOd6vRPSoiu5fCm0GJWblC7EZwpNXIbguCwOr5jFFIsa0/exec"
+
+    def _reporting_request(self, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            import requests
+        except ImportError as exc:
+            raise RuntimeError(
+                "The requests package is required for online CoCANoT services. "
+                "Install it in the app environment and include it in the .pkg build."
+            ) from exc
+
+        try:
+            response = requests.post(
+                self.REPORTING_ENDPOINT,
+                json=payload,
+                headers={"Accept": "application/json", "User-Agent": "CoCANoT-Desktop/1.0"},
+                timeout=(10, 55),
+                allow_redirects=True,
+            )
+            response.raise_for_status()
+        except requests.exceptions.Timeout as exc:
+            raise RuntimeError(
+                "The reporting service did not confirm the request in time. "
+                "Your report may already be in GitHub. Retry the same report "
+                "without changing its text to safely check its status."
+            ) from exc
+        except requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "unknown"
+            raise RuntimeError(
+                f"Reporting service returned HTTP {status}. Check the web-app deployment."
+            ) from exc
+        except requests.exceptions.RequestException as exc:
+            raise RuntimeError(
+                f"Reporting service connection failed ({type(exc).__name__}). "
+                "Your report may already have arrived. Retry without editing its text."
+            ) from exc
+
+        try:
+            result = response.json()
+        except ValueError as exc:
+            raise RuntimeError(
+                "The reporting service returned a non-JSON response. "
+                "Check its deployment and access permissions."
+            ) from exc
+        if not isinstance(result, dict):
+            raise RuntimeError("The reporting service returned an invalid JSON response.")
+        return result
+
+    def submit_bug_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not self.authenticated_site_id or not self._reporting_session_token:
+            return {"ok": False, "message": "Sign in again before submitting a report."}
+        summary = str((payload or {}).get("summary") or "").strip()
+        description = str((payload or {}).get("description") or "").strip()
+        steps = str((payload or {}).get("steps") or "").strip()
+        request_id = str((payload or {}).get("requestId") or "").strip()
+        if not re.fullmatch(r"[a-f0-9-]{36}", request_id, flags=re.I):
+            return {"ok": False, "message": "Invalid report request ID. Restart Help & Support and try again."}
+        if not summary or not description:
+            return {"ok": False, "message": "Enter a summary and description."}
+        if len(summary) > 160 or len(description) > 4000 or len(steps) > 3000:
+            return {"ok": False, "message": "One or more fields exceed the permitted length."}
+        try:
+            result = self._reporting_request({
+                "action": "report",
+                "requestId": request_id,
+                "sessionToken": self._reporting_session_token,
+                "summary": summary,
+                "description": description,
+                "steps": steps,
+            })
+        except RuntimeError as exc:
+            return {"ok": False, "message": str(exc)}
+        if result.get("ok") is not True:
+            return {"ok": False, "message": str(result.get("error") or "Report was not accepted.")}
+        return {
+            "ok": True,
+            "issueNumber": result.get("issueNumber"),
+            "issueUrl": result.get("issueUrl", ""),
+        }
+
+    def open_external_url(self, url: str) -> dict[str, Any]:
+        target = str(url or "").strip()
+
+        if not target:
+            return {"ok": False, "message": "No URL was provided."}
+
+        if not target.startswith(("https://github.com/", "http://github.com/")):
+            return {
+                "ok": False,
+                "message": "Only GitHub links can be opened from Help & Support.",
+            }
+
+        try:
+            opened = bool(webbrowser.open(target, new=2))
+        except Exception as exc:
+            return {"ok": False, "message": str(exc)}
+
+        return {
+            "ok": opened,
+            "message": "" if opened else "The system browser could not be opened.",
+        }
+
     def authenticate_site(
         self,
         site_id: str,
         access_code: str,
     ) -> dict[str, Any]:
         normalized = normalize_site_id(site_id)
-
         if not normalized or not str(access_code or "").strip():
-            return {
-                "ok": False,
-                "site_id": "",
-                "message": "Enter both Site ID and Access Code.",
-            }
-
-        if not validate_site_access(
-            normalized,
-            access_code,
-        ):
-            return {
-                "ok": False,
-                "site_id": "",
-                "message": "The Site ID and Access Code do not match.",
-            }
-
-        saved = self.store.set_site_id(
-            normalized
-        )
+            return {"ok": False, "site_id": "", "message": "Enter both Site ID and Access Code."}
+        self.authenticated_site_id = ""
+        self._reporting_session_token = ""
+        try:
+            result = self._reporting_request({
+                "action": "login",
+                "siteId": normalized,
+                "accessCode": str(access_code).strip(),
+            })
+        except RuntimeError as exc:
+            return {"ok": False, "site_id": "", "message": str(exc)}
+        if result.get("ok") is not True:
+            return {"ok": False, "site_id": "", "message": str(result.get("error") or "Site authentication failed.")}
+        returned_site = normalize_site_id(result.get("site_id"))
+        token = str(result.get("sessionToken") or "")
+        if returned_site != normalized or not token:
+            return {"ok": False, "site_id": "", "message": "Invalid authentication service response."}
+        saved = self.store.set_site_id(returned_site)
         self.authenticated_site_id = saved
-
-        return {
-            "ok": True,
-            "site_id": saved,
-            "message": "",
-        }
+        self._reporting_session_token = token
+        return {"ok": True, "site_id": saved, "message": ""}
 
     def sign_out(self) -> dict[str, bool]:
         self.authenticated_site_id = ""
+        self._reporting_session_token = ""
         return {"ok": True}
 
     def set_site_id(self, site_id: str) -> str:
@@ -5163,20 +5265,70 @@ class CoCANoTAPI:
             pass
 
     def imaging_bids_get_state(self) -> dict[str, Any]:
-        accepted_payload = self.imaging_get_accepted_files()
-        accepted = accepted_payload["files"]
-
-        if not accepted:
-            raise ValueError(
-                "No accepted images were found. "
-                "Accept at least one image in Step 4 Review first."
-            )
-
         _dictionary, rules, _validator = (
             self._imaging_dictionary_context()
         )
 
-        config = load_imaging_config()
+        try:
+            config = load_imaging_config()
+        except PipelineConfigError:
+            return {
+                "site_id": self.get_site_id(),
+                "records": [],
+                "rules": [
+                    self._imaging_rule_payload(rule)
+                    for rule in rules
+                    if not bool(
+                        rule.get(
+                            "system_generated",
+                            False,
+                        )
+                    )
+                ],
+                "held_count": 0,
+                "bids_output_dir": "",
+                "local_database": {
+                    "site_id": self.get_site_id(),
+                    "connected": bool(
+                        self.get_site_id()
+                    ),
+                },
+            }
+
+        accepted_payload = self.imaging_get_accepted_files()
+        accepted = accepted_payload["files"]
+
+        if not accepted:
+            return {
+                "site_id": self.get_site_id(),
+                "records": [],
+                "rules": [
+                    self._imaging_rule_payload(rule)
+                    for rule in rules
+                    if not bool(
+                        rule.get(
+                            "system_generated",
+                            False,
+                        )
+                    )
+                ],
+                "held_count": int(
+                    accepted_payload.get(
+                        "held_count",
+                        0,
+                    )
+                ),
+                "bids_output_dir": str(
+                    config.imaging.bids_output_dir
+                ),
+                "local_database": {
+                    "site_id": self.get_site_id(),
+                    "connected": bool(
+                        self.get_site_id()
+                    ),
+                },
+            }
+
         output_dir = config.imaging.bids_output_dir
         drafts = self._load_imaging_bids_drafts(
             self._imaging_stage_paths(config)["bids_drafts"]
@@ -9939,6 +10091,15 @@ class CoCANoTAPI:
         patient_id = str(
             patient_id or ""
         ).strip()
+
+        if patient_id:
+            patient_id = (
+                self._resolve_existing_patient_id(
+                    patient_id
+                )
+                or patient_id
+            )
+
         assessment_id = str(
             assessment_id or ""
         ).strip().upper()
@@ -10127,6 +10288,30 @@ class CoCANoTAPI:
         table_name = str(
             table_name or ""
         ).strip()
+
+        metadata = dict(
+            metadata or {}
+        )
+
+        incoming_patient_id = str(
+            metadata.get(
+                "CoCANoT Patient ID",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if incoming_patient_id:
+            resolved_patient_id = (
+                self._resolve_existing_patient_id(
+                    incoming_patient_id
+                )
+            )
+
+            if resolved_patient_id:
+                metadata[
+                    "CoCANoT Patient ID"
+                ] = resolved_patient_id
 
         if table_name == "Clinical":
             patient_id = str(
@@ -10447,7 +10632,184 @@ class CoCANoTAPI:
         )
 
     @staticmethod
+    def _canonical_patient_id_for_comparison(
+        value: Any,
+    ) -> str:
+        """
+        Compare numeric-only patient IDs without leading-zero differences.
+
+        Examples:
+        002 == 2
+        0007 == 7
+
+        Alphanumeric IDs are preserved apart from surrounding whitespace.
+        """
+        text = str(
+            value
+            if value is not None
+            else ""
+        ).strip()
+
+        if not text:
+            return ""
+
+        if text.isdigit():
+            return str(
+                int(text)
+            )
+
+        return text
+
+    def _resolve_existing_patient_id(
+        self,
+        patient_id: str,
+    ) -> str:
+        """
+        Resolve an uploaded patient ID to the locally stored representation.
+
+        This lets a spreadsheet value such as 2 match an existing patient
+        stored as 002, without rewriting the existing database identifier.
+        """
+        requested = str(
+            patient_id or ""
+        ).strip()
+
+        if not requested:
+            return ""
+
+        target = (
+            self._canonical_patient_id_for_comparison(
+                requested
+            )
+        )
+
+        try:
+            patient_ids = (
+                self.repository.patient_ids_for_site(
+                    self.get_site_id()
+                )
+            )
+        except Exception:
+            return requested
+
+        exact = next(
+            (
+                str(value)
+                for value in patient_ids
+                if str(value).strip()
+                == requested
+            ),
+            None,
+        )
+
+        if exact is not None:
+            return exact
+
+        equivalent = [
+            str(value)
+            for value in patient_ids
+            if (
+                self._canonical_patient_id_for_comparison(
+                    value
+                )
+                == target
+            )
+        ]
+
+        if len(equivalent) == 1:
+            return equivalent[0]
+
+        return requested
+
+    @staticmethod
+    def _comparison_value(
+        field_name: str,
+        value: Any,
+    ) -> Any:
+        """
+        Normalize values for semantic equality checks only.
+
+        This intentionally does not modify the data that is saved.
+        """
+        field_name = str(
+            field_name or ""
+        ).strip()
+
+        if field_name == "CoCANoT Patient ID":
+            return CoCANoTAPI._canonical_patient_id_for_comparison(
+                value
+            )
+
+        if value is None:
+            return ""
+
+        if isinstance(
+            value,
+            (list, tuple, set),
+        ):
+            normalized = [
+                CoCANoTAPI._comparison_value(
+                    "",
+                    item,
+                )
+                for item in value
+                if str(item).strip()
+            ]
+
+            # Multi-select order should not make two assessments different.
+            return sorted(
+                normalized,
+                key=lambda item: str(item),
+            )
+
+        if isinstance(
+            value,
+            bool,
+        ):
+            return value
+
+        if isinstance(
+            value,
+            (int, float),
+        ):
+            if (
+                isinstance(value, float)
+                and value.is_integer()
+            ):
+                return str(
+                    int(value)
+                )
+
+            return str(value)
+
+        text = " ".join(
+            str(value)
+            .replace("\u00a0", " ")
+            .split()
+        )
+
+        if not text:
+            return ""
+
+        # Excel/openpyxl may give a whole number as "14.0" while the stored
+        # metadata contains "14". Treat those as the same for comparison.
+        if re.fullmatch(
+            r"[+-]?\d+\.0+",
+            text,
+        ):
+            try:
+                return str(
+                    int(
+                        float(text)
+                    )
+                )
+            except ValueError:
+                pass
+
+        return text
+
     def _metadata_comparison_projection(
+        self,
         metadata: dict[str, Any],
         rules: list[dict[str, Any]],
     ) -> dict[str, Any]:
@@ -10489,32 +10851,12 @@ class CoCANoTAPI:
                 field_name
             )
 
-            if isinstance(
+            projection[
+                field_name
+            ] = self._comparison_value(
+                field_name,
                 value,
-                list,
-            ):
-                projection[
-                    field_name
-                ] = [
-                    str(item).strip()
-                    for item in value
-                    if str(item).strip()
-                ]
-            elif value is None:
-                projection[
-                    field_name
-                ] = ""
-            elif isinstance(
-                value,
-                str,
-            ):
-                projection[
-                    field_name
-                ] = value.strip()
-            else:
-                projection[
-                    field_name
-                ] = value
+            )
 
         return projection
 
@@ -10544,12 +10886,23 @@ class CoCANoTAPI:
             or ""
         ).strip()
 
+        resolved_patient_id = (
+            self._resolve_existing_patient_id(
+                patient_id
+            )
+        )
+
         base = {
             "existing_record_id": "",
             "has_changes": True,
             "requires_review": False,
             "immutable": False,
             "import_allowed": True,
+            "resolved_patient_id": (
+                resolved_patient_id
+                if resolved_patient_id
+                else patient_id
+            ),
         }
 
         if not patient_id:
@@ -10581,7 +10934,7 @@ class CoCANoTAPI:
             assessments = (
                 self.repository.clinical_assessments(
                     self.get_site_id(),
-                    patient_id,
+                    resolved_patient_id,
                 )
             )
 
@@ -10642,6 +10995,8 @@ class CoCANoTAPI:
                         "",
                     )
                     for key in tracked
+                    if key
+                    != "CoCANoT Patient ID"
                 }
 
             if uploaded_assessment_id:
@@ -10723,8 +11078,26 @@ class CoCANoTAPI:
                 (
                     pair
                     for pair in projections
-                    if pair[1]
-                    == incoming_projection
+                    if {
+                        **pair[1],
+                        "CoCANoT Patient ID":
+                            self._canonical_patient_id_for_comparison(
+                                pair[1].get(
+                                    "CoCANoT Patient ID",
+                                    "",
+                                )
+                            ),
+                    }
+                    == {
+                        **incoming_projection,
+                        "CoCANoT Patient ID":
+                            self._canonical_patient_id_for_comparison(
+                                incoming_projection.get(
+                                    "CoCANoT Patient ID",
+                                    "",
+                                )
+                            ),
+                    }
                 ),
                 None,
             )
@@ -10860,7 +11233,7 @@ class CoCANoTAPI:
                 self.get_site_id(),
                 "Surgical",
                 record_id,
-                patient_id=patient_id,
+                patient_id=resolved_patient_id,
             )
 
             if existing is None:
@@ -10916,6 +11289,51 @@ class CoCANoTAPI:
             "proposed_action": "Create record",
         }
 
+    @staticmethod
+    def _batch_validation_problems(
+        validation: dict[str, Any],
+        rules: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Return only user-actionable batch validation problems."""
+        system_generated_fields = {
+            str(rule.get("field_name", "") or "").strip()
+            for rule in rules
+            if bool(rule.get("system_generated", False))
+        }
+
+        problems: list[dict[str, Any]] = []
+
+        for result in validation.get("results", []):
+            status = str(result.get("status", "") or "").strip()
+
+            if status not in {
+                "invalid",
+                "missing_required",
+            }:
+                continue
+
+            field_name = str(
+                result.get("field_name", "") or ""
+            ).strip()
+
+            if (
+                status == "missing_required"
+                and field_name in system_generated_fields
+            ):
+                continue
+
+            problems.append(
+                {
+                    "field_name": field_name,
+                    "status": status,
+                    "message": str(
+                        result.get("message", "") or ""
+                    ),
+                }
+            )
+
+        return problems
+
     def metadata_batch_choose_file(
         self,
         table_name: str,
@@ -10964,22 +11382,34 @@ class CoCANoTAPI:
                 dict(row),
                 rules,
             )
+
+            uploaded_patient_id = str(
+                clean.get(
+                    "CoCANoT Patient ID",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            resolved_patient_id = (
+                self._resolve_existing_patient_id(
+                    uploaded_patient_id
+                )
+            )
+
+            if resolved_patient_id:
+                clean[
+                    "CoCANoT Patient ID"
+                ] = resolved_patient_id
+
             validation = validator.validate_record(
                 table_name,
                 clean,
             )
-            problems = [
-                {
-                    "field_name": result["field_name"],
-                    "status": result["status"],
-                    "message": result["message"],
-                }
-                for result in validation["results"]
-                if result["status"] in {
-                    "invalid",
-                    "missing_required",
-                }
-            ]
+            problems = self._batch_validation_problems(
+                validation,
+                rules,
+            )
 
             problems.extend(
                 {
@@ -11010,6 +11440,7 @@ class CoCANoTAPI:
             preview.append(
                 {
                     "row_number": row_number,
+                    "uploaded_patient_id": uploaded_patient_id,
                     "include": (
                         not problems
                         and bool(
@@ -11095,22 +11526,43 @@ class CoCANoTAPI:
                 dict(item.get("metadata", {}) or {}),
                 rules,
             )
+
+            uploaded_patient_id = str(
+                item.get(
+                    "uploaded_patient_id",
+                    clean.get(
+                        "CoCANoT Patient ID",
+                        "",
+                    ),
+                )
+                or ""
+            ).strip()
+
+            resolved_patient_id = (
+                self._resolve_existing_patient_id(
+                    str(
+                        clean.get(
+                            "CoCANoT Patient ID",
+                            "",
+                        )
+                        or ""
+                    ).strip()
+                )
+            )
+
+            if resolved_patient_id:
+                clean[
+                    "CoCANoT Patient ID"
+                ] = resolved_patient_id
+
             validation = validator.validate_record(
                 table_name,
                 clean,
             )
-            problems = [
-                {
-                    "field_name": result["field_name"],
-                    "status": result["status"],
-                    "message": result["message"],
-                }
-                for result in validation["results"]
-                if result["status"] in {
-                    "invalid",
-                    "missing_required",
-                }
-            ]
+            problems = self._batch_validation_problems(
+                validation,
+                rules,
+            )
 
             problems.extend(
                 {
@@ -11141,6 +11593,7 @@ class CoCANoTAPI:
             validated.append(
                 {
                     **dict(item),
+                    "uploaded_patient_id": uploaded_patient_id,
                     "patient_id": str(
                         clean.get("CoCANoT Patient ID", "") or ""
                     ).strip(),
@@ -12842,7 +13295,7 @@ def main() -> None:
     api.window = window
 
     try:
-        webview.start(debug=True)
+        webview.start(debug=False)
     finally:
         server.shutdown()
         server.server_close()

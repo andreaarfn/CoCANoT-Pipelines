@@ -1,8 +1,8 @@
 name: CoCANoT-Pipelines
-version: "0.1.0"
+version: "0.2.0"
 
 installer_type: pkg
-installer_filename: CoCANoT-Mac-0.1-Test.pkg
+installer_filename: CoCANoT-Pipelines-0.2.0-macOS-arm64.pkg
 
 environment_file: ../../environment/environment-macos.yaml
 
