@@ -1,236 +1,156 @@
 # CoCANoT Pipelines
 
-CoCANoT Pipelines is a cross-platform software suite for standardized neuroimaging and electrophysiology data processing.
+CoCANoT Pipelines is a desktop application for deidentifying, standardizing, validating, and managing clinical research data collected by participating CoCANoT centers.
 
-The project currently contains two independent pipelines:
+The application provides a unified interface for processing neuroimaging and electrophysiology data, managing clinical and surgical metadata, and reviewing patient records according to the CoCANoT metadata dictionary.
 
-- **Imaging Pipeline**
-  - DICOM → NIfTI conversion
-  - NIfTI de-identification
-  - MRI defacing
-  - BIDS conversion
+## Application Overview
 
-- **Electrophysiology Pipeline**
-  - EDF metadata de-identification
-  - Quality-control comparison
-  - BIDS conversion
+The desktop application uses React for its interface, Python for data processing, and PyWebView to connect the frontend with the processing pipelines.
 
-Both pipelines share a common configuration system and are packaged for simple installation on supported operating systems.
+The application includes five primary components.
 
----
+| Component | Function |
+|---|---|
+| Imaging | DICOM conversion, NIfTI header deidentification, MRI defacing, quality control, metadata validation, and BIDS export |
+| Electrophysiology | EDF metadata deidentification, quality control, metadata validation, and BIDS export |
+| Metadata Management | Creation, editing, validation, and management of clinical, surgical, imaging, and electrophysiology metadata |
+| Patient Data Review | Review of patient records, associated metadata, and linked data files |
+| Help & Support | Direct submission of bug reports to the development team's private GitHub repository |
 
-# Repository Structure
+The application also includes a Needs Attention dashboard for identifying records that require further review.
 
-```
+## Repository Structure
+
+```text
 CoCANoT-Pipelines/
-
-├── pipeline_config.py
-├── pipeline_settings.json
-│
+├── react_dashboard.py
+├── react_frontend/
+│   ├── src/
+│   └── dist/
 ├── ImagingPipeline/
-│   ├── dashboard.py
 │   └── scripts/
-│
 ├── ElectrophysiologyPipeline/
-│   ├── dashboard.py
 │   └── scripts/
-│
+├── MetadataPipeline/
+│   ├── dictionaries/
+│   ├── forms/
+│   ├── storage/
+│   └── validation/
+├── app/
+│   └── site_access.py
+├── config/
 └── packaging/
+    └── constructor/
+        └── macos/
 ```
 
----
+## Data Processing
 
-# Project Components
+### Imaging
 
-## Shared Configuration
+The imaging workflow supports DICOM and NIfTI inputs and includes:
 
-### `pipeline_config.py`
+1. DICOM to NIfTI conversion
+2. NIfTI header deidentification
+3. MRI defacing using PyDeface
+4. Quality control and review of processed images
+5. CoCANoT metadata completion, validation, and BIDS conversion
 
-Loads and validates the shared pipeline configuration used by both pipelines.
+### Electrophysiology
 
-### `pipeline_settings.json`
+The electrophysiology workflow currently processes EDF recordings and includes:
 
-Stores user-specific settings, including selected input and output directories.
+1. Selection and preparation of recordings
+2. EDF metadata deidentification
+3. Quality control through comparison of original and processed recordings
+4. Review of accepted recordings
+5. CoCANoT metadata completion, validation, and BIDS conversion
 
----
+### Metadata Management
 
-## ImagingPipeline
+Clinical, surgical, imaging, and electrophysiology metadata are managed according to the CoCANoT metadata dictionary.
 
-Contains the MRI processing pipeline.
+The application supports individual record entry, bulk metadata uploads, field validation, and management of existing patient records. Related assessments and processed files are linked through CoCANoT identifiers.
 
-### `dashboard.py`
+Metadata and record associations are maintained in the application's local storage system.
 
-Graphical interface for configuring and running the imaging workflow.
+## Site Authentication
 
-### `scripts/`
+Participating centers access the application using their assigned Site ID and Access Code.
 
-| File | Purpose |
-|------|---------|
-| `dicom_to_nifti.py` | Converts DICOM images to NIfTI format using dcm2niix. |
-| `scrub_nifti_header.py` | Removes identifying metadata from NIfTI headers. |
-| `deface_nifti_with_pydeface.py` | Removes facial features from MRI volumes using PyDeface and FSL. |
-| `nifti_to_bids.py` | Organizes processed imaging data into BIDS format. |
+Credentials are verified through a centralized Google Apps Script authentication service. A successful login establishes a temporary authenticated session.
 
----
+Each center's records are associated with its Site ID.
 
-## ElectrophysiologyPipeline
+## Bug Reporting
 
-Contains the EEG processing pipeline.
+The Help & Support section allows users to submit bug reports directly from the desktop application.
 
-### `dashboard.py`
+Reports include the reporting Site ID, a short summary, a description of the problem, and steps to reproduce it.
 
-Graphical interface for configuring and running the electrophysiology workflow.
+Submissions are processed through Google Apps Script and automatically created as GitHub Issues in the private CoCANoT repository. Users do not need a GitHub account or access to the repository.
 
-### `scripts/`
+The application confirms successful submission and uses request identifiers to prevent duplicate issues when a report is retried.
 
-| File | Purpose |
-|------|---------|
-| `scrub_edf_metadata.py` | Removes identifying metadata from EDF files. |
-| `compare_raw_and_scrubbed_edf.py` | Compares original and scrubbed EDF files for quality control. |
-| `convert_edf_to_bids.py` | Converts EDF recordings into BIDS format. |
+**Bug reports must not contain patient identifiers, protected health information, or other sensitive data.**
 
----
-
-## packaging
-
-Contains everything required to build platform-specific installers.
-
-```
-packaging/
-
-├── environment-macos.yaml
-├── environment-linux.yaml
-├── environment-windows.yaml
-│
-├── constructor/
-│   ├── macos/
-│   ├── linux/
-│   └── windows/
-│
-└── scripts/
-```
-
-### Environment files
-
-Define the software dependencies installed for each operating system.
-
-### Constructor
-
-Contains platform-specific installer configuration files.
-
-### Packaging scripts
-
-Contains post-install scripts executed after installation.
-
----
-
-# Installation
-
-## macOS
-
-Download the latest macOS installer:
-
-```
-CoCANoT-Pipelines-<version>-MacOSX.pkg
-```
-
-Double-click the installer and follow the installation instructions.
-
-No separate installation of Python, Conda, Homebrew, dcm2niix, or FSL is required.
-
----
-
-## Linux
-
-Download the latest Linux installer:
-
-```
-CoCANoT-Pipelines-<version>-Linux.sh
-```
-
-Run
-
-```bash
-chmod +x CoCANoT-Pipelines-<version>-Linux.sh
-
-./CoCANoT-Pipelines-<version>-Linux.sh
-```
-
----
-
-## Windows
-
-Download the latest Windows installer:
-
-```
-CoCANoT-Pipelines-<version>-Windows.exe
-```
-
-Run the installer and follow the installation instructions.
-
-The Imaging Pipeline uses Windows Subsystem for Linux (WSL) for FSL-based processing.
-
----
-
-# Development
-
-## Repository
-
-Clone the repository
-
-```bash
-git clone https://github.com/andreaarfn/CoCANoT-Pipelines.git
-```
-
----
-
-## Building installers
+## Installation
 
 ### macOS
 
+Download the latest available macOS installer from the repository's [Releases](https://github.com/andreaarfn/CoCANoT-Pipelines/releases) section.
+
+Open the `.pkg` file and follow the installation instructions.
+
+Once installed, launch CoCANoT and sign in using your assigned Site ID and Access Code.
+
+The application requires an internet connection for authentication and bug report submission. Data processing workflows operate locally.
+
+### Other Operating Systems
+
+The repository includes pipeline components and packaging configurations for Linux and Windows. The current unified React desktop application is being developed and tested for macOS.
+
+## Development
+
+### Frontend
+
+The user interface is developed with React and JavaScript.
+
+To build the frontend:
+
 ```bash
-constructor packaging/constructor/macos
+cd react_frontend
+npm install
+npm run build
 ```
 
-### Linux
+### Python Application
+
+The desktop application is launched through `react_dashboard.py`, which uses PyWebView to expose Python processing functions to the React interface.
 
 ```bash
-constructor packaging/constructor/linux
+python react_dashboard.py
 ```
 
-### Windows
+Python dependencies and required processing tools must be available in the development environment.
 
-```bash
-constructor packaging\constructor\windows
-```
+### Packaging
 
----
+macOS installer configuration is maintained in `packaging/constructor/macos`.
 
-# Software Dependencies
+Installer builds use Constructor to package the application and its required runtime dependencies.
 
-## Shared
+## Data Privacy
 
-- Python
-- Tk
+CoCANoT processing workflows are designed to remove identifying information from imaging and electrophysiology data before standardized export.
 
-## Imaging
+Processed data and metadata must be reviewed and validated before sharing. Automated deidentification does not replace site responsibility for confirming that outputs contain no identifying information.
 
-- dcm2niix
-- NumPy
-- NiBabel
-- Matplotlib
-- PyDeface
-- FSL / FLIRT
+Authentication and bug reporting communicate with the external reporting service. Patient data should not be included in these requests.
 
-## Electrophysiology
+## Project Status
 
-- PyEDFlib
-- Flask
+CoCANoT Pipelines is under active development and testing as part of the CoCANoT consortium.
 
-All required dependencies are bundled with the platform installers.
-
----
-
-# License
-
-This project is under active development with the Epilepsy Institute for Care and Cure
+The project is developed in collaboration with the Epilepsy Institute for Care and Cure.
