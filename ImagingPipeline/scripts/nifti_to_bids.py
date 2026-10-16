@@ -1295,6 +1295,8 @@ def copy_record(
 
 
     sidecar = dict(scrubbed_header)
+    # Keep the full validated CoCANoT dictionary together with this image sidecar.
+    sidecar["CoCANoTMetadata"] = dict(metadata)
 
     sidecar["Defaced"] = True
 
