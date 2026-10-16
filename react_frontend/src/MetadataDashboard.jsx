@@ -644,27 +644,12 @@ export default function MetadataDashboard({
 
 
 
-    await api()?.metadata_create_patient?.(
-
-
-
+    const createdPatient = await api()?.metadata_create_patient?.(
       siteId,
-
-
-
       clean
-
-
-
     );
-
-
-
     await loadPatients();
-
-
-
-    await loadPatient(clean);
+    await loadPatient(createdPatient?.patient_id ?? clean);
 
 
 
