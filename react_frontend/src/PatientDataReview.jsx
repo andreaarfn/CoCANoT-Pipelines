@@ -886,6 +886,8 @@ function ImagingPatientReview({
 
 
   const [preview, setPreview] = useState(null);
+  const [showDirectionLabels, setShowDirectionLabels] = useState(true);
+  const [showLinkedJson, setShowLinkedJson] = useState(false);
 
 
 
@@ -1509,6 +1511,10 @@ function ImagingPatientReview({
 
 
 
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, margin: "12px 0" }}>
+            <input type="checkbox" checked={showDirectionLabels} onChange={event => setShowDirectionLabels(event.target.checked)} />
+            Show anatomical direction annotations
+          </label>
           <div className={styles.imageGrid}>
 
 
@@ -1522,6 +1528,9 @@ function ImagingPatientReview({
 
 
               src={preview.views.axial}
+              showDirectionLabels={showDirectionLabels}
+              automaticLabels={preview.orientation_labels?.axial}
+              annotations={preview.direction_annotations?.defaced_axial ?? preview.direction_annotations?.raw_axial}
 
 
 
@@ -1538,6 +1547,9 @@ function ImagingPatientReview({
 
 
               src={preview.views.coronal}
+              showDirectionLabels={showDirectionLabels}
+              automaticLabels={preview.orientation_labels?.coronal}
+              annotations={preview.direction_annotations?.defaced_coronal ?? preview.direction_annotations?.raw_coronal}
 
 
 
@@ -1554,6 +1566,9 @@ function ImagingPatientReview({
 
 
               src={preview.views.sagittal}
+              showDirectionLabels={showDirectionLabels}
+              automaticLabels={preview.orientation_labels?.sagittal}
+              annotations={preview.direction_annotations?.defaced_sagittal ?? preview.direction_annotations?.raw_sagittal}
 
 
 
@@ -1749,49 +1764,35 @@ function ImagingPatientReview({
 
 
 
-function ImagePanel({ label, src }) {
-
-
-
+function ImagePanel({ label, src, showDirectionLabels, automaticLabels, annotations }) {
+  const overlay = annotations?.manualLabels ?? automaticLabels ?? {};
+  const rotation = annotations?.rotation ?? 0;
+  const displayed = { ...overlay };
+  for (let turn = 0; turn < rotation / 90; turn += 1) {
+    const old = { ...displayed };
+    displayed.top = old.left;
+    displayed.right = old.top;
+    displayed.bottom = old.right;
+    displayed.left = old.bottom;
+  }
+  const positions = {
+    top: { top: 6, left: "50%", transform: "translateX(-50%)" },
+    bottom: { bottom: 6, left: "50%", transform: "translateX(-50%)" },
+    left: { left: 6, top: "50%", transform: "translateY(-50%)" },
+    right: { right: 6, top: "50%", transform: "translateY(-50%)" },
+  };
   return (
-
-
-
     <div className={styles.imagePanel}>
-
-
-
       <span>{label}</span>
-
-
-
-      <div>
-
-
-
-        <img src={src} alt={`${label} NIfTI slice`} />
-
-
-
+      <div style={{ position: "relative", overflow: "hidden" }}>
+        <img src={src} alt={`${label} NIfTI slice`} style={{ transform: `rotate(${rotation}deg)`, objectFit: "contain", maxWidth: "100%" }} />
+        {showDirectionLabels && Object.entries(positions).map(([edge, position]) =>
+          displayed[edge] ? <span key={edge} style={{ position: "absolute", ...position, padding: "2px 5px", borderRadius: 4, background: "rgba(0,0,0,0.8)", color: "white", fontWeight: 700, pointerEvents: "none" }}>{displayed[edge]}</span> : null
+        )}
       </div>
-
-
-
     </div>
-
-
-
   );
-
-
-
 }
-
-
-
-
-
-
 
 function ReviewSlider({
 
