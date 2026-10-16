@@ -9647,113 +9647,12 @@ class CoCANoTAPI:
                 if matches_export(candidate):
                     return candidate.resolve()
 
-        # Legacy records may not have a BIDS export. Preserve the existing
-        # fallback, but the UI must identify those as pre-export sources.
-        for candidate in (
-            self._metadata_record_file_candidates(
-                record,
-                kind="imaging",
-            )
-        ):
-            if candidate.is_file() and _is_nifti(
-                candidate
-            ):
-                return candidate
-
-        metadata = dict(
-            record.get(
-                "metadata",
-                {},
-            )
-            or {}
-        )
-        patient_id = str(
-            metadata.get(
-                "CoCANoT Patient ID",
-                "",
-            )
-            or ""
-        ).strip()
-        image_id = str(
-            metadata.get(
-                "Image ID",
-                "",
-            )
-            or ""
-        ).strip()
-
-        config = load_imaging_config()
-        output_dir = (
-            config.imaging.bids_output_dir
-        )
-
-        if (
-            output_dir.exists()
-            and patient_id
-            and image_id
-        ):
-            for sidecar in output_dir.rglob(
-                "*.json"
-            ):
-                try:
-                    payload = json.loads(
-                        sidecar.read_text(
-                            encoding="utf-8"
-                        )
-                    )
-                except (
-                    OSError,
-                    json.JSONDecodeError,
-                ):
-                    continue
-
-                if not isinstance(
-                    payload,
-                    dict,
-                ):
-                    continue
-
-                if (
-                    str(
-                        payload.get(
-                            "CoCANoTPatientID",
-                            "",
-                        )
-                        or ""
-                    )
-                    != patient_id
-                    or str(
-                        payload.get(
-                            "ImageID",
-                            "",
-                        )
-                        or ""
-                    )
-                    != image_id
-                ):
-                    continue
-
-                stem = sidecar.name[
-                    :-5
-                ]
-                possibilities = (
-                    sidecar.with_name(
-                        stem
-                        + ".nii.gz"
-                    ),
-                    sidecar.with_name(
-                        stem
-                        + ".nii"
-                    ),
-                )
-
-                for candidate in possibilities:
-                    if candidate.is_file():
-                        return candidate.resolve()
-
         raise FileNotFoundError(
-            "The NIfTI file linked to this Imaging record "
-            "could not be found on this computer."
+            "No matching Step 5 BIDS image and JSON export was found for "
+            f"CoCANoT Patient ID {expected_patient or '(missing)'} and "
+            f"Image ID {expected_image or '(missing)'}. "
+            "Complete or repeat Step 5 BIDS export, then reopen Review Linked Image. "
+            "The original Step 3 image is deliberately not substituted here."
         )
 
     def metadata_get_imaging_preview(
