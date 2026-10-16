@@ -807,14 +807,36 @@ class CoCANoTAPI:
             return {"ok": False, "site_id": "", "message": "Enter both Site ID and Access Code."}
         self.authenticated_site_id = ""
         self._reporting_session_token = ""
+        # The authentication endpoint is a Google Apps Script web app.
+        # Use urllib's POST/redirect handling, matching the verified desktop
+        # diagnostic and avoiding HTTP-client-specific HTML redirect pages.
+        payload = json.dumps({
+            "action": "login",
+            "siteId": normalized,
+            "accessCode": str(access_code).strip(),
+        }).encode("utf-8")
+        login_request = urllib_request.Request(
+            self.REPORTING_ENDPOINT,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "CoCANoT-Desktop/1.0",
+            },
+            method="POST",
+        )
         try:
-            result = self._reporting_request({
-                "action": "login",
-                "siteId": normalized,
-                "accessCode": str(access_code).strip(),
-            })
-        except RuntimeError as exc:
-            return {"ok": False, "site_id": "", "message": str(exc)}
+            with urllib_request.urlopen(login_request, timeout=25) as response:
+                response_body = response.read()
+            result = json.loads(response_body)
+        except HTTPError as exc:
+            return {"ok": False, "site_id": "", "message": f"Authentication service returned HTTP {exc.code}."}
+        except (URLError, TimeoutError, OSError) as exc:
+            return {"ok": False, "site_id": "", "message": f"Authentication connection failed ({type(exc).__name__})."}
+        except (ValueError, UnicodeDecodeError):
+            return {"ok": False, "site_id": "", "message": "Authentication service returned non-JSON data. Check the desktop HTTP connection."}
+        if not isinstance(result, dict):
+            return {"ok": False, "site_id": "", "message": "Invalid authentication service response."}
         if result.get("ok") is not True:
             return {"ok": False, "site_id": "", "message": str(result.get("error") or "Site authentication failed.")}
         returned_site = normalize_site_id(result.get("site_id"))
