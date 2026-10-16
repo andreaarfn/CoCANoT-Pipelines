@@ -2362,6 +2362,12 @@ function ImagingReview({
         coords.volume ?? null
       );
       setReview(data);
+      if (data?.direction_annotations) {
+        setImageReviewEdits(current => ({
+          ...current,
+          ...Object.fromEntries(Object.entries(data.direction_annotations).map(([panel, edits]) => [`${id}:${panel}`, edits])),
+        }));
+      }
       reviewCoordsRef.current = {
         x: Number(data?.x ?? 0),
         y: Number(data?.y ?? 0),
@@ -2375,6 +2381,23 @@ function ImagingReview({
       alert(String(error));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveDirectionAnnotation(panel, patch) {
+    const id = `${selectedId}:${panel}`;
+    const merged = { ...(imageReviewEdits[id] ?? {}), ...patch };
+    setImageReviewEdits(current => ({ ...current, [id]: merged }));
+    const bridge = api();
+    if (bridge?.imaging_review_save_direction_annotations) {
+      try {
+        await bridge.imaging_review_save_direction_annotations(selectedId, panel, {
+          manualLabels: merged.manualLabels ?? null,
+          rotation: merged.rotation ?? 0,
+        });
+      } catch (error) {
+        alert(`Unable to save direction annotations: ${String(error)}`);
+      }
     }
   }
 
@@ -2578,12 +2601,12 @@ function ImagingReview({
                   </p>
                 )}
                 <div className={styles.imageGrid}>
-                  <ImageView key={`${selectedId}-raw-axial`} label="Raw Axial" sourcePlane="Axial" is4D={Boolean(review.is_4d)} src={review.views.raw_axial} automaticLabels={review.orientation_labels?.raw_axial} edits={imageReviewEdits[`${selectedId}:raw_axial`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:raw_axial`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
-                  <ImageView key={`${selectedId}-raw-coronal`} label="Raw Coronal" sourcePlane="Coronal" is4D={Boolean(review.is_4d)} src={review.views.raw_coronal} automaticLabels={review.orientation_labels?.raw_coronal} edits={imageReviewEdits[`${selectedId}:raw_coronal`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:raw_coronal`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
-                  <ImageView key={`${selectedId}-raw-sagittal`} label="Raw Sagittal" sourcePlane="Sagittal" is4D={Boolean(review.is_4d)} src={review.views.raw_sagittal} automaticLabels={review.orientation_labels?.raw_sagittal} edits={imageReviewEdits[`${selectedId}:raw_sagittal`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:raw_sagittal`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
-                  <ImageView key={`${selectedId}-defaced-axial`} label="Defaced Axial" sourcePlane="Axial" is4D={Boolean(review.is_4d)} src={review.views.defaced_axial} automaticLabels={review.orientation_labels?.defaced_axial} edits={imageReviewEdits[`${selectedId}:defaced_axial`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:defaced_axial`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
-                  <ImageView key={`${selectedId}-defaced-coronal`} label="Defaced Coronal" sourcePlane="Coronal" is4D={Boolean(review.is_4d)} src={review.views.defaced_coronal} automaticLabels={review.orientation_labels?.defaced_coronal} edits={imageReviewEdits[`${selectedId}:defaced_coronal`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:defaced_coronal`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
-                  <ImageView key={`${selectedId}-defaced-sagittal`} label="Defaced Sagittal" sourcePlane="Sagittal" is4D={Boolean(review.is_4d)} src={review.views.defaced_sagittal} automaticLabels={review.orientation_labels?.defaced_sagittal} edits={imageReviewEdits[`${selectedId}:defaced_sagittal`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:defaced_sagittal`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
+                  <ImageView key={`${selectedId}-raw-axial`} label="Raw Axial" sourcePlane="Axial" is4D={Boolean(review.is_4d)} src={review.views.raw_axial} automaticLabels={review.orientation_labels?.raw_axial} edits={imageReviewEdits[`${selectedId}:raw_axial`] ?? {}} onEdit={patch => saveDirectionAnnotation("raw_axial", patch)} />
+                  <ImageView key={`${selectedId}-raw-coronal`} label="Raw Coronal" sourcePlane="Coronal" is4D={Boolean(review.is_4d)} src={review.views.raw_coronal} automaticLabels={review.orientation_labels?.raw_coronal} edits={imageReviewEdits[`${selectedId}:raw_coronal`] ?? {}} onEdit={patch => saveDirectionAnnotation("raw_coronal", patch)} />
+                  <ImageView key={`${selectedId}-raw-sagittal`} label="Raw Sagittal" sourcePlane="Sagittal" is4D={Boolean(review.is_4d)} src={review.views.raw_sagittal} automaticLabels={review.orientation_labels?.raw_sagittal} edits={imageReviewEdits[`${selectedId}:raw_sagittal`] ?? {}} onEdit={patch => saveDirectionAnnotation("raw_sagittal", patch)} />
+                  <ImageView key={`${selectedId}-defaced-axial`} label="Defaced Axial" sourcePlane="Axial" is4D={Boolean(review.is_4d)} src={review.views.defaced_axial} automaticLabels={review.orientation_labels?.defaced_axial} edits={imageReviewEdits[`${selectedId}:defaced_axial`] ?? {}} onEdit={patch => saveDirectionAnnotation("defaced_axial", patch)} />
+                  <ImageView key={`${selectedId}-defaced-coronal`} label="Defaced Coronal" sourcePlane="Coronal" is4D={Boolean(review.is_4d)} src={review.views.defaced_coronal} automaticLabels={review.orientation_labels?.defaced_coronal} edits={imageReviewEdits[`${selectedId}:defaced_coronal`] ?? {}} onEdit={patch => saveDirectionAnnotation("defaced_coronal", patch)} />
+                  <ImageView key={`${selectedId}-defaced-sagittal`} label="Defaced Sagittal" sourcePlane="Sagittal" is4D={Boolean(review.is_4d)} src={review.views.defaced_sagittal} automaticLabels={review.orientation_labels?.defaced_sagittal} edits={imageReviewEdits[`${selectedId}:defaced_sagittal`] ?? {}} onEdit={patch => saveDirectionAnnotation("defaced_sagittal", patch)} />
                 </div>
 
                 <Slider label="Sagittal X" value={review.x} max={review.limits.x_max} onChange={value => move("x", value)} />
