@@ -10454,6 +10454,26 @@ class CoCANoTAPI:
                 )
             )
 
+        # Do not silently merge or duplicate records whose older IDs
+        # would collide with the new canonical format. Migrate them explicitly.
+        identifier_field = {
+            "Surgical": "Surgery ID",
+            "Imaging": "Image ID",
+            "Electrophysiology": "Recording ID",
+        }[table_name]
+        canonical_record_id = str(clean.get(identifier_field, "")).strip()
+        for existing in self.repository.records_for_patient(
+            self.get_site_id(), clean.get("CoCANoT Patient ID", ""), table_name
+        ):
+            legacy_id = str(existing.get("record_id", "")).strip()
+            if (legacy_id != canonical_record_id
+                    and normalize_record_id(table_name, legacy_id) == canonical_record_id):
+                raise ValueError(
+                    f"Existing {table_name} record {legacy_id} conflicts with "
+                    f"{canonical_record_id}. Review and migrate legacy record IDs "
+                    "before importing this record to avoid losing associations."
+                )
+
         return self.repository.save_record(
             self.get_site_id(),
             table_name,
