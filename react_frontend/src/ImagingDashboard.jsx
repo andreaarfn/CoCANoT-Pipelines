@@ -2324,7 +2324,6 @@ function ImagingReview({
   const [editField, setEditField] = useState("");
   const [editValue, setEditValue] = useState("");
   const [rejectOpen, setRejectOpen] = useState(false);
-  const [orientationNotes, setOrientationNotes] = useState("");
   const reviewRequestRef = useRef(0);
   const reviewCoordsRef = useRef({ x: 0, y: 0, z: 0, volume: 0 });
 
@@ -2363,7 +2362,6 @@ function ImagingReview({
         coords.volume ?? null
       );
       setReview(data);
-      setOrientationNotes(data?.orientation_verification?.notes ?? "");
       reviewCoordsRef.current = {
         x: Number(data?.x ?? 0),
         y: Number(data?.y ?? 0),
@@ -2416,22 +2414,6 @@ function ImagingReview({
       if (requestId === reviewRequestRef.current) {
         alert(String(error));
       }
-    }
-  }
-
-  async function saveOrientationVerification(decision) {
-    const bridge = api();
-    if (!bridge?.imaging_review_save_orientation_verification) {
-      alert("Orientation verification is unavailable. Restart the Python desktop application.");
-      return;
-    }
-    try {
-      const result = await bridge.imaging_review_save_orientation_verification(selectedId, decision, orientationNotes);
-      setReview(result);
-      await loadItem(selectedId, reviewCoordsRef.current);
-      await onStateRefresh?.();
-    } catch (error) {
-      alert(String(error));
     }
   }
 
@@ -2611,41 +2593,11 @@ function ImagingReview({
                 </p>
               </section>
 
-              <section className={styles.card}>
-                <h3>Anatomical orientation verification</h3>
-                <p className={styles.helpText}>
-                  Inspect several slices in each plane and compare against the source NIfTI in a trusted viewer when uncertain.
-                  Confirm that axial shows a transverse section, coronal a frontal section, and sagittal a side profile.
-                  Check left/right and superior/inferior markers, including for oblique or 4D datasets.
-                  Preview rotation and manually edited labels do not correct source orientation.
-                </p>
-                <p className={styles.helpText}>
-                  Current decision: <strong>{review.orientation_verification?.decision === "verified" ? "Verified" : review.orientation_verification?.decision === "needs_attention" ? "Needs attention" : "Not reviewed"}</strong>
-                </p>
-                <label style={{ display: "block", marginBottom: 10 }}>
-                  Review notes (optional)
-                  <textarea
-                    style={{ display: "block", width: "100%", minHeight: 64, marginTop: 6 }}
-                    value={orientationNotes}
-                    onChange={event => setOrientationNotes(event.target.value)}
-                    placeholder="Record any uncertainty or comparison with a trusted viewer."
-                    maxLength={2000}
-                  />
-                </label>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  <button type="button" className={styles.primaryButton} onClick={() => saveOrientationVerification("verified")}>Confirm orientation is correct</button>
-                  <button type="button" className={styles.secondaryButton} onClick={() => saveOrientationVerification("needs_attention")}>Flag orientation mismatch</button>
-                  <button type="button" className={styles.secondaryButton} onClick={() => saveOrientationVerification("unreviewed")}>Clear verification</button>
-                </div>
-                {review.orientation_verification?.decision !== "verified" && (
-                  <p className={styles.orientationWarning}>Orientation must be verified before this image can be accepted.</p>
-                )}
-              </section>
               <div className={styles.reviewFooter}>
                 <span>{review.key} | Review status: {review.status}</span>
                 <div>
                   <button className={styles.secondaryButton} onClick={() => setRejectOpen(true)}>Reject</button>
-                  <button className={styles.primaryButton} disabled={review.orientation_verification?.decision !== "verified"} title="Verify orientation before accepting" onClick={() => setStatus("Accepted")}>Accept</button>
+                  <button className={styles.primaryButton} onClick={() => setStatus("Accepted")}>Accept</button>
                   <button
                     className={styles.primaryButton}
                     disabled={stageState !== "complete"}
