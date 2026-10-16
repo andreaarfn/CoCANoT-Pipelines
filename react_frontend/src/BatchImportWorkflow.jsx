@@ -417,7 +417,7 @@ export default function BatchImportWorkflow({
 
         row?.import_allowed !== false &&
 
-        row?.difference_status !== "Unchanged",
+        row?.difference_status !== "Duplicate",
 
     }));
 
@@ -1818,7 +1818,7 @@ export default function BatchImportWorkflow({
         if (index !== rowIndex) return row;
 
         const unchanged =
-          row?.difference_status === "Unchanged";
+          row?.difference_status === "Duplicate";
 
         return {
           ...row,
@@ -1855,7 +1855,7 @@ export default function BatchImportWorkflow({
         }
 
         if (
-          row?.difference_status === "Unchanged"
+          row?.difference_status === "Duplicate"
         ) {
           return true;
         }
@@ -1873,7 +1873,7 @@ export default function BatchImportWorkflow({
       updated: 0,
       skipped_unchanged: rows.filter(
         row =>
-          row?.difference_status === "Unchanged" ||
+          row?.difference_status === "Duplicate" ||
           row?.clinical_resolution === "existing"
       ).length,
       failed: 0,
@@ -2768,7 +2768,7 @@ export default function BatchImportWorkflow({
 
             Created {result.created ?? 0}, updated{" "}
 
-            {result.updated ?? 0}, skipped unchanged{" "}
+            {result.updated ?? 0}, skipped duplicate{" "}
 
             {result.skipped_unchanged ?? 0}, failed{" "}
 
@@ -3331,13 +3331,13 @@ function BatchSummary({
 
             row =>
 
-              row.difference_status === "Unchanged"
+              row.difference_status === "Duplicate"
 
           ).length}
 
         </strong>
 
-        <span>Unchanged</span>
+        <span>Duplicate</span>
 
       </div>
 
@@ -3452,7 +3452,7 @@ function BatchTable({
 
                   className={
 
-                    row.difference_status === "Unchanged"
+                    row.difference_status === "Duplicate"
 
                       ? styles.unchangedBadge
 
@@ -3687,7 +3687,7 @@ function BatchTable({
                 ) : tableName === "Clinical" ? (
                   <div className={styles.clinicalCompareStatus}>
                     {row.existing_record_id ? (
-                      row.difference_status === "Unchanged" ? (
+                      row.difference_status === "Duplicate" ? (
                         <span className={styles.noProblems}>
                           Same as existing
                         </span>
