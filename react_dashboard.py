@@ -7534,12 +7534,19 @@ class CoCANoTAPI:
 
         raw_header = self._header_dict(prepared_path)
         scrubbed_header = self._header_dict(scrubbed_path)
+        protected_fields = {
+            "dim", "pixdim", "datatype", "bitpix", "vox_offset",
+            "qform_code", "sform_code", "quatern_b", "quatern_c", "quatern_d",
+            "qoffset_x", "qoffset_y", "qoffset_z",
+            "srow_x", "srow_y", "srow_z", "xyzt_units",
+            "scl_slope", "scl_inter", "magic",
+        }
         header_rows = [
             {
                 "field": key,
                 "raw": raw_header.get(key, ""),
                 "scrubbed": scrubbed_header.get(key, ""),
-                "editable": key not in {"shape", "affine"},
+                "editable": key not in protected_fields and key not in {"shape", "affine"},
             }
             for key in sorted(set(raw_header) | set(scrubbed_header))
         ]
@@ -7618,6 +7625,14 @@ class CoCANoTAPI:
         header = image.header.copy()
         if field not in header:
             raise ValueError("Computed fields such as shape and affine cannot be edited as header text.")
+        if field in {
+            "dim", "pixdim", "datatype", "bitpix", "vox_offset",
+            "qform_code", "sform_code", "quatern_b", "quatern_c", "quatern_d",
+            "qoffset_x", "qoffset_y", "qoffset_z",
+            "srow_x", "srow_y", "srow_z", "xyzt_units",
+            "scl_slope", "scl_inter", "magic",
+        }:
+            raise ValueError("This field controls image geometry or voxel interpretation and cannot be changed through the header text editor.")
 
         original_shape = tuple(image.shape)
         original_affine = np.array(image.affine, copy=True)
