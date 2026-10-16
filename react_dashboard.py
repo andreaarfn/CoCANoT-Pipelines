@@ -7490,32 +7490,74 @@ class CoCANoTAPI:
                 raise ValueError(f"{name} NIfTI has invalid voxel spacing.")
             directions = linear / lengths
             if np.max(np.abs(directions), axis=0).min() < 0.98:
-                spatial_warnings.append(f"{name}: oblique acquisition; slices are closest anatomical planes, not exact axial/coronal/sagittal cuts.")
+                spatial_warnings.append(f"{name}: oblique acquisition; preview resampled into exact anatomical planes (display only).")
 
-        display_raw = nib.as_closest_canonical(raw_image)
-        display_defaced = nib.as_closest_canonical(defaced_image)
-        if display_raw.shape != display_defaced.shape:
-            raise ValueError("Canonical raw/defaced image shapes do not match.")
+        # Build one shared world-aligned RAS+ review grid. Oblique voxel
+        # coordinates are resampled into true anatomical planes for DISPLAY
+        # ONLY; no image, affine, or stored metadata is rewritten.
+        from scipy.ndimage import map_coordinates
 
-        shape = tuple(int(value) for value in display_raw.shape)
+        image_corners = np.array([
+            [i, j, k, 1.0]
+            for i in (-0.5, raw_image.shape[0] - 0.5)
+            for j in (-0.5, raw_image.shape[1] - 0.5)
+            for k in (-0.5, raw_image.shape[2] - 0.5)
+        ], dtype=float).T
+        world_corners = (raw_image.affine @ image_corners)[:3]
+        world_min = world_corners.min(axis=1)
+        world_max = world_corners.max(axis=1)
+        voxel_sizes = np.linalg.norm(raw_image.affine[:3, :3], axis=0)
+        spacing = float(np.min(voxel_sizes))
+        if not np.isfinite(spacing) or spacing <= 0:
+            raise ValueError("Invalid imaging voxel spacing for anatomical review.")
+        # Cap the number of review coordinates to avoid huge memory demand
+        # on images with wide oblique bounding boxes.
+        axis_lengths = world_max - world_min
+        spacing = max(spacing, float(np.max(axis_lengths) / 511.0))
+        shape = tuple(max(2, int(np.ceil(length / spacing)) + 1) for length in axis_lengths)
+        world_origin = world_min + 0.5 * spacing
+
         x_index = self._clamp_review_index(shape[0] // 2 if x is None else x, shape[0])
         y_index = self._clamp_review_index(shape[1] // 2 if y is None else y, shape[1])
         z_index = self._clamp_review_index(shape[2] // 2 if z is None else z, shape[2])
-        volume_count = shape[3] if len(shape) == 4 else 1
+        volume_count = raw_image.shape[3] if len(raw_image.shape) == 4 else 1
         volume_index = self._clamp_review_index(0 if volume is None else volume, volume_count)
 
-        raw = self._volume_array(display_raw, volume_index)
-        clean = self._volume_array(display_defaced, volume_index)
-        low, high = self._intensity_limits(raw, clean)
+        inverse_affine = np.linalg.inv(raw_image.affine)
+        coordinate_axes = [
+            world_origin[axis] + np.arange(shape[axis], dtype=float) * spacing
+            for axis in range(3)
+        ]
 
+        def anatomical_slice(data, plane):
+            if plane == "axial":
+                xx, yy = np.meshgrid(coordinate_axes[0], coordinate_axes[1], indexing="ij")
+                zz = np.full_like(xx, coordinate_axes[2][z_index])
+            elif plane == "coronal":
+                xx, zz = np.meshgrid(coordinate_axes[0], coordinate_axes[2], indexing="ij")
+                yy = np.full_like(xx, coordinate_axes[1][y_index])
+            else:
+                yy, zz = np.meshgrid(coordinate_axes[1], coordinate_axes[2], indexing="ij")
+                xx = np.full_like(yy, coordinate_axes[0][x_index])
+            world = np.stack((xx, yy, zz), axis=0).reshape(3, -1)
+            source = inverse_affine[:3, :3] @ world + inverse_affine[:3, 3, None]
+            sampled = map_coordinates(
+                data, source, order=1, mode="constant", cval=0.0,
+                prefilter=False,
+            )
+            return np.rot90(sampled.reshape(xx.shape))
+
+        raw = self._volume_array(raw_image, volume_index)
+        clean = self._volume_array(defaced_image, volume_index)
+        low, high = self._intensity_limits(raw, clean)
         views = {
-            "raw_axial": np.rot90(raw[:, :, z_index]),
-            "raw_coronal": np.rot90(raw[:, y_index, :]),
-            "raw_sagittal": np.rot90(raw[x_index, :, :]),
-            "defaced_axial": np.rot90(clean[:, :, z_index]),
-            "defaced_coronal": np.rot90(clean[:, y_index, :]),
-            "defaced_sagittal": np.rot90(clean[x_index, :, :]),
+            f"{name}_{plane}": anatomical_slice(data, plane)
+            for name, data in (("raw", raw), ("defaced", clean))
+            for plane in ("axial", "coronal", "sagittal")
         }
+        # All resampled views use RAS+ world coordinates.
+        display_raw = nib.as_closest_canonical(raw_image)
+        display_defaced = nib.as_closest_canonical(defaced_image)
 
         raw_header = self._header_dict(prepared_path)
         scrubbed_header = self._header_dict(scrubbed_path)
