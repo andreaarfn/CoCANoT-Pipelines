@@ -2554,7 +2554,7 @@ function ImagingReview({
                   </div>
                   {review.header_rows.find(row => row.field === editField)?.review_only && (
                     <p className={styles.headerEditNotice}>
-                      <strong>Review annotation only.</strong> This field affects image geometry or voxel interpretation. Your entered value will be saved for review without changing the NIfTI file.
+                      <strong>Saved as a review annotation, not a NIfTI header edit.</strong> The value you enter is stored in this image's local review record (under header_review_overrides). The actual NIfTI header remains unchanged, and this annotation is not automatically included in BIDS exports.
                     </p>
                   )}
                 </div>
