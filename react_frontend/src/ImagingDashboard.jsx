@@ -2430,8 +2430,13 @@ function ImagingReview({
     if (!editField) return;
     const bridge = api();
     if (!bridge?.imaging_review_save_header) return;
-    const data = await bridge.imaging_review_save_header(selectedId, editField, editValue);
-    setReview(data);
+    try {
+      const data = await bridge.imaging_review_save_header(selectedId, editField, editValue);
+      setReview(data);
+      setEditValue(data.header_rows.find(row => row.field === editField)?.scrubbed ?? "");
+    } catch (error) {
+      alert(`Unable to save header edit: ${String(error)}`);
+    }
   }
 
   async function chooseExternalReplacement() {
