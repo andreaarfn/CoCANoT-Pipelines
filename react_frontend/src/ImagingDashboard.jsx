@@ -2319,6 +2319,7 @@ function ImagingReview({
   const [items, setItems] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [review, setReview] = useState(null);
+  const [imageReviewEdits, setImageReviewEdits] = useState({});
   const [loading, setLoading] = useState(false);
   const [editField, setEditField] = useState("");
   const [editValue, setEditValue] = useState("");
@@ -2552,12 +2553,12 @@ function ImagingReview({
               <section className={styles.card}>
                 <h3>Interactive raw versus defaced image review</h3>
                 <div className={styles.imageGrid}>
-                  <ImageView key={`${selectedId}-raw-axial`} label="Raw Axial" src={review.views.raw_axial} automaticLabels={review.orientation_labels?.raw_axial} />
-                  <ImageView key={`${selectedId}-raw-coronal`} label="Raw Coronal" src={review.views.raw_coronal} automaticLabels={review.orientation_labels?.raw_coronal} />
-                  <ImageView key={`${selectedId}-raw-sagittal`} label="Raw Sagittal" src={review.views.raw_sagittal} automaticLabels={review.orientation_labels?.raw_sagittal} />
-                  <ImageView key={`${selectedId}-defaced-axial`} label="Defaced Axial" src={review.views.defaced_axial} automaticLabels={review.orientation_labels?.defaced_axial} />
-                  <ImageView key={`${selectedId}-defaced-coronal`} label="Defaced Coronal" src={review.views.defaced_coronal} automaticLabels={review.orientation_labels?.defaced_coronal} />
-                  <ImageView key={`${selectedId}-defaced-sagittal`} label="Defaced Sagittal" src={review.views.defaced_sagittal} automaticLabels={review.orientation_labels?.defaced_sagittal} />
+                  <ImageView key={`${selectedId}-raw-axial`} label="Raw Axial" sourcePlane="Axial" is4D={Boolean(review.is_4d)} src={review.views.raw_axial} automaticLabels={review.orientation_labels?.raw_axial} edits={imageReviewEdits[`${selectedId}:raw_axial`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:raw_axial`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
+                  <ImageView key={`${selectedId}-raw-coronal`} label="Raw Coronal" sourcePlane="Coronal" is4D={Boolean(review.is_4d)} src={review.views.raw_coronal} automaticLabels={review.orientation_labels?.raw_coronal} edits={imageReviewEdits[`${selectedId}:raw_coronal`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:raw_coronal`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
+                  <ImageView key={`${selectedId}-raw-sagittal`} label="Raw Sagittal" sourcePlane="Sagittal" is4D={Boolean(review.is_4d)} src={review.views.raw_sagittal} automaticLabels={review.orientation_labels?.raw_sagittal} edits={imageReviewEdits[`${selectedId}:raw_sagittal`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:raw_sagittal`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
+                  <ImageView key={`${selectedId}-defaced-axial`} label="Defaced Axial" sourcePlane="Axial" is4D={Boolean(review.is_4d)} src={review.views.defaced_axial} automaticLabels={review.orientation_labels?.defaced_axial} edits={imageReviewEdits[`${selectedId}:defaced_axial`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:defaced_axial`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
+                  <ImageView key={`${selectedId}-defaced-coronal`} label="Defaced Coronal" sourcePlane="Coronal" is4D={Boolean(review.is_4d)} src={review.views.defaced_coronal} automaticLabels={review.orientation_labels?.defaced_coronal} edits={imageReviewEdits[`${selectedId}:defaced_coronal`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:defaced_coronal`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
+                  <ImageView key={`${selectedId}-defaced-sagittal`} label="Defaced Sagittal" sourcePlane="Sagittal" is4D={Boolean(review.is_4d)} src={review.views.defaced_sagittal} automaticLabels={review.orientation_labels?.defaced_sagittal} edits={imageReviewEdits[`${selectedId}:defaced_sagittal`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:defaced_sagittal`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
                 </div>
 
                 <Slider label="Sagittal X" value={review.x} max={review.limits.x_max} onChange={value => move("x", value)} />
@@ -2573,7 +2574,7 @@ function ImagingReview({
                 )}
 
                 <p className={styles.helpText}>
-                  Use the sliders to move through the complete slice stack. All six panels stay linked. Orientation labels are generated from the NIfTI affine. You can hide or correct the labels for review; corrections do not modify NIfTI orientation, affine metadata, or BIDS exports. Verify questionable orientation against the source.
+                  Use the sliders to move through the complete slice stack. All six panels stay linked. Direction markers are generated from the NIfTI affine. Plane and 4D classifications are suggested from the view and image dimensions; review and override them where necessary. Edits and preview rotation are retained while you remain in Step 4, but do not modify NIfTI orientation, affine metadata, or BIDS exports. Verify questionable orientation against the source.
                 </p>
               </section>
 
@@ -2617,15 +2618,17 @@ function ImagingReview({
 
 const ANATOMICAL_MARKERS = ["", "R", "L", "A", "P", "S", "I"];
 const EDGE_NAMES = ["left", "right", "top", "bottom"];
+const IMAGE_PLANES = ["Axial", "Coronal", "Sagittal", "4D"];
 
-function ImageView({ label, src, automaticLabels }) {
-  const [rotation, setRotation] = useState(0);
+function ImageView({ label, src, automaticLabels, sourcePlane, is4D, edits, onEdit }) {
   const [showLabels, setShowLabels] = useState(true);
-  const [manualLabels, setManualLabels] = useState(null);
   const [editingLabels, setEditingLabels] = useState(false);
+  const rotation = edits.rotation ?? 0;
+  const manualLabels = edits.manualLabels ?? null;
+  const selectedPlane = edits.plane ?? (is4D ? "4D" : sourcePlane);
   const sourceLabels = automaticLabels ?? {};
   const labels = manualLabels ?? sourceLabels;
-  // CSS rotates clockwise, so direction overlays follow the same movement.
+  // Rotate the preview and markers together; the underlying NIfTI is unchanged.
   const turns = (rotation / 90) % 4;
   const displayed = { ...labels };
   for (let n = 0; n < turns; n += 1) {
@@ -2636,11 +2639,7 @@ function ImageView({ label, src, automaticLabels }) {
     displayed.left = before.bottom;
   }
   function changeLabel(edge, value) {
-    setManualLabels(current => ({
-      ...sourceLabels,
-      ...(current ?? {}),
-      [edge]: value,
-    }));
+    onEdit({ manualLabels: { ...sourceLabels, ...(manualLabels ?? {}), [edge]: value } });
   }
 
   return (
@@ -2648,18 +2647,21 @@ function ImageView({ label, src, automaticLabels }) {
       <span>{label}</span>
       <div className={styles.imageControls}>
         <label>
-          <input
-            type="checkbox"
-            checked={showLabels}
-            onChange={event => setShowLabels(event.target.checked)}
-          />
-          Orientation labels
+          Image plane / type
+          <select value={selectedPlane} onChange={event => onEdit({ plane: event.target.value })} aria-label={`${label} image plane or type`}>
+            {IMAGE_PLANES.map(plane => <option value={plane} key={plane}>{plane}</option>)}
+          </select>
+        </label>
+        <small>{edits.plane ? "Manually assigned" : "Auto-suggested from image view / dimensions"}</small>
+        <label>
+          <input type="checkbox" checked={showLabels} onChange={event => setShowLabels(event.target.checked)} />
+          Anatomical direction labels
         </label>
         <div className={styles.rotationControls} aria-label={`${label} rotation controls`}>
-          <button type="button" title="Rotate 90° left" onClick={() => setRotation(current => (current + 270) % 360)}>↶ 90°</button>
-          <button type="button" title="Rotate 90° right" onClick={() => setRotation(current => (current + 90) % 360)}>↷ 90°</button>
-          <button type="button" title="Reset rotation" onClick={() => setRotation(0)}>Reset</button>
-          <button type="button" onClick={() => setEditingLabels(current => !current)}>{editingLabels ? "Done" : "Edit labels"}</button>
+          <button type="button" title="Rotate 90° left" onClick={() => onEdit({ rotation: (rotation + 270) % 360 })}>↶ 90°</button>
+          <button type="button" title="Rotate 90° right" onClick={() => onEdit({ rotation: (rotation + 90) % 360 })}>↷ 90°</button>
+          <button type="button" title="Reset rotation" onClick={() => onEdit({ rotation: 0 })}>Reset</button>
+          <button type="button" onClick={() => setEditingLabels(current => !current)}>{editingLabels ? "Done" : "Edit direction labels"}</button>
         </div>
         {editingLabels && (
           <div className={styles.orientationEditor}>
@@ -2667,13 +2669,11 @@ function ImageView({ label, src, automaticLabels }) {
               <label key={edge}>
                 {edge}
                 <select value={labels[edge] ?? ""} onChange={event => changeLabel(edge, event.target.value)} aria-label={`${label} ${edge} anatomical label`}>
-                  {ANATOMICAL_MARKERS.map(marker => (
-                    <option key={marker} value={marker}>{marker || "Unknown"}</option>
-                  ))}
+                  {ANATOMICAL_MARKERS.map(marker => <option key={marker} value={marker}>{marker || "Unknown"}</option>)}
                 </select>
               </label>
             ))}
-            <button type="button" onClick={() => setManualLabels(null)}>Restore automatic labels</button>
+            <button type="button" onClick={() => onEdit({ manualLabels: null })}>Restore automatic direction labels</button>
           </div>
         )}
         {!Object.keys(sourceLabels).length && !manualLabels && (
@@ -2683,7 +2683,7 @@ function ImageView({ label, src, automaticLabels }) {
       <div className={styles.imageCanvas}>
         {src ? (
           <>
-            <img src={src} alt={label} style={{ transform: `rotate(${rotation}deg)` }} />
+            <img src={src} alt={`${label} — ${selectedPlane}`} style={{ transform: `rotate(${rotation}deg)` }} />
             {showLabels && EDGE_NAMES.map(edge => displayed[edge] ? (
               <span key={edge} className={styles[`imageSide${edge[0].toUpperCase() + edge.slice(1)}`]}>
                 {displayed[edge]}
