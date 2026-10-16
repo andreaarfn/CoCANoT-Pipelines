@@ -2367,22 +2367,11 @@ export default function MetadataDashboard({
 
 
 
-        onFinished={result => {
-
-
-
-          setMessage(
-
-
-
-            `Imported ${result.imported ?? 0} ${batchImport} record(s).`
-
-
-
-          );
-
-
-
+        onFinished={async result => {
+          setMessage(`Imported ${result.imported ?? 0} ${batchImport} record(s).`);
+          await loadPatients();
+          if (loadedPatientId) await loadPatient(loadedPatientId);
+          await onDataChanged?.();
         }}
 
 
@@ -3196,11 +3185,7 @@ export default function MetadataDashboard({
 
 
 
-                  ? () =>
-
-
-
-                      importRecords(tableName)
+                  ? () => setBatchImport(tableName)
 
 
 
