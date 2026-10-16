@@ -136,6 +136,8 @@ export default function BatchImportWorkflow({
 
   tableName,
 
+  targetPatientId = "",
+
   onBack,
 
   onFinished,
@@ -143,6 +145,19 @@ export default function BatchImportWorkflow({
   backLabel = "Back to Bulk Upload",
 
 }) {
+
+  const scopedPatientId = String(targetPatientId || "").trim();
+  const normalizedPatientId = value => {
+    const text = String(value ?? "").trim();
+    return /^[0-9]+$/.test(text) ? String(Number(text)).padStart(3, "0") : text;
+  };
+  const rowPatientId = row => normalizedPatientId(
+    row?.metadata?.["CoCANoT Patient ID"] ?? row?.patient_id ?? ""
+  );
+  const rowCanImport = row =>
+    (row?.problems ?? []).length === 0 &&
+    row?.import_allowed !== false &&
+    row?.difference_status !== "Duplicate";
 
   const [step, setStep] = useState(1);
 
@@ -220,7 +235,7 @@ export default function BatchImportWorkflow({
 
 
 
-    rows.forEach(row => {
+    rows.filter(row => row.include).forEach(row => {
 
       const metadata = row?.metadata ?? {};
 
@@ -307,7 +322,7 @@ export default function BatchImportWorkflow({
 
     const unique = new Map();
 
-    rows.forEach(row => {
+    rows.filter(row => row.include).forEach(row => {
       const metadata = row?.metadata ?? {};
       const patientId = String(
         metadata["CoCANoT Patient ID"] ??
@@ -405,25 +420,16 @@ export default function BatchImportWorkflow({
 
 
 
-  function refreshIncludeFlags(activeRows) {
-
-    return (activeRows ?? []).map(row => ({
-
+  function refreshIncludeFlags(activeRows, previousRows = null) {
+    return (activeRows ?? []).map((row, index) => ({
       ...row,
-
-      include:
-
-        (row?.problems ?? []).length === 0 &&
-
-        row?.import_allowed !== false &&
-
-        row?.difference_status !== "Duplicate",
-
+      include: rowCanImport(row) && (
+        previousRows
+          ? Boolean(previousRows[index]?.include)
+          : !scopedPatientId || rowPatientId(row) === normalizedPatientId(scopedPatientId)
+      ),
     }));
-
   }
-
-
 
   function surgeryDateKey(patientId, surgeryId) {
     return `${String(patientId ?? "").trim()}::${String(
@@ -896,7 +902,7 @@ export default function BatchImportWorkflow({
 
         refreshed = refreshIncludeFlags(
 
-          checked.rows
+          checked.rows, rows
 
         );
 
@@ -904,7 +910,7 @@ export default function BatchImportWorkflow({
 
         refreshed = refreshIncludeFlags(
 
-          refreshed
+          refreshed, rows
 
         );
 
@@ -1020,7 +1026,7 @@ export default function BatchImportWorkflow({
 
       rows: refreshIncludeFlags(
 
-        checked.rows ?? activeRows
+        checked.rows ?? activeRows, activeRows
 
       ),
 
@@ -1264,28 +1270,49 @@ export default function BatchImportWorkflow({
 
 
 
-  function toggleInclude(index) {
+  async function toggleInclude(index) {
+    const selected = rows[index];
+    if (!selected) return;
+    if (selected.include) {
+      setRows(current => current.map((row, i) =>
+        i === index ? { ...row, include: false } : row
+      ));
+      return;
+    }
+    if (!rowCanImport(selected)) return;
 
-    setRows(current =>
+    if (scopedPatientId && rowPatientId(selected) !== normalizedPatientId(scopedPatientId)) {
+      const sourceId = rowPatientId(selected) || "(blank)";
+      const confirmed = window.confirm(
+        `This uploaded row belongs to patient ${sourceId}. Change its CoCANoT Patient ID to ${normalizedPatientId(scopedPatientId)} and include it in this patient's import? This changes the staged row, not the original file.`
+      );
+      if (!confirmed) return;
+      const adjusted = rows.map((row, i) => i === index ? {
+        ...row,
+        metadata: {
+          ...row.metadata,
+          "CoCANoT Patient ID": normalizedPatientId(scopedPatientId),
+        },
+        patient_id: normalizedPatientId(scopedPatientId),
+        include: true,
+      } : row);
+      try {
+        setBusy(true);
+        setError("");
+        const refreshed = await validateRowsAgainstBackend(adjusted);
+        setRows(refreshed.rows);
+        setValidation(null);
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
 
-      current.map((row, rowIndex) =>
-
-        rowIndex === index
-
-          ? {
-
-              ...row,
-
-              include: !row.include,
-
-            }
-
-          : row
-
-      )
-
-    );
-
+    setRows(current => current.map((row, i) =>
+      i === index ? { ...row, include: true } : row
+    ));
   }
 
 
