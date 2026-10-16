@@ -1999,6 +1999,22 @@ class CoCANoTAPI:
                     existing_bids_by_size,
                 )
             )
+            # Completion is scoped to the CURRENT configured BIDS output folder.
+            # A legacy PatientDataLinkStore path in another folder is useful
+            # for recovery, but cannot mark this output directory complete.
+            if existing_export is not None:
+                exported_path = Path(str(existing_export.get("nifti_path", ""))).expanduser()
+                try:
+                    in_current_output = exported_path.resolve().is_relative_to(output_dir.resolve())
+                except (OSError, ValueError):
+                    in_current_output = False
+                if (
+                    not in_current_output
+                    or not exported_path.is_file()
+                    or _matching_json(exported_path) is None
+                ):
+                    existing_export = None
+
             project = ""
             project_description = ""
             session_id = ""
@@ -3424,8 +3440,16 @@ class CoCANoTAPI:
             return False
 
         records = state.get("records", [])
+        output_dir = config.imaging.bids_output_dir
+        if not output_dir.is_dir() or not any(
+            _is_nifti(path) for path in output_dir.rglob("*") if path.is_file()
+        ):
+            return False
         return bool(records) and all(
             record.get("record_state") == "completed_recorded"
+            and isinstance(record.get("existing_export"), dict)
+            and Path(str(record["existing_export"].get("nifti_path", ""))).is_file()
+            and _matching_json(Path(str(record["existing_export"]["nifti_path"]))) is not None
             for record in records
         )
 
