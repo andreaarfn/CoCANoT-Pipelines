@@ -345,10 +345,10 @@ def _normalize_patient_id(value: Any) -> str:
         for key in ("patient_id", "patientId", "id", "CoCANoT Patient ID"):
             candidate = value.get(key)
             if candidate not in (None, ""):
-                return str(candidate).strip()
+                return normalize_patient_id(candidate)
         return ""
 
-    return str(value or "").strip()
+    return normalize_patient_id(value)
 
 def _exclusive_multiselect_conflicts(
     metadata: dict[str, Any],
@@ -9203,7 +9203,7 @@ class CoCANoTAPI:
     ) -> dict[str, Any]:
         """Return the same grouped local records used by PatientExplorer."""
         site_id = str(site_id or "").strip()
-        patient_id = str(patient_id or "").strip()
+        patient_id = self._resolve_existing_patient_id(patient_id)
 
         result: dict[str, Any] = {
             "patient_id": patient_id,
@@ -10011,6 +10011,9 @@ class CoCANoTAPI:
         if not patient_id:
             raise ValueError("Patient ID is required.")
 
+        # Use an existing legacy spelling rather than creating a second patient.
+        patient_id = self._resolve_existing_patient_id(patient_id) or patient_id
+
         exists = getattr(
             self.repository,
             "patient_exists",
@@ -10352,6 +10355,9 @@ class CoCANoTAPI:
             ),
             rules,
         )
+        # Preserve links to pre-normalization patient keys until a database migration.
+        if clean.get("CoCANoT Patient ID"):
+            clean["CoCANoT Patient ID"] = self._resolve_existing_patient_id(clean["CoCANoT Patient ID"])
 
         exclusive_problems = (
             _exclusive_multiselect_conflicts(
