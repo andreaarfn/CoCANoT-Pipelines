@@ -2552,12 +2552,12 @@ function ImagingReview({
               <section className={styles.card}>
                 <h3>Interactive raw versus defaced image review</h3>
                 <div className={styles.imageGrid}>
-                  <ImageView label="Raw Axial" src={review.views.raw_axial} />
-                  <ImageView label="Raw Coronal" src={review.views.raw_coronal} />
-                  <ImageView label="Raw Sagittal" src={review.views.raw_sagittal} />
-                  <ImageView label="Defaced Axial" src={review.views.defaced_axial} />
-                  <ImageView label="Defaced Coronal" src={review.views.defaced_coronal} />
-                  <ImageView label="Defaced Sagittal" src={review.views.defaced_sagittal} />
+                  <ImageView key={`${selectedId}-raw-axial`} label="Raw Axial" src={review.views.raw_axial} />
+                  <ImageView key={`${selectedId}-raw-coronal`} label="Raw Coronal" src={review.views.raw_coronal} />
+                  <ImageView key={`${selectedId}-raw-sagittal`} label="Raw Sagittal" src={review.views.raw_sagittal} />
+                  <ImageView key={`${selectedId}-defaced-axial`} label="Defaced Axial" src={review.views.defaced_axial} />
+                  <ImageView key={`${selectedId}-defaced-coronal`} label="Defaced Coronal" src={review.views.defaced_coronal} />
+                  <ImageView key={`${selectedId}-defaced-sagittal`} label="Defaced Sagittal" src={review.views.defaced_sagittal} />
                 </div>
 
                 <Slider label="Sagittal X" value={review.x} max={review.limits.x_max} onChange={value => move("x", value)} />
@@ -2573,7 +2573,7 @@ function ImagingReview({
                 )}
 
                 <p className={styles.helpText}>
-                  Use the sliders to move through the complete slice stack. All six panels stay linked.
+                  Use the sliders to move through the complete slice stack. All six panels stay linked. Rotation and R/L labels are manually assigned display aids only. They do not change NIfTI voxel orientation, affine metadata, or BIDS exports. Verify anatomical laterality against the source image orientation before labeling.
                 </p>
               </section>
 
@@ -2616,11 +2616,46 @@ function ImagingReview({
 }
 
 function ImageView({ label, src }) {
+  const [rotation, setRotation] = useState(0);
+  // User-assigned display markers. No anatomical orientation is inferred.
+  const [markers, setMarkers] = useState("none");
+  const leftMarker = markers === "right-left" ? "R" : markers === "left-right" ? "L" : "";
+  const rightMarker = markers === "right-left" ? "L" : markers === "left-right" ? "R" : "";
+
   return (
     <div className={styles.imageView}>
       <span>{label}</span>
+      <div className={styles.imageControls}>
+        <label>
+          Side labels
+          <select
+            aria-label={`${label} side labels`}
+            value={markers}
+            onChange={event => setMarkers(event.target.value)}
+          >
+            <option value="none">None</option>
+            <option value="right-left">R on left / L on right</option>
+            <option value="left-right">L on left / R on right</option>
+          </select>
+        </label>
+        <div className={styles.rotationControls} aria-label={`${label} rotation controls`}>
+          <button type="button" title="Rotate 90° left" onClick={() => setRotation(current => (current + 270) % 360)}>↶ 90°</button>
+          <button type="button" title="Rotate 90° right" onClick={() => setRotation(current => (current + 90) % 360)}>↷ 90°</button>
+          <button type="button" title="Reset rotation" onClick={() => setRotation(0)}>Reset</button>
+        </div>
+      </div>
       <div className={styles.imageCanvas}>
-        {src ? <img src={src} alt={label} /> : <div>Image unavailable</div>}
+        {src ? (
+          <>
+            <img
+              src={src}
+              alt={label}
+              style={{ transform: `rotate(${rotation}deg)` }}
+            />
+            {leftMarker && <span className={styles.imageSideLeft} aria-label={`Image left edge labeled ${leftMarker}`}>{leftMarker}</span>}
+            {rightMarker && <span className={styles.imageSideRight} aria-label={`Image right edge labeled ${rightMarker}`}>{rightMarker}</span>}
+          </>
+        ) : <div>Image unavailable</div>}
       </div>
     </div>
   );
