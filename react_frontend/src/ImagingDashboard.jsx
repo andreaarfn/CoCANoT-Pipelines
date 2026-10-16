@@ -2552,6 +2552,12 @@ function ImagingReview({
 
               <section className={styles.card}>
                 <h3>Interactive raw versus defaced image review</h3>
+                {review.spatial_warnings?.length > 0 && (
+                  <div role="alert" className={styles.orientationWarning}>
+                    <strong>Check spatial orientation before accepting:</strong>
+                    {review.spatial_warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+                  </div>
+                )}
                 {review.display_orientation && (
                   <p className={styles.helpText}>
                     Source axis orientation: {(review.display_orientation.raw_original ?? []).join("") || "Unknown"}.
@@ -2661,7 +2667,11 @@ function ImageView({ label, src, automaticLabels, sourcePlane, is4D, edits, onEd
             {IMAGE_PLANES.map(plane => <option value={plane} key={plane}>{plane}</option>)}
           </select>
         </label>
-        <small>{edits.plane ? "Manually assigned" : "Auto-suggested from image view / dimensions"}</small>
+        <small>
+          {edits.plane ? "Manual review annotation" : "Suggested from the canonical slice extraction"}
+          {is4D ? " · 4D dataset: use the volume slider to inspect time/volume frames." : " · 3D dataset."}
+          {" "}Changing this label does not change the slice or anatomical axes.
+        </small>
         <label>
           <input type="checkbox" checked={showLabels} onChange={event => setShowLabels(event.target.checked)} />
           Anatomical direction labels
