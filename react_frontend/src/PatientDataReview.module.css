@@ -462,3 +462,97 @@
     padding-left:12px;
   }
 }
+
+
+/* Linked imaging review controls and JSON sidecar */
+.imageReviewToolbar {
+  margin: 0;
+  padding: 11px 14px 0;
+  display: flex;
+  align-items: center;
+}
+.directionToggle {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid #d5e0e8;
+  border-radius: 8px;
+  background: #f7fafc;
+  color: #284762;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.directionToggle input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #3479bc;
+  cursor: pointer;
+}
+.directionToggleStatus {
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #e9f1f8;
+  color: #45667f;
+  font-size: 10px;
+  font-weight: 700;
+}
+.linkedJsonCard {
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid #d5e0e8;
+  border-radius: 9px;
+  background: white;
+}
+.linkedJsonHeader {
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f7fafc;
+}
+.linkedJsonHeading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.linkedJsonHeading strong {
+  color: #263e56;
+  font-size: 12px;
+}
+.linkedJsonHeading span {
+  overflow-wrap: anywhere;
+  color: #708599;
+  font-size: 10px;
+}
+.linkedJsonContent {
+  padding: 14px;
+  border-top: 1px solid #dce5ec;
+}
+.linkedJsonPreview {
+  max-height: 430px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #e0e7ef;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #263e56;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.linkedJsonEmpty {
+  margin: 0;
+  color: #61768b;
+  font-size: 12px;
+}
+@media (max-width: 680px) {
+  .linkedJsonHeader { align-items: flex-start; flex-direction: column; }
+}
