@@ -7471,20 +7471,33 @@ class CoCANoTAPI:
         raw_image = nib.load(str(prepared_path))
         defaced_image = nib.load(str(defaced_path))
 
+        if len(raw_image.shape) not in {3, 4} or len(defaced_image.shape) not in {3, 4}:
+            raise ValueError("Only 3D and 4D NIfTI images are supported.")
         if raw_image.shape != defaced_image.shape:
             raise ValueError(f"Raw and defaced image shapes do not match: {raw_image.shape} vs {defaced_image.shape}")
-        if len(raw_image.shape) not in {3, 4}:
-            raise ValueError("Only 3D and 4D NIfTI images are supported.")
+        if not np.allclose(raw_image.affine, defaced_image.affine, rtol=1e-5, atol=1e-3):
+            raise ValueError(
+                "Raw and defaced NIfTI affines do not match. Review spatial alignment "
+                "before comparing slices; rotating a preview cannot repair an affine mismatch."
+            )
 
-        shape = tuple(int(value) for value in raw_image.shape)
+        # Normalize temporary review images to nearest RAS+ so storage-axis order
+        # cannot be mistaken for sagittal/coronal/axial anatomical orientation.
+        # No file is written or modified by this display transformation.
+        display_raw = nib.as_closest_canonical(raw_image)
+        display_defaced = nib.as_closest_canonical(defaced_image)
+        if display_raw.shape != display_defaced.shape:
+            raise ValueError("Canonical raw/defaced image shapes do not match.")
+
+        shape = tuple(int(value) for value in display_raw.shape)
         x_index = self._clamp_review_index(shape[0] // 2 if x is None else x, shape[0])
         y_index = self._clamp_review_index(shape[1] // 2 if y is None else y, shape[1])
         z_index = self._clamp_review_index(shape[2] // 2 if z is None else z, shape[2])
         volume_count = shape[3] if len(shape) == 4 else 1
         volume_index = self._clamp_review_index(0 if volume is None else volume, volume_count)
 
-        raw = self._volume_array(raw_image, volume_index)
-        clean = self._volume_array(defaced_image, volume_index)
+        raw = self._volume_array(display_raw, volume_index)
+        clean = self._volume_array(display_defaced, volume_index)
         low, high = self._intensity_limits(raw, clean)
 
         views = {
@@ -7532,8 +7545,8 @@ class CoCANoTAPI:
             except (ValueError, TypeError, np.linalg.LinAlgError):
                 return {}
 
-        raw_orientation = orientation_edges(raw_image)
-        defaced_orientation = orientation_edges(defaced_image)
+        raw_orientation = orientation_edges(display_raw)
+        defaced_orientation = orientation_edges(display_defaced)
 
         return {
             "id": item["id"],
@@ -7547,6 +7560,12 @@ class CoCANoTAPI:
             "shape": list(shape),
             "ndim": len(shape),
             "is_4d": len(shape) == 4,
+            "display_orientation": {
+                "raw_original": list(nib.aff2axcodes(raw_image.affine)),
+                "defaced_original": list(nib.aff2axcodes(defaced_image.affine)),
+                "canonical": list(nib.aff2axcodes(display_raw.affine)),
+                "reoriented_for_display": not np.allclose(raw_image.affine, display_raw.affine),
+            },
             "x": x_index,
             "y": y_index,
             "z": z_index,
