@@ -7576,6 +7576,7 @@ class CoCANoTAPI:
             "key": item["key"],
             "status": item["status"],
             "defacing_source": item["defacing_source"],
+            "orientation_verification": self._load_review_state(self._imaging_review_items()[1]).get(item["key"], {}).get("orientation_verification", {}),
             "orientation_labels": {
                 **{"raw_" + plane: labels for plane, labels in raw_orientation.items()},
                 **{"defaced_" + plane: labels for plane, labels in defaced_orientation.items()},
@@ -7627,6 +7628,29 @@ class CoCANoTAPI:
         self._imaging_log(f"Saved scrubbed NIfTI header edit: {item['key']} | {field}")
         return self.imaging_review_get_item(index)
 
+    def imaging_review_save_orientation_verification(self, item_id: str | int, decision: str, notes: str = "") -> dict[str, Any]:
+        items, state_path = self._imaging_review_items()
+        index = int(item_id)
+        if index < 0 or index >= len(items):
+            raise ValueError("Imaging review item not found.")
+        if decision not in {"verified", "needs_attention", "unreviewed"}:
+            raise ValueError("Invalid orientation verification decision.")
+        item = items[index]
+        state = self._load_review_state(state_path)
+        current = dict(state.get(item["key"], {}))
+        current["orientation_verification"] = {
+            "decision": decision,
+            "notes": str(notes or "")[:2000],
+        }
+        if decision != "verified" and current.get("status") == "Accepted":
+            current["status"] = "Pending"
+            current["accepted_defaced_path"] = ""
+            current["defacing_source"] = ""
+        state[item["key"]] = current
+        self._save_review_state(state_path, state)
+        self._refresh_imaging_review_stage()
+        return self.imaging_review_get_item(index)
+
     def imaging_review_set_status(self, item_id: str | int, status: str) -> dict[str, Any]:
         items, state_path = self._imaging_review_items()
         index = int(item_id)
@@ -7639,6 +7663,9 @@ class CoCANoTAPI:
             raise ValueError(f"Unsupported review status: {status}")
 
         state = self._load_review_state(state_path)
+        existing = dict(state.get(item["key"], {}))
+        if status == "Accepted" and existing.get("orientation_verification", {}).get("decision") != "verified":
+            raise ValueError("Confirm the anatomical plane orientation before accepting this image.")
         accepted_path = ""
         defacing_source = ""
         if status == "Accepted":
@@ -7646,6 +7673,7 @@ class CoCANoTAPI:
             defacing_source = "pydeface"
 
         state[item["key"]] = {
+            **existing,
             "status": status,
             "accepted_defaced_path": accepted_path,
             "defacing_source": defacing_source,
