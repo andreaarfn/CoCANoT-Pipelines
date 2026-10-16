@@ -2542,11 +2542,6 @@ function ImagingReview({
                     />
                   </label>
 
-                  {review.header_rows.find(row => row.field === editField)?.review_only && (
-                    <p className={styles.orientationWarning}>
-                      This field controls image geometry or voxel interpretation. Your edit is saved as a review annotation only; NIfTI file values remain unchanged.
-                    </p>
-                  )}
                   <div className={styles.headerEditActions}>
                     <button
                       type="button"
@@ -2557,6 +2552,11 @@ function ImagingReview({
                       Save Header Edit
                     </button>
                   </div>
+                  {review.header_rows.find(row => row.field === editField)?.review_only && (
+                    <p className={styles.headerEditNotice}>
+                      <strong>Review annotation only.</strong> This field affects image geometry or voxel interpretation. Your entered value will be saved for review without changing the NIfTI file.
+                    </p>
+                  )}
                 </div>
               </section>
 
