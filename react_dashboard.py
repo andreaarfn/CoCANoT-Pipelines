@@ -9608,6 +9608,47 @@ class CoCANoTAPI:
         self,
         record: dict[str, Any],
     ) -> Path:
+        # Prioritize the final Step 5 BIDS export, not the original Step 3
+        # prepared/defaced NIfTI or its dcm2niix JSON sidecar.
+        context = dict(record.get("context", {}) or {})
+        metadata = dict(record.get("metadata", {}) or {})
+        expected_patient = str(metadata.get("CoCANoT Patient ID", "") or "").strip()
+        expected_image = str(metadata.get("Image ID", "") or "").strip()
+
+        def matches_export(candidate: Path) -> bool:
+            if not candidate.is_file() or not _is_nifti(candidate):
+                return False
+            sidecar = _matching_json(candidate)
+            if sidecar is None:
+                return False
+            try:
+                payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return False
+            if not isinstance(payload, dict):
+                return False
+            embedded = payload.get("CoCANoTMetadata", {})
+            if not isinstance(embedded, dict):
+                embedded = {}
+            patient = str(payload.get("CoCANoTPatientID") or embedded.get("CoCANoT Patient ID") or "").strip()
+            image_id = str(payload.get("ImageID") or embedded.get("Image ID") or "").strip()
+            return bool(expected_patient and expected_image and patient == expected_patient and image_id == expected_image)
+
+        explicit = context.get("bids_data_path", "")
+        if explicit:
+            candidate = Path(str(explicit)).expanduser()
+            if matches_export(candidate):
+                return candidate.resolve()
+
+        config = load_imaging_config()
+        output_dir = config.imaging.bids_output_dir
+        if output_dir.exists() and expected_patient and expected_image:
+            for candidate in sorted(output_dir.rglob("*.nii.gz")) + sorted(output_dir.rglob("*.nii")):
+                if matches_export(candidate):
+                    return candidate.resolve()
+
+        # Legacy records may not have a BIDS export. Preserve the existing
+        # fallback, but the UI must identify those as pre-export sources.
         for candidate in (
             self._metadata_record_file_candidates(
                 record,
