@@ -7580,6 +7580,7 @@ class CoCANoTAPI:
             "key": item["key"],
             "status": item["status"],
             "defacing_source": item["defacing_source"],
+            "direction_annotations": self._load_review_state(self._imaging_review_items()[1]).get(item["key"], {}).get("direction_annotations", {}),
             "orientation_labels": {
                 **{"raw_" + plane: labels for plane, labels in raw_orientation.items()},
                 **{"defaced_" + plane: labels for plane, labels in defaced_orientation.items()},
@@ -7607,6 +7608,32 @@ class CoCANoTAPI:
             "views": {name: self._slice_png_data_url(array, low, high) for name, array in views.items()},
             "header_rows": header_rows,
         }
+
+    def imaging_review_save_direction_annotations(self, item_id: str | int, panel: str, edits: dict[str, Any]) -> dict[str, Any]:
+        items, state_path = self._imaging_review_items()
+        index = int(item_id)
+        if index < 0 or index >= len(items):
+            raise ValueError("Imaging review item not found.")
+        if panel not in {"raw_axial", "raw_coronal", "raw_sagittal", "defaced_axial", "defaced_coronal", "defaced_sagittal"}:
+            raise ValueError("Invalid imaging panel.")
+        if not isinstance(edits, dict):
+            raise ValueError("Invalid direction annotation.")
+        marker_values = {"", "R", "L", "A", "P", "S", "I"}
+        labels = edits.get("manualLabels")
+        if labels is not None:
+            if not isinstance(labels, dict) or any(k not in {"left", "right", "top", "bottom"} or v not in marker_values for k, v in labels.items()):
+                raise ValueError("Invalid anatomical direction labels.")
+        rotation = edits.get("rotation", 0)
+        if type(rotation) is not int or rotation not in {0, 90, 180, 270}:
+            raise ValueError("Rotation must be 0, 90, 180, or 270 degrees.")
+        state = self._load_review_state(state_path)
+        entry = dict(state.get(items[index]["key"], {}))
+        annotations = dict(entry.get("direction_annotations", {}))
+        annotations[panel] = {"manualLabels": labels, "rotation": rotation}
+        entry["direction_annotations"] = annotations
+        state[items[index]["key"]] = entry
+        self._save_review_state(state_path, state)
+        return {"ok": True, "direction_annotations": annotations}
 
     def imaging_review_save_header(self, item_id: str | int, field: str, value: str) -> dict[str, Any]:
         import ast
@@ -9715,6 +9742,9 @@ class CoCANoTAPI:
                 "Only 3D and 4D NIfTI images are supported."
             )
 
+        # Use the same anatomical coordinate convention as Step 4.
+        image = nib.as_closest_canonical(image)
+
         shape = tuple(
             int(value)
             for value in image.shape
@@ -9787,7 +9817,45 @@ class CoCANoTAPI:
             ),
         }
 
+        codes = nib.aff2axcodes(image.affine)
+        opposite = {"R": "L", "L": "R", "A": "P", "P": "A", "S": "I", "I": "S"}
+        def edges(first, second):
+            return {"left": opposite[codes[first]], "right": codes[first],
+                    "top": codes[second], "bottom": opposite[codes[second]]}
+        direction_labels = {
+            "axial": edges(0, 1), "coronal": edges(0, 2), "sagittal": edges(1, 2)
+        }
+        sidecar_path = _matching_json(path)
+        sidecar = None
+        sidecar_error = None
+        if sidecar_path and sidecar_path.is_file():
+            try:
+                sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                sidecar_error = str(exc)
+
+        review_annotations = {}
+        try:
+            review_items, review_state_path = self._imaging_review_items()
+            review_state = self._load_review_state(review_state_path)
+            resolved = path.resolve()
+            for candidate in review_items:
+                linked_paths = [
+                    candidate.get("prepared_path"), candidate.get("scrubbed_path"),
+                    candidate.get("review_defaced_path"), candidate.get("accepted_defaced_path")
+                ]
+                if any(p and Path(p).resolve() == resolved for p in linked_paths):
+                    review_annotations = review_state.get(candidate["key"], {}).get("direction_annotations", {})
+                    break
+        except (OSError, ValueError, KeyError):
+            pass
+
         return {
+            "orientation_labels": direction_labels,
+            "direction_annotations": review_annotations,
+            "linked_json": sidecar,
+            "linked_json_path": str(sidecar_path) if sidecar_path else "",
+            "linked_json_error": sidecar_error,
             "path": str(
                 path
             ),
