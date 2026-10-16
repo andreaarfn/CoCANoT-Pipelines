@@ -1766,7 +1766,7 @@ function ImagingPatientReview({
           {(!preview.linked_is_bids_export || !preview.linked_json_has_cocanot_metadata) && (
             <p className={styles.linkedJsonEmpty} style={{ padding: "9px 14px", margin: 0 }}>
               {!preview.linked_is_bids_export
-                ? "Showing a pre-export NIfTI. Complete Step 5 to create the standardized BIDS filename and combined sidecar JSON."
+                ? "This viewer opened the earlier processed NIfTI and its processing JSON, not a verified Step 5 BIDS export. This does not mean Step 5 was never completed. The saved BIDS link may be missing, outdated, or pointing to a different output folder."
                 : "This existing BIDS JSON predates the complete CoCANoT metadata export. Re-export from Step 5 to update the actual JSON file."}
             </p>
           )}
