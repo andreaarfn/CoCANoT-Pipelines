@@ -2428,7 +2428,6 @@ function ImagingReview({
     try {
       const result = await bridge.imaging_review_save_orientation_verification(selectedId, decision, orientationNotes);
       setReview(result);
-      await loadItems();
       await loadItem(selectedId, reviewCoordsRef.current);
       await onStateRefresh?.();
     } catch (error) {
