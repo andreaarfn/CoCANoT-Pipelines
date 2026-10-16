@@ -9589,8 +9589,8 @@ class CoCANoTAPI:
             if not isinstance(payload, dict):
                 return False
             embedded = payload.get("CoCANoTMetadata", {})
-            if not isinstance(embedded, dict) or not embedded:
-                return False
+            if not isinstance(embedded, dict):
+                embedded = {}
             patient = str(payload.get("CoCANoTPatientID") or embedded.get("CoCANoT Patient ID") or "").strip()
             image_id = str(payload.get("ImageID") or embedded.get("Image ID") or "").strip()
             return bool(expected_patient and expected_image and patient == expected_patient and image_id == expected_image)
@@ -9608,8 +9608,15 @@ class CoCANoTAPI:
                 if matches_export(candidate):
                     return candidate.resolve()
 
+        # Older patient records may predate the BIDS link or complete sidecar.
+        # Permit their explicitly linked image for review, but never claim it
+        # is a Step 5 export. The frontend displays its actual source status.
+        for candidate in self._metadata_record_file_candidates(record, kind="imaging"):
+            if candidate.is_file() and _is_nifti(candidate):
+                return candidate.resolve()
+
         raise FileNotFoundError(
-            "No matching Step 5 BIDS image and JSON export was found for "
+            "No accessible linked imaging file was found for "
             f"CoCANoT Patient ID {expected_patient or '(missing)'} and "
             f"Image ID {expected_image or '(missing)'}. "
             "Complete or repeat Step 5 BIDS export, then reopen Review Linked Image. "
