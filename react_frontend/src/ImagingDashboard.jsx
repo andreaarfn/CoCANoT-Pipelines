@@ -2552,6 +2552,15 @@ function ImagingReview({
 
               <section className={styles.card}>
                 <h3>Interactive raw versus defaced image review</h3>
+                {review.display_orientation && (
+                  <p className={styles.helpText}>
+                    Source axis orientation: {(review.display_orientation.raw_original ?? []).join("") || "Unknown"}.
+                    {" "}Review display: {(review.display_orientation.canonical ?? []).join("") || "Unknown"}.
+                    {review.display_orientation.reoriented_for_display
+                      ? " Image axes have been normalized for viewing only; source NIfTI data is unchanged."
+                      : " Source axes already match the review display orientation."}
+                  </p>
+                )}
                 <div className={styles.imageGrid}>
                   <ImageView key={`${selectedId}-raw-axial`} label="Raw Axial" sourcePlane="Axial" is4D={Boolean(review.is_4d)} src={review.views.raw_axial} automaticLabels={review.orientation_labels?.raw_axial} edits={imageReviewEdits[`${selectedId}:raw_axial`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:raw_axial`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
                   <ImageView key={`${selectedId}-raw-coronal`} label="Raw Coronal" sourcePlane="Coronal" is4D={Boolean(review.is_4d)} src={review.views.raw_coronal} automaticLabels={review.orientation_labels?.raw_coronal} edits={imageReviewEdits[`${selectedId}:raw_coronal`] ?? {}} onEdit={patch => setImageReviewEdits(current => { const id = `${selectedId}:raw_coronal`; return { ...current, [id]: { ...(current[id] ?? {}), ...patch } }; })} />
