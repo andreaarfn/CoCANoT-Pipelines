@@ -1845,6 +1845,16 @@ function ImagingBidsStep({
           </div>
         )}
 
+        {records.some(record => record.record_state === "recorded_export_missing") && (
+          <div className={styles.notice} role="status">
+            <strong>Restore missing BIDS exports:</strong> The patient metadata record is already saved,
+            but its final imaging file or matching JSON was not found. Select the affected
+            image, check its <strong>Include</strong> box, review its saved CoCANoT metadata,
+            and use <strong>Review Metadata &amp; Convert</strong> to recreate the BIDS output.
+            You do not need to delete the patient record or repeat Steps 1–4.
+            Only include the images you intend to export.
+          </div>
+        )}
         <div className={styles.bidsTableWrap}>
           <table className={styles.table}>
             <thead>
