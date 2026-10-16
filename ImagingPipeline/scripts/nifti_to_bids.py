@@ -962,9 +962,14 @@ def build_bids_base(
 
 
 
-    if run_override is not None:
-
-        parts.append(f"run-{run_override:02d}")
+    # Use a numeric Image ID suffix as the BIDS run entity when present.
+    # Non-numeric Image IDs keep standard subject/session/modality naming.
+    image_id = str(record.get("cocanot_metadata", {}).get("Image ID", "") or "")
+    image_number = re.search(r"(\\d+)$", image_id)
+    inferred_run = int(image_number.group(1)) if image_number else None
+    run_number = run_override if run_override is not None else inferred_run
+    if run_number is not None:
+        parts.append(f"run-{run_number:02d}")
 
 
 
@@ -998,7 +1003,10 @@ def choose_output_base(
 
 
 
-    for run in range(2, 10000):
+    image_id = str(record.get("cocanot_metadata", {}).get("Image ID", "") or "")
+    match = re.search(r"(\\d+)$", image_id)
+    first_free_run = max(2, int(match.group(1)) + 1) if match else 2
+    for run in range(first_free_run, 10000):
 
         candidate = build_bids_base(
 
