@@ -1285,7 +1285,7 @@ export default function BatchImportWorkflow({
       ));
       return;
     }
-    if (!rowCanImport(selected)) return;
+    if (!rowCanImport(selected) && (!scopedPatientId || rowPatientId(selected) === normalizedPatientId(scopedPatientId))) return;
 
     if (scopedPatientId && rowPatientId(selected) !== normalizedPatientId(scopedPatientId)) {
       const sourceId = rowPatientId(selected) || "(blank)";
@@ -2089,6 +2089,13 @@ export default function BatchImportWorkflow({
           then explicitly import accepted records.
 
         </p>
+        {scopedPatientId && (
+          <p>
+            Importing for patient <strong>{normalizedPatientId(scopedPatientId)}</strong>.
+            All uploaded rows are shown, but only this patient's eligible rows are selected.
+            Selecting another patient's row requires confirming reassignment.
+          </p>
+        )}
 
       </header>
 
