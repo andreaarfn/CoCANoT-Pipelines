@@ -423,7 +423,8 @@ export default function BatchImportWorkflow({
   function refreshIncludeFlags(activeRows, previousRows = null) {
     return (activeRows ?? []).map((row, index) => ({
       ...row,
-      include: rowCanImport(row) && (
+      include: rowCanImport(row) &&
+        (!scopedPatientId || rowPatientId(row) === normalizedPatientId(scopedPatientId)) && (
         previousRows
           ? Boolean(previousRows[index]?.include)
           : !scopedPatientId || rowPatientId(row) === normalizedPatientId(scopedPatientId)
@@ -1094,6 +1095,10 @@ export default function BatchImportWorkflow({
 
 
 
+      // Select only the patient whose Manage One Patient upload was opened.
+      // All other file rows remain visible for optional, confirmed reassignment.
+      stagedRows = refreshIncludeFlags(stagedRows);
+
       stagedRows =
 
         await attachClinicalAssessmentIds(
@@ -1299,7 +1304,9 @@ export default function BatchImportWorkflow({
       try {
         setBusy(true);
         setError("");
-        const refreshed = await validateRowsAgainstBackend(adjusted);
+        let prepared = await attachClinicalAssessmentIds(adjusted);
+        prepared = await attachActualSurgeryDates(prepared);
+        const refreshed = await validateRowsAgainstBackend(prepared);
         setRows(refreshed.rows);
         setValidation(null);
       } catch (err) {
@@ -1874,6 +1881,7 @@ export default function BatchImportWorkflow({
     return (
       rows.length > 0 &&
       rows.every(row => {
+        if (!row.include) return true;
         if (!row?.existing_record_id) {
           return Boolean(
             row?.clinical_resolution === "uploaded" ||
@@ -1951,6 +1959,11 @@ export default function BatchImportWorkflow({
   async function commitRows() {
 
     try {
+      if (scopedPatientId && rows.some(row =>
+        row.include && rowPatientId(row) !== normalizedPatientId(scopedPatientId)
+      )) {
+        throw new Error("An included row belongs to another patient. Confirm reassignment before importing.");
+      }
 
       setBusy(true);
 
