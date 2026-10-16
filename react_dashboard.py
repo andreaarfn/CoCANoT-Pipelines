@@ -7508,11 +7508,42 @@ class CoCANoTAPI:
             for key in sorted(set(raw_header) | set(scrubbed_header))
         ]
 
+        # np.rot90 followed by imsave(origin="lower") makes image screen-right
+        # point along the positive first slice axis and screen-up along the
+        # negative second slice axis. Derive anatomical edges from the affine.
+        def orientation_edges(image):
+            try:
+                codes = nib.aff2axcodes(image.affine)
+                opposite = {"R": "L", "L": "R", "A": "P", "P": "A", "S": "I", "I": "S"}
+                if len(codes) < 3 or any(code not in opposite for code in codes[:3]):
+                    return {}
+                def edges(first, second):
+                    return {
+                        "left": opposite[codes[first]],
+                        "right": codes[first],
+                        "top": opposite[codes[second]],
+                        "bottom": codes[second],
+                    }
+                return {
+                    "axial": edges(0, 1),
+                    "coronal": edges(0, 2),
+                    "sagittal": edges(1, 2),
+                }
+            except (ValueError, TypeError, np.linalg.LinAlgError):
+                return {}
+
+        raw_orientation = orientation_edges(raw_image)
+        defaced_orientation = orientation_edges(defaced_image)
+
         return {
             "id": item["id"],
             "key": item["key"],
             "status": item["status"],
             "defacing_source": item["defacing_source"],
+            "orientation_labels": {
+                **{"raw_" + plane: labels for plane, labels in raw_orientation.items()},
+                **{"defaced_" + plane: labels for plane, labels in defaced_orientation.items()},
+            },
             "shape": list(shape),
             "ndim": len(shape),
             "is_4d": len(shape) == 4,
