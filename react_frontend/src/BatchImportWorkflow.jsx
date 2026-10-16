@@ -446,7 +446,7 @@ export default function BatchImportWorkflow({
 
     const identities = new Map();
 
-    (activeRows ?? []).forEach(row => {
+    (activeRows ?? []).filter(row => row.include).forEach(row => {
       const metadata = row?.metadata ?? {};
       const patientId = String(
         metadata["CoCANoT Patient ID"] ??
@@ -635,6 +635,7 @@ export default function BatchImportWorkflow({
 
         (activeRows ?? [])
 
+          .filter(row => row.include)
           .map(row =>
 
             String(
