@@ -7539,7 +7539,7 @@ class CoCANoTAPI:
                 "field": key,
                 "raw": raw_header.get(key, ""),
                 "scrubbed": scrubbed_header.get(key, ""),
-                "editable": key in EDITABLE_HEADER_FIELDS,
+                "editable": key in image.header,
             }
             for key in sorted(set(raw_header) | set(scrubbed_header))
         ]
@@ -7605,10 +7605,9 @@ class CoCANoTAPI:
         }
 
     def imaging_review_save_header(self, item_id: str | int, field: str, value: str) -> dict[str, Any]:
-        field = str(field or "").strip()
-        if field not in EDITABLE_HEADER_FIELDS:
-            raise ValueError("Only NIfTI text fields are editable.")
+        import ast
 
+        field = str(field or "").strip()
         items, _ = self._imaging_review_items()
         index = int(item_id)
         if index < 0 or index >= len(items):
@@ -7617,13 +7616,64 @@ class CoCANoTAPI:
         scrubbed_path = Path(item["scrubbed_path"])
         image = nib.load(str(scrubbed_path))
         header = image.header.copy()
-        header[field] = str(value or "").encode("utf-8")
-        updated = nib.Nifti1Image(np.asanyarray(image.dataobj), image.affine, header)
-        qform, qform_code = image.get_qform(coded=True)
-        sform, sform_code = image.get_sform(coded=True)
-        updated.set_qform(qform, int(qform_code))
-        updated.set_sform(sform, int(sform_code))
-        nib.save(updated, str(scrubbed_path))
+        if field not in header:
+            raise ValueError("Computed fields such as shape and affine cannot be edited as header text.")
+
+        original_shape = tuple(image.shape)
+        original_affine = np.array(image.affine, copy=True)
+        original_dtype = image.get_data_dtype()
+        original_qform, original_qcode = image.get_qform(coded=True)
+        original_sform, original_scode = image.get_sform(coded=True)
+
+        current = np.asarray(header[field])
+        try:
+            if current.dtype.kind in {"S", "U"}:
+                header[field] = str(value or "").encode("utf-8")
+            else:
+                parsed = ast.literal_eval(str(value).strip())
+                candidate = np.asarray(parsed)
+                if candidate.shape != current.shape:
+                    raise ValueError(f"Expected a value with shape {current.shape}, got {candidate.shape}.")
+                if current.dtype.kind in {"i", "u"}:
+                    numeric = np.asarray(candidate, dtype=np.float64)
+                    if not np.all(np.isfinite(numeric)) or not np.all(numeric == np.floor(numeric)):
+                        raise ValueError("Integer fields require finite whole numbers.")
+                    limits = np.iinfo(current.dtype)
+                    if np.any(numeric < limits.min) or np.any(numeric > limits.max):
+                        raise ValueError("Integer header value is out of range.")
+                if current.dtype.kind == "f" and not np.all(np.isfinite(np.asarray(candidate, dtype=float))):
+                    raise ValueError("Numeric header fields must contain finite values.")
+                header[field] = np.asarray(candidate, dtype=current.dtype)
+        except (SyntaxError, TypeError, OverflowError, ValueError) as exc:
+            raise ValueError(f"Invalid value for NIfTI header field {field}: {exc}") from exc
+
+        updated = nib.Nifti1Image(np.asanyarray(image.dataobj), original_affine, header)
+        updated.set_qform(original_qform, int(original_qcode))
+        updated.set_sform(original_sform, int(original_scode))
+        if (tuple(updated.shape) != original_shape or
+                not np.allclose(updated.affine, original_affine, atol=1e-6, rtol=1e-6) or
+                updated.get_data_dtype() != original_dtype):
+            raise ValueError("This edit would change image geometry or voxel data type. It was not saved.")
+
+        # Validate through a round-trip on a temporary NIfTI before replacing
+        # the original, so invalid edits cannot corrupt the scrubbed image.
+        import os
+        import tempfile
+        with tempfile.NamedTemporaryFile(
+            suffix=".nii.gz" if str(scrubbed_path).endswith(".gz") else ".nii",
+            prefix=".header_edit_", dir=str(scrubbed_path.parent), delete=False
+        ) as temporary:
+            temp_path = Path(temporary.name)
+        try:
+            nib.save(updated, str(temp_path))
+            checked = nib.load(str(temp_path))
+            if (tuple(checked.shape) != original_shape or
+                    not np.allclose(checked.affine, original_affine, atol=1e-6, rtol=1e-6) or
+                    checked.get_data_dtype() != original_dtype):
+                raise ValueError("Header edit failed spatial integrity checks and was not saved.")
+            os.replace(temp_path, scrubbed_path)
+        finally:
+            temp_path.unlink(missing_ok=True)
         self._imaging_log(f"Saved scrubbed NIfTI header edit: {item['key']} | {field}")
         return self.imaging_review_get_item(index)
 
