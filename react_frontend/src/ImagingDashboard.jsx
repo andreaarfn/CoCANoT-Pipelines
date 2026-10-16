@@ -2588,9 +2588,7 @@ function ImagingReview({
                   />
                 )}
 
-                <p className={styles.helpText}>
-                  Use the sliders to move through the complete slice stack. All six panels stay linked. Direction markers are generated from the NIfTI affine. Plane and 4D classifications are suggested from the view and image dimensions; review and override them where necessary. Edits and preview rotation are retained while you remain in Step 4, but do not modify NIfTI orientation, affine metadata, or BIDS exports. Verify questionable orientation against the source.
-                </p>
+
               </section>
 
               <div className={styles.reviewFooter}>
@@ -2667,11 +2665,7 @@ function ImageView({ label, src, automaticLabels, sourcePlane, is4D, edits, onEd
             {IMAGE_PLANES.map(plane => <option value={plane} key={plane}>{plane}</option>)}
           </select>
         </label>
-        <small>
-          {edits.plane ? "Manual review annotation" : "Suggested from the canonical slice extraction"}
-          {is4D ? " · 4D dataset: use the volume slider to inspect time/volume frames." : " · 3D dataset."}
-          {" "}Changing this label does not change the slice or anatomical axes.
-        </small>
+
         <label>
           <input type="checkbox" checked={showLabels} onChange={event => setShowLabels(event.target.checked)} />
           Anatomical direction labels
