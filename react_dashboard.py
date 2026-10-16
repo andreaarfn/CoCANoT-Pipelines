@@ -9866,6 +9866,11 @@ class CoCANoTAPI:
         direction_labels = {
             "axial": edges(0, 1), "coronal": edges(0, 2), "sagittal": edges(1, 2)
         }
+        config_for_preview = load_imaging_config()
+        try:
+            linked_is_bids_export = path.resolve().is_relative_to(config_for_preview.imaging.bids_output_dir.resolve())
+        except (OSError, ValueError):
+            linked_is_bids_export = False
         sidecar_path = _matching_json(path)
         sidecar = None
         sidecar_error = None
@@ -9894,6 +9899,8 @@ class CoCANoTAPI:
         return {
             "orientation_labels": direction_labels,
             "direction_annotations": review_annotations,
+            "linked_is_bids_export": linked_is_bids_export,
+            "linked_json_has_cocanot_metadata": isinstance(sidecar, dict) and isinstance(sidecar.get("CoCANoTMetadata"), dict),
             "linked_json": sidecar,
             "linked_json_path": str(sidecar_path) if sidecar_path else "",
             "linked_json_error": sidecar_error,
