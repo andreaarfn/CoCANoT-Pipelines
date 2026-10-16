@@ -9628,8 +9628,8 @@ class CoCANoTAPI:
             if not isinstance(payload, dict):
                 return False
             embedded = payload.get("CoCANoTMetadata", {})
-            if not isinstance(embedded, dict):
-                embedded = {}
+            if not isinstance(embedded, dict) or not embedded:
+                return False
             patient = str(payload.get("CoCANoTPatientID") or embedded.get("CoCANoT Patient ID") or "").strip()
             image_id = str(payload.get("ImageID") or embedded.get("Image ID") or "").strip()
             return bool(expected_patient and expected_image and patient == expected_patient and image_id == expected_image)
