@@ -11399,7 +11399,7 @@ class CoCANoTAPI:
         metadata using the same surgery ID is a conflict requiring review.
         Existing stored-record comparisons remain the first check.
         """
-        seen: dict[tuple[str, str], tuple[dict[str, Any], int]] = {}
+        seen: dict[tuple[str, str], tuple[dict[str, Any], int, dict[str, Any]]] = {}
         for row in rows:
             metadata = dict(row.get("metadata") or {})
             patient_id = self._canonical_patient_id_for_comparison(
@@ -11414,10 +11414,10 @@ class CoCANoTAPI:
             projection = self._metadata_comparison_projection(metadata, rules)
             row_number = int(row.get("row_number") or 0)
             if key not in seen:
-                seen[key] = (projection, row_number)
+                seen[key] = (projection, row_number, row)
                 continue
 
-            first_projection, first_number = seen[key]
+            first_projection, first_number, first_row = seen[key]
             if first_projection == projection:
                 row["difference_status"] = "Duplicate"
                 row["status"] = "Duplicate"
@@ -11430,6 +11430,23 @@ class CoCANoTAPI:
                     f"Conflicts with row {first_number}: both use Surgery ID "
                     f"{surgery_id} for the same patient but contain different metadata."
                 )
+                # Neither conflicting row is safe to import until reviewed.
+                first_row["difference_status"] = "Needs Review"
+                first_row["status"] = "Needs attention"
+                first_row["proposed_action"] = "Resolve conflicting surgery IDs"
+                first_row["requires_review"] = True
+                first_row["import_allowed"] = False
+                first_row["include"] = False
+                if not any(
+                    item.get("field_name") == "Surgery ID"
+                    and "Conflicting Surgery ID" in item.get("message", "")
+                    for item in first_row.get("problems", [])
+                ):
+                    first_row.setdefault("problems", []).append({
+                        "field_name": "Surgery ID",
+                        "status": "invalid",
+                        "message": f"Conflicting Surgery ID {surgery_id} in row {row_number}.",
+                    })
                 row["difference_status"] = "Needs Review"
                 row["status"] = "Needs attention"
                 row["proposed_action"] = "Resolve conflicting surgery IDs"
