@@ -2513,7 +2513,7 @@ function ImagingReview({
                         >
                           <td>{row.field}</td>
                           <td>{row.raw}</td>
-                          <td>{row.review_override != null ? <><strong>{row.review_override}</strong> <small>(review annotation; file unchanged)</small></> : row.scrubbed}</td>
+                          <td>{row.review_override != null ? <><strong>{row.review_override}</strong> <small>(header annotation; file unchanged)</small></> : row.scrubbed}</td>
                           <td>{row.editable ? "Yes" : "No"}</td>
                         </tr>
                       ))}
@@ -2554,7 +2554,7 @@ function ImagingReview({
                   </div>
                   {review.header_rows.find(row => row.field === editField)?.review_only && (
                     <p className={styles.headerEditNotice}>
-                      <strong>Saved as a review annotation, not a NIfTI header edit.</strong> The value you enter is stored in this image's local review record (under header_review_overrides). The actual NIfTI header remains unchanged, and this annotation is not automatically included in BIDS exports.
+                      <strong>Saved as a header annotation, not a NIfTI header edit.</strong> The value you enter is stored in this image's local review record (under header_annotations). The actual NIfTI header remains unchanged, and this annotation is not automatically included in BIDS exports.
                     </p>
                   )}
                 </div>
