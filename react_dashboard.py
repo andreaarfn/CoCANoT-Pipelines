@@ -3465,21 +3465,31 @@ class CoCANoTAPI:
             return "not_started"
 
         if same_context:
-            prepare_complete = self._verify_prepare_outputs(stages)
+            # A completed output from another cycle is not proof that the
+            # current input selection has passed this stage. Require both
+            # a completion recorded for this source signature and files.
+            prepare_complete = (
+                saved_stages.get("prepare") == "complete"
+                and self._verify_prepare_outputs(stages)
+            )
             scrub_complete = (
                 prepare_complete
+                and saved_stages.get("scrub") == "complete"
                 and self._verify_scrub_outputs(stages)
             )
             deface_complete = (
                 scrub_complete
+                and saved_stages.get("deface") == "complete"
                 and self._verify_deface_outputs(stages)
             )
             review_complete = (
                 deface_complete
+                and saved_stages.get("review") == "complete"
                 and self._verify_review_complete()
             )
             bids_complete = (
                 review_complete
+                and saved_stages.get("metadata_bids") == "complete"
                 and self._verify_bids_complete(config)
             )
 
@@ -3558,69 +3568,20 @@ class CoCANoTAPI:
             "metadata_bids": "not_started",
         }
 
-        detected = False
+        # Never adopt files from an earlier cycle merely because the same
+        # derivatives directory is reused. The previous manifest may belong
+        # to another input set; keep its files but start this selection fresh.
+        if manifest:
+            note = (
+                "Imaging sources or output folders changed. Step completion "
+                "was reset for this selection; existing files were preserved."
+            )
+            self._save_imaging_pipeline_state(config, note=note)
+            return {"source": "selection_changed", "note": note}
 
-        if (
-            not self.dicom_input_paths
-            and self.nifti_input_paths
-            and self._verify_prepare_outputs(stages)
-        ):
-            self.imaging_stage_state["prepare"] = "complete"
-            detected = True
-
-        if (
-            self.imaging_stage_state["prepare"] == "complete"
-            and self._verify_scrub_outputs(stages)
-        ):
-            self.imaging_stage_state["scrub"] = "complete"
-            detected = True
-
-        if (
-            self.imaging_stage_state["scrub"] == "complete"
-            and self._verify_deface_outputs(stages)
-        ):
-            self.imaging_stage_state["deface"] = "complete"
-            detected = True
-
-        if self.imaging_stage_state["deface"] == "complete":
-            if self._verify_review_complete():
-                self.imaging_stage_state["review"] = "complete"
-                detected = True
-            else:
-                try:
-                    items, _ = self._imaging_review_items()
-                except Exception:
-                    items = []
-
-                if items and any(
-                    str(item.get("status", "Pending") or "Pending")
-                    != "Pending"
-                    for item in items
-                ):
-                    self.imaging_stage_state["review"] = "running"
-
-        if (
-            self.imaging_stage_state["review"] == "complete"
-            and self._verify_bids_complete(config)
-        ):
-            self.imaging_stage_state["metadata_bids"] = "complete"
-            detected = True
-
-        note = (
-            "Existing outputs were matched to the current NIfTI selection."
-            if detected
-            else ""
-        )
-
-        self._save_imaging_pipeline_state(
-            config,
-            note=note,
-        )
-
-        return {
-            "source": "detected" if detected else "new",
-            "note": note,
-        }
+        note = "No matching imaging run manifest was found. Process this selection from Step 1."
+        self._save_imaging_pipeline_state(config, note=note)
+        return {"source": "new", "note": note}
 
     @staticmethod
     def _snapshot_imaging_files(
