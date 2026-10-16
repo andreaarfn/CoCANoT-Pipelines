@@ -136,6 +136,8 @@ export default function BatchImportWorkflow({
 
   tableName,
 
+  targetPatientId = "",
+
   onBack,
 
   onFinished,
@@ -143,6 +145,19 @@ export default function BatchImportWorkflow({
   backLabel = "Back to Bulk Upload",
 
 }) {
+
+  const scopedPatientId = String(targetPatientId || "").trim();
+  const normalizedPatientId = value => {
+    const text = String(value ?? "").trim();
+    return /^[0-9]+$/.test(text) ? String(Number(text)).padStart(3, "0") : text;
+  };
+  const rowPatientId = row => normalizedPatientId(
+    row?.metadata?.["CoCANoT Patient ID"] ?? row?.patient_id ?? ""
+  );
+  const rowCanImport = row =>
+    (row?.problems ?? []).length === 0 &&
+    row?.import_allowed !== false &&
+    row?.difference_status !== "Duplicate";
 
   const [step, setStep] = useState(1);
 
@@ -220,7 +235,7 @@ export default function BatchImportWorkflow({
 
 
 
-    rows.forEach(row => {
+    rows.filter(row => row.include).forEach(row => {
 
       const metadata = row?.metadata ?? {};
 
@@ -307,7 +322,7 @@ export default function BatchImportWorkflow({
 
     const unique = new Map();
 
-    rows.forEach(row => {
+    rows.filter(row => row.include).forEach(row => {
       const metadata = row?.metadata ?? {};
       const patientId = String(
         metadata["CoCANoT Patient ID"] ??
@@ -405,25 +420,17 @@ export default function BatchImportWorkflow({
 
 
 
-  function refreshIncludeFlags(activeRows) {
-
-    return (activeRows ?? []).map(row => ({
-
+  function refreshIncludeFlags(activeRows, previousRows = null) {
+    return (activeRows ?? []).map((row, index) => ({
       ...row,
-
-      include:
-
-        (row?.problems ?? []).length === 0 &&
-
-        row?.import_allowed !== false &&
-
-        row?.difference_status !== "Unchanged",
-
+      include: rowCanImport(row) &&
+        (!scopedPatientId || rowPatientId(row) === normalizedPatientId(scopedPatientId)) && (
+        previousRows
+          ? Boolean(previousRows[index]?.include)
+          : !scopedPatientId || rowPatientId(row) === normalizedPatientId(scopedPatientId)
+      ),
     }));
-
   }
-
-
 
   function surgeryDateKey(patientId, surgeryId) {
     return `${String(patientId ?? "").trim()}::${String(
@@ -439,7 +446,7 @@ export default function BatchImportWorkflow({
 
     const identities = new Map();
 
-    (activeRows ?? []).forEach(row => {
+    (activeRows ?? []).filter(row => row.include).forEach(row => {
       const metadata = row?.metadata ?? {};
       const patientId = String(
         metadata["CoCANoT Patient ID"] ??
@@ -628,6 +635,7 @@ export default function BatchImportWorkflow({
 
         (activeRows ?? [])
 
+          .filter(row => row.include)
           .map(row =>
 
             String(
@@ -896,7 +904,7 @@ export default function BatchImportWorkflow({
 
         refreshed = refreshIncludeFlags(
 
-          checked.rows
+          checked.rows, rows
 
         );
 
@@ -904,7 +912,7 @@ export default function BatchImportWorkflow({
 
         refreshed = refreshIncludeFlags(
 
-          refreshed
+          refreshed, rows
 
         );
 
@@ -922,6 +930,7 @@ export default function BatchImportWorkflow({
 
         refreshed
 
+          .filter(row => row.include)
           .filter(
 
             row =>
@@ -1020,7 +1029,7 @@ export default function BatchImportWorkflow({
 
       rows: refreshIncludeFlags(
 
-        checked.rows ?? activeRows
+        checked.rows ?? activeRows, activeRows
 
       ),
 
@@ -1087,6 +1096,10 @@ export default function BatchImportWorkflow({
         );
 
 
+
+      // Select only the patient whose Manage One Patient upload was opened.
+      // All other file rows remain visible for optional, confirmed reassignment.
+      stagedRows = refreshIncludeFlags(stagedRows);
 
       stagedRows =
 
@@ -1264,28 +1277,51 @@ export default function BatchImportWorkflow({
 
 
 
-  function toggleInclude(index) {
+  async function toggleInclude(index) {
+    const selected = rows[index];
+    if (!selected) return;
+    if (selected.include) {
+      setRows(current => current.map((row, i) =>
+        i === index ? { ...row, include: false } : row
+      ));
+      return;
+    }
+    if (!rowCanImport(selected) && (!scopedPatientId || rowPatientId(selected) === normalizedPatientId(scopedPatientId))) return;
 
-    setRows(current =>
+    if (scopedPatientId && rowPatientId(selected) !== normalizedPatientId(scopedPatientId)) {
+      const sourceId = rowPatientId(selected) || "(blank)";
+      const confirmed = window.confirm(
+        `This uploaded row belongs to patient ${sourceId}. Change its CoCANoT Patient ID to ${normalizedPatientId(scopedPatientId)} and include it in this patient's import? This changes the staged row, not the original file.`
+      );
+      if (!confirmed) return;
+      const adjusted = rows.map((row, i) => i === index ? {
+        ...row,
+        metadata: {
+          ...row.metadata,
+          "CoCANoT Patient ID": normalizedPatientId(scopedPatientId),
+        },
+        patient_id: normalizedPatientId(scopedPatientId),
+        include: true,
+      } : row);
+      try {
+        setBusy(true);
+        setError("");
+        let prepared = await attachClinicalAssessmentIds(adjusted);
+        prepared = await attachActualSurgeryDates(prepared);
+        const refreshed = await validateRowsAgainstBackend(prepared);
+        setRows(refreshed.rows);
+        setValidation(null);
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
 
-      current.map((row, rowIndex) =>
-
-        rowIndex === index
-
-          ? {
-
-              ...row,
-
-              include: !row.include,
-
-            }
-
-          : row
-
-      )
-
-    );
-
+    setRows(current => current.map((row, i) =>
+      i === index ? { ...row, include: true } : row
+    ));
   }
 
 
@@ -1818,7 +1854,7 @@ export default function BatchImportWorkflow({
         if (index !== rowIndex) return row;
 
         const unchanged =
-          row?.difference_status === "Unchanged";
+          row?.difference_status === "Duplicate";
 
         return {
           ...row,
@@ -1847,6 +1883,7 @@ export default function BatchImportWorkflow({
     return (
       rows.length > 0 &&
       rows.every(row => {
+        if (!row.include) return true;
         if (!row?.existing_record_id) {
           return Boolean(
             row?.clinical_resolution === "uploaded" ||
@@ -1855,7 +1892,7 @@ export default function BatchImportWorkflow({
         }
 
         if (
-          row?.difference_status === "Unchanged"
+          row?.difference_status === "Duplicate"
         ) {
           return true;
         }
@@ -1873,7 +1910,7 @@ export default function BatchImportWorkflow({
       updated: 0,
       skipped_unchanged: rows.filter(
         row =>
-          row?.difference_status === "Unchanged" ||
+          row?.difference_status === "Duplicate" ||
           row?.clinical_resolution === "existing"
       ).length,
       failed: 0,
@@ -1924,6 +1961,11 @@ export default function BatchImportWorkflow({
   async function commitRows() {
 
     try {
+      if (scopedPatientId && rows.some(row =>
+        row.include && rowPatientId(row) !== normalizedPatientId(scopedPatientId)
+      )) {
+        throw new Error("An included row belongs to another patient. Confirm reassignment before importing.");
+      }
 
       setBusy(true);
 
@@ -2048,6 +2090,13 @@ export default function BatchImportWorkflow({
           then explicitly import accepted records.
 
         </p>
+        {scopedPatientId && (
+          <p>
+            Importing for patient <strong>{normalizedPatientId(scopedPatientId)}</strong>.
+            All uploaded rows are shown, but only this patient's eligible rows are selected.
+            Selecting another patient's row requires confirming reassignment.
+          </p>
+        )}
 
       </header>
 
@@ -2202,22 +2251,6 @@ export default function BatchImportWorkflow({
                   <Upload size={15} />
 
                   Upload / Update Clinical Assessments
-
-                </button>
-
-                <button
-
-                  className={styles.secondary}
-
-                  onClick={refreshSurgicalClinicalLinks}
-
-                  disabled={busy}
-
-                >
-
-                  <RefreshCw size={15} />
-
-                  Re-check Links
 
                 </button>
 
@@ -2768,7 +2801,7 @@ export default function BatchImportWorkflow({
 
             Created {result.created ?? 0}, updated{" "}
 
-            {result.updated ?? 0}, skipped unchanged{" "}
+            {result.updated ?? 0}, skipped duplicate{" "}
 
             {result.skipped_unchanged ?? 0}, failed{" "}
 
@@ -2917,10 +2950,14 @@ export default function BatchImportWorkflow({
             <BatchImportWorkflow
 
               tableName="Clinical"
+              targetPatientId={scopedPatientId}
 
               backLabel="Return to Surgical Review"
 
-              onBack={() => setClinicalAssistOpen(false)}
+              onBack={async () => {
+                setClinicalAssistOpen(false);
+                await refreshSurgicalClinicalLinks();
+              }}
 
               onFinished={async () => {
 
@@ -3331,13 +3368,13 @@ function BatchSummary({
 
             row =>
 
-              row.difference_status === "Unchanged"
+              row.difference_status === "Duplicate"
 
           ).length}
 
         </strong>
 
-        <span>Unchanged</span>
+        <span>Duplicate</span>
 
       </div>
 
@@ -3400,7 +3437,7 @@ function BatchTable({
 
             <th>Patient ID</th>
 
-            <th>Difference</th>
+            <th>Status</th>
 
             <th>Proposed Action</th>
 
@@ -3452,7 +3489,7 @@ function BatchTable({
 
                   className={
 
-                    row.difference_status === "Unchanged"
+                    row.difference_status === "Duplicate"
 
                       ? styles.unchangedBadge
 
@@ -3687,7 +3724,7 @@ function BatchTable({
                 ) : tableName === "Clinical" ? (
                   <div className={styles.clinicalCompareStatus}>
                     {row.existing_record_id ? (
-                      row.difference_status === "Unchanged" ? (
+                      row.difference_status === "Duplicate" ? (
                         <span className={styles.noProblems}>
                           Same as existing
                         </span>

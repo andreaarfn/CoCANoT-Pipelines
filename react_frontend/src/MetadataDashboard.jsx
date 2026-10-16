@@ -644,27 +644,12 @@ export default function MetadataDashboard({
 
 
 
-    await api()?.metadata_create_patient?.(
-
-
-
+    const createdPatient = await api()?.metadata_create_patient?.(
       siteId,
-
-
-
       clean
-
-
-
     );
-
-
-
     await loadPatients();
-
-
-
-    await loadPatient(clean);
+    await loadPatient(createdPatient?.patient_id ?? clean);
 
 
 
@@ -2375,6 +2360,8 @@ export default function MetadataDashboard({
 
 
         tableName={batchImport}
+        targetPatientId={view === "patients" ? loadedPatientId : ""}
+        backLabel={view === "patients" ? "Back to Manage One Patient" : "Back to Bulk Upload"}
 
 
 
@@ -2382,22 +2369,11 @@ export default function MetadataDashboard({
 
 
 
-        onFinished={result => {
-
-
-
-          setMessage(
-
-
-
-            `Imported ${result.imported ?? 0} ${batchImport} record(s).`
-
-
-
-          );
-
-
-
+        onFinished={async result => {
+          setMessage(`Imported ${result.imported ?? 0} ${batchImport} record(s).`);
+          await loadPatients();
+          if (loadedPatientId) await loadPatient(loadedPatientId);
+          await onDataChanged?.();
         }}
 
 
@@ -3211,11 +3187,7 @@ export default function MetadataDashboard({
 
 
 
-                  ? () =>
-
-
-
-                      importRecords(tableName)
+                  ? () => setBatchImport(tableName)
 
 
 

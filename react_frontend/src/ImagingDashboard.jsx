@@ -2552,12 +2552,12 @@ function ImagingReview({
               <section className={styles.card}>
                 <h3>Interactive raw versus defaced image review</h3>
                 <div className={styles.imageGrid}>
-                  <ImageView label="Raw Axial" src={review.views.raw_axial} />
-                  <ImageView label="Raw Coronal" src={review.views.raw_coronal} />
-                  <ImageView label="Raw Sagittal" src={review.views.raw_sagittal} />
-                  <ImageView label="Defaced Axial" src={review.views.defaced_axial} />
-                  <ImageView label="Defaced Coronal" src={review.views.defaced_coronal} />
-                  <ImageView label="Defaced Sagittal" src={review.views.defaced_sagittal} />
+                  <ImageView key={`${selectedId}-raw-axial`} label="Raw Axial" src={review.views.raw_axial} automaticLabels={review.orientation_labels?.raw_axial} />
+                  <ImageView key={`${selectedId}-raw-coronal`} label="Raw Coronal" src={review.views.raw_coronal} automaticLabels={review.orientation_labels?.raw_coronal} />
+                  <ImageView key={`${selectedId}-raw-sagittal`} label="Raw Sagittal" src={review.views.raw_sagittal} automaticLabels={review.orientation_labels?.raw_sagittal} />
+                  <ImageView key={`${selectedId}-defaced-axial`} label="Defaced Axial" src={review.views.defaced_axial} automaticLabels={review.orientation_labels?.defaced_axial} />
+                  <ImageView key={`${selectedId}-defaced-coronal`} label="Defaced Coronal" src={review.views.defaced_coronal} automaticLabels={review.orientation_labels?.defaced_coronal} />
+                  <ImageView key={`${selectedId}-defaced-sagittal`} label="Defaced Sagittal" src={review.views.defaced_sagittal} automaticLabels={review.orientation_labels?.defaced_sagittal} />
                 </div>
 
                 <Slider label="Sagittal X" value={review.x} max={review.limits.x_max} onChange={value => move("x", value)} />
@@ -2573,7 +2573,7 @@ function ImagingReview({
                 )}
 
                 <p className={styles.helpText}>
-                  Use the sliders to move through the complete slice stack. All six panels stay linked.
+                  Use the sliders to move through the complete slice stack. All six panels stay linked. Orientation labels are generated from the NIfTI affine. You can hide or correct the labels for review; corrections do not modify NIfTI orientation, affine metadata, or BIDS exports. Verify questionable orientation against the source.
                 </p>
               </section>
 
@@ -2615,12 +2615,82 @@ function ImagingReview({
   );
 }
 
-function ImageView({ label, src }) {
+const ANATOMICAL_MARKERS = ["", "R", "L", "A", "P", "S", "I"];
+const EDGE_NAMES = ["left", "right", "top", "bottom"];
+
+function ImageView({ label, src, automaticLabels }) {
+  const [rotation, setRotation] = useState(0);
+  const [showLabels, setShowLabels] = useState(true);
+  const [manualLabels, setManualLabels] = useState(null);
+  const [editingLabels, setEditingLabels] = useState(false);
+  const sourceLabels = automaticLabels ?? {};
+  const labels = manualLabels ?? sourceLabels;
+  // CSS rotates clockwise, so direction overlays follow the same movement.
+  const turns = (rotation / 90) % 4;
+  const displayed = { ...labels };
+  for (let n = 0; n < turns; n += 1) {
+    const before = { ...displayed };
+    displayed.top = before.left;
+    displayed.right = before.top;
+    displayed.bottom = before.right;
+    displayed.left = before.bottom;
+  }
+  function changeLabel(edge, value) {
+    setManualLabels(current => ({
+      ...sourceLabels,
+      ...(current ?? {}),
+      [edge]: value,
+    }));
+  }
+
   return (
     <div className={styles.imageView}>
       <span>{label}</span>
+      <div className={styles.imageControls}>
+        <label>
+          <input
+            type="checkbox"
+            checked={showLabels}
+            onChange={event => setShowLabels(event.target.checked)}
+          />
+          Orientation labels
+        </label>
+        <div className={styles.rotationControls} aria-label={`${label} rotation controls`}>
+          <button type="button" title="Rotate 90° left" onClick={() => setRotation(current => (current + 270) % 360)}>↶ 90°</button>
+          <button type="button" title="Rotate 90° right" onClick={() => setRotation(current => (current + 90) % 360)}>↷ 90°</button>
+          <button type="button" title="Reset rotation" onClick={() => setRotation(0)}>Reset</button>
+          <button type="button" onClick={() => setEditingLabels(current => !current)}>{editingLabels ? "Done" : "Edit labels"}</button>
+        </div>
+        {editingLabels && (
+          <div className={styles.orientationEditor}>
+            {EDGE_NAMES.map(edge => (
+              <label key={edge}>
+                {edge}
+                <select value={labels[edge] ?? ""} onChange={event => changeLabel(edge, event.target.value)} aria-label={`${label} ${edge} anatomical label`}>
+                  {ANATOMICAL_MARKERS.map(marker => (
+                    <option key={marker} value={marker}>{marker || "Unknown"}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <button type="button" onClick={() => setManualLabels(null)}>Restore automatic labels</button>
+          </div>
+        )}
+        {!Object.keys(sourceLabels).length && !manualLabels && (
+          <span className={styles.orientationWarning}>Orientation unknown — verify before assigning labels.</span>
+        )}
+      </div>
       <div className={styles.imageCanvas}>
-        {src ? <img src={src} alt={label} /> : <div>Image unavailable</div>}
+        {src ? (
+          <>
+            <img src={src} alt={label} style={{ transform: `rotate(${rotation}deg)` }} />
+            {showLabels && EDGE_NAMES.map(edge => displayed[edge] ? (
+              <span key={edge} className={styles[`imageSide${edge[0].toUpperCase() + edge.slice(1)}`]}>
+                {displayed[edge]}
+              </span>
+            ) : null)}
+          </>
+        ) : <div>Image unavailable</div>}
       </div>
     </div>
   );

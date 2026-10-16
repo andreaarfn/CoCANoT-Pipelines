@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 import webview
+from MetadataPipeline.storage.identifiers import normalize_patient_id, normalize_record_id
 import fitz
 from PIL import Image, ImageDraw
 import nibabel as nib
@@ -344,10 +345,10 @@ def _normalize_patient_id(value: Any) -> str:
         for key in ("patient_id", "patientId", "id", "CoCANoT Patient ID"):
             candidate = value.get(key)
             if candidate not in (None, ""):
-                return str(candidate).strip()
+                return normalize_patient_id(candidate)
         return ""
 
-    return str(value or "").strip()
+    return normalize_patient_id(value)
 
 def _exclusive_multiselect_conflicts(
     metadata: dict[str, Any],
@@ -806,14 +807,36 @@ class CoCANoTAPI:
             return {"ok": False, "site_id": "", "message": "Enter both Site ID and Access Code."}
         self.authenticated_site_id = ""
         self._reporting_session_token = ""
+        # The authentication endpoint is a Google Apps Script web app.
+        # Use urllib's POST/redirect handling, matching the verified desktop
+        # diagnostic and avoiding HTTP-client-specific HTML redirect pages.
+        payload = json.dumps({
+            "action": "login",
+            "siteId": normalized,
+            "accessCode": str(access_code).strip(),
+        }).encode("utf-8")
+        login_request = urllib_request.Request(
+            self.REPORTING_ENDPOINT,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "CoCANoT-Desktop/1.0",
+            },
+            method="POST",
+        )
         try:
-            result = self._reporting_request({
-                "action": "login",
-                "siteId": normalized,
-                "accessCode": str(access_code).strip(),
-            })
-        except RuntimeError as exc:
-            return {"ok": False, "site_id": "", "message": str(exc)}
+            with urllib_request.urlopen(login_request, timeout=25) as response:
+                response_body = response.read()
+            result = json.loads(response_body)
+        except HTTPError as exc:
+            return {"ok": False, "site_id": "", "message": f"Authentication service returned HTTP {exc.code}."}
+        except (URLError, TimeoutError, OSError) as exc:
+            return {"ok": False, "site_id": "", "message": f"Authentication connection failed ({type(exc).__name__})."}
+        except (ValueError, UnicodeDecodeError):
+            return {"ok": False, "site_id": "", "message": "Authentication service returned non-JSON data. Check the desktop HTTP connection."}
+        if not isinstance(result, dict):
+            return {"ok": False, "site_id": "", "message": "Invalid authentication service response."}
         if result.get("ok") is not True:
             return {"ok": False, "site_id": "", "message": str(result.get("error") or "Site authentication failed.")}
         returned_site = normalize_site_id(result.get("site_id"))
@@ -1757,6 +1780,11 @@ class CoCANoTAPI:
                     field_name
                 ] = ""
 
+        if "CoCANoT Patient ID" in normalized:
+            normalized["CoCANoT Patient ID"] = normalize_patient_id(normalized["CoCANoT Patient ID"])
+        for table, field in (("Surgical", "Surgery ID"), ("Imaging", "Image ID"), ("Electrophysiology", "Recording ID")):
+            if field in normalized:
+                normalized[field] = normalize_record_id(table, normalized[field])
         return normalized
 
     @staticmethod
@@ -7480,11 +7508,42 @@ class CoCANoTAPI:
             for key in sorted(set(raw_header) | set(scrubbed_header))
         ]
 
+        # np.rot90 followed by imsave(origin="lower") makes image screen-right
+        # point along the positive first slice axis and screen-up along the
+        # negative second slice axis. Derive anatomical edges from the affine.
+        def orientation_edges(image):
+            try:
+                codes = nib.aff2axcodes(image.affine)
+                opposite = {"R": "L", "L": "R", "A": "P", "P": "A", "S": "I", "I": "S"}
+                if len(codes) < 3 or any(code not in opposite for code in codes[:3]):
+                    return {}
+                def edges(first, second):
+                    return {
+                        "left": opposite[codes[first]],
+                        "right": codes[first],
+                        "top": opposite[codes[second]],
+                        "bottom": codes[second],
+                    }
+                return {
+                    "axial": edges(0, 1),
+                    "coronal": edges(0, 2),
+                    "sagittal": edges(1, 2),
+                }
+            except (ValueError, TypeError, np.linalg.LinAlgError):
+                return {}
+
+        raw_orientation = orientation_edges(raw_image)
+        defaced_orientation = orientation_edges(defaced_image)
+
         return {
             "id": item["id"],
             "key": item["key"],
             "status": item["status"],
             "defacing_source": item["defacing_source"],
+            "orientation_labels": {
+                **{"raw_" + plane: labels for plane, labels in raw_orientation.items()},
+                **{"defaced_" + plane: labels for plane, labels in defaced_orientation.items()},
+            },
             "shape": list(shape),
             "ndim": len(shape),
             "is_4d": len(shape) == 4,
@@ -9197,7 +9256,7 @@ class CoCANoTAPI:
     ) -> dict[str, Any]:
         """Return the same grouped local records used by PatientExplorer."""
         site_id = str(site_id or "").strip()
-        patient_id = str(patient_id or "").strip()
+        patient_id = self._resolve_existing_patient_id(patient_id)
 
         result: dict[str, Any] = {
             "patient_id": patient_id,
@@ -9997,13 +10056,16 @@ class CoCANoTAPI:
         patient_id: str,
     ) -> dict[str, Any]:
         site_id = str(site_id or "").strip()
-        patient_id = str(patient_id or "").strip()
+        patient_id = normalize_patient_id(patient_id)
 
         if not site_id:
             raise ValueError("Site ID is required.")
 
         if not patient_id:
             raise ValueError("Patient ID is required.")
+
+        # Use an existing legacy spelling rather than creating a second patient.
+        patient_id = self._resolve_existing_patient_id(patient_id) or patient_id
 
         exists = getattr(
             self.repository,
@@ -10346,6 +10408,9 @@ class CoCANoTAPI:
             ),
             rules,
         )
+        # Preserve links to pre-normalization patient keys until a database migration.
+        if clean.get("CoCANoT Patient ID"):
+            clean["CoCANoT Patient ID"] = self._resolve_existing_patient_id(clean["CoCANoT Patient ID"])
 
         exclusive_problems = (
             _exclusive_multiselect_conflicts(
@@ -10441,6 +10506,26 @@ class CoCANoTAPI:
                     for item in bad[:20]
                 )
             )
+
+        # Do not silently merge or duplicate records whose older IDs
+        # would collide with the new canonical format. Migrate them explicitly.
+        identifier_field = {
+            "Surgical": "Surgery ID",
+            "Imaging": "Image ID",
+            "Electrophysiology": "Recording ID",
+        }[table_name]
+        canonical_record_id = str(clean.get(identifier_field, "")).strip()
+        for existing in self.repository.records_for_patient(
+            self.get_site_id(), clean.get("CoCANoT Patient ID", ""), table_name
+        ):
+            legacy_id = str(existing.get("record_id", "")).strip()
+            if (legacy_id != canonical_record_id
+                    and normalize_record_id(table_name, legacy_id) == canonical_record_id):
+                raise ValueError(
+                    f"Existing {table_name} record {legacy_id} conflicts with "
+                    f"{canonical_record_id}. Review and migrate legacy record IDs "
+                    "before importing this record to avoid losing associations."
+                )
 
         return self.repository.save_record(
             self.get_site_id(),
@@ -10719,7 +10804,7 @@ class CoCANoTAPI:
         if len(equivalent) == 1:
             return equivalent[0]
 
-        return requested
+        return normalize_patient_id(requested)
 
     @staticmethod
     def _comparison_value(
@@ -11041,8 +11126,8 @@ class CoCANoTAPI:
                     if exact:
                         return {
                             **base,
-                            "difference_status": "Unchanged",
-                            "proposed_action": "Skip unchanged",
+                            "difference_status": "Duplicate",
+                            "proposed_action": "Skip duplicate",
                             "existing_record_id": str(
                                 record.get(
                                     "record_id",
@@ -11108,8 +11193,8 @@ class CoCANoTAPI:
                 ]
                 return {
                     **base,
-                    "difference_status": "Unchanged",
-                    "proposed_action": "Skip unchanged",
+                    "difference_status": "Duplicate",
+                    "proposed_action": "Skip duplicate",
                     "existing_record_id": str(
                         record.get(
                             "record_id",
@@ -11269,12 +11354,12 @@ class CoCANoTAPI:
             return {
                 **base,
                 "difference_status": (
-                    "Unchanged"
+                    "Duplicate"
                     if unchanged
                     else "Changed"
                 ),
                 "proposed_action": (
-                    "Skip unchanged"
+                    "Skip duplicate"
                     if unchanged
                     else "Update existing Surgical record"
                 ),
@@ -11333,6 +11418,77 @@ class CoCANoTAPI:
             )
 
         return problems
+
+    def _flag_surgical_batch_duplicates(
+        self,
+        rows: list[dict[str, Any]],
+        rules: list[dict[str, Any]],
+    ) -> None:
+        """Detect duplicate and conflicting surgery IDs within one upload.
+
+        A repeated row with equivalent metadata is a duplicate; different
+        metadata using the same surgery ID is a conflict requiring review.
+        Existing stored-record comparisons remain the first check.
+        """
+        seen: dict[tuple[str, str], tuple[dict[str, Any], int, dict[str, Any]]] = {}
+        for row in rows:
+            metadata = dict(row.get("metadata") or {})
+            patient_id = self._canonical_patient_id_for_comparison(
+                metadata.get("CoCANoT Patient ID", "")
+            )
+            surgery_id = normalize_record_id(
+                "Surgical", metadata.get("Surgery ID", "")
+            )
+            if not patient_id or not surgery_id:
+                continue
+            key = (patient_id, surgery_id)
+            projection = self._metadata_comparison_projection(metadata, rules)
+            row_number = int(row.get("row_number") or 0)
+            if key not in seen:
+                seen[key] = (projection, row_number, row)
+                continue
+
+            first_projection, first_number, first_row = seen[key]
+            if first_projection == projection:
+                row["difference_status"] = "Duplicate"
+                row["status"] = "Duplicate"
+                row["proposed_action"] = f"Skip duplicate of row {first_number}"
+                row["has_changes"] = False
+                row["import_allowed"] = False
+                row["include"] = False
+            else:
+                detail = (
+                    f"Conflicts with row {first_number}: both use Surgery ID "
+                    f"{surgery_id} for the same patient but contain different metadata."
+                )
+                # Neither conflicting row is safe to import until reviewed.
+                first_row["difference_status"] = "Needs Review"
+                first_row["status"] = "Needs attention"
+                first_row["proposed_action"] = "Resolve conflicting surgery IDs"
+                first_row["requires_review"] = True
+                first_row["import_allowed"] = False
+                first_row["include"] = False
+                if not any(
+                    item.get("field_name") == "Surgery ID"
+                    and "Conflicting Surgery ID" in item.get("message", "")
+                    for item in first_row.get("problems", [])
+                ):
+                    first_row.setdefault("problems", []).append({
+                        "field_name": "Surgery ID",
+                        "status": "invalid",
+                        "message": f"Conflicting Surgery ID {surgery_id} in row {row_number}.",
+                    })
+                row["difference_status"] = "Needs Review"
+                row["status"] = "Needs attention"
+                row["proposed_action"] = "Resolve conflicting surgery IDs"
+                row["requires_review"] = True
+                row["import_allowed"] = False
+                row["include"] = False
+                row.setdefault("problems", []).append({
+                    "field_name": "Surgery ID",
+                    "status": "invalid",
+                    "message": detail,
+                })
 
     def metadata_batch_choose_file(
         self,
@@ -11466,6 +11622,9 @@ class CoCANoTAPI:
                 }
             )
 
+        if table_name == "Surgical":
+            self._flag_surgical_batch_duplicates(preview, rules)
+
         return {
             "ok": True,
             "cancelled": False,
@@ -11498,7 +11657,7 @@ class CoCANoTAPI:
                 for item in preview
                 if item.get(
                     "difference_status"
-                ) == "Unchanged"
+                ) == "Duplicate"
             ),
             "rows": preview,
         }
@@ -11610,6 +11769,9 @@ class CoCANoTAPI:
                 }
             )
 
+        if table_name == "Surgical":
+            self._flag_surgical_batch_duplicates(validated, rules)
+
         return {
             "ok": not any(
                 item["problems"]
@@ -11617,7 +11779,7 @@ class CoCANoTAPI:
                 if bool(item.get("include", True))
                 and item.get(
                     "difference_status"
-                ) != "Unchanged"
+                ) != "Duplicate"
             ),
             "rows": validated,
             "valid_count": sum(
@@ -11645,7 +11807,7 @@ class CoCANoTAPI:
                 for item in validated
                 if item.get(
                     "difference_status"
-                ) == "Unchanged"
+                ) == "Duplicate"
             ),
         }
 
@@ -11664,7 +11826,7 @@ class CoCANoTAPI:
             for item in validated["rows"]
             if item.get(
                 "difference_status"
-            ) == "Unchanged"
+            ) == "Duplicate"
         ]
 
         included = [
@@ -11673,7 +11835,7 @@ class CoCANoTAPI:
             if bool(item.get("include", True))
             and item.get(
                 "difference_status"
-            ) != "Unchanged"
+            ) != "Duplicate"
         ]
 
         blocked = [
@@ -11736,7 +11898,7 @@ class CoCANoTAPI:
                     "row_number": item[
                         "row_number"
                     ],
-                    "status": "Skipped - unchanged",
+                    "status": "Skipped - duplicate",
                     "record_id": str(
                         item.get(
                             "existing_record_id",
@@ -11745,7 +11907,7 @@ class CoCANoTAPI:
                         or ""
                     ),
                     "message": (
-                        "No metadata differences were detected."
+                        "Duplicate metadata already exists."
                     ),
                 }
             )
