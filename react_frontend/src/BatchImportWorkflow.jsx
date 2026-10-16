@@ -930,6 +930,7 @@ export default function BatchImportWorkflow({
 
         refreshed
 
+          .filter(row => row.include)
           .filter(
 
             row =>
@@ -2253,22 +2254,6 @@ export default function BatchImportWorkflow({
 
                 </button>
 
-                <button
-
-                  className={styles.secondary}
-
-                  onClick={refreshSurgicalClinicalLinks}
-
-                  disabled={busy}
-
-                >
-
-                  <RefreshCw size={15} />
-
-                  Re-check Links
-
-                </button>
-
               </div>
 
 
@@ -2969,7 +2954,10 @@ export default function BatchImportWorkflow({
 
               backLabel="Return to Surgical Review"
 
-              onBack={() => setClinicalAssistOpen(false)}
+              onBack={async () => {
+                setClinicalAssistOpen(false);
+                await refreshSurgicalClinicalLinks();
+              }}
 
               onFinished={async () => {
 
