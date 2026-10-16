@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 import webview
+from MetadataPipeline.storage.identifiers import normalize_patient_id, normalize_record_id
 import fitz
 from PIL import Image, ImageDraw
 import nibabel as nib
@@ -1757,6 +1758,11 @@ class CoCANoTAPI:
                     field_name
                 ] = ""
 
+        if "CoCANoT Patient ID" in normalized:
+            normalized["CoCANoT Patient ID"] = normalize_patient_id(normalized["CoCANoT Patient ID"])
+        for table, field in (("Surgical", "Surgery ID"), ("Imaging", "Image ID"), ("Electrophysiology", "Recording ID")):
+            if field in normalized:
+                normalized[field] = normalize_record_id(table, normalized[field])
         return normalized
 
     @staticmethod
@@ -9997,7 +10003,7 @@ class CoCANoTAPI:
         patient_id: str,
     ) -> dict[str, Any]:
         site_id = str(site_id or "").strip()
-        patient_id = str(patient_id or "").strip()
+        patient_id = normalize_patient_id(patient_id)
 
         if not site_id:
             raise ValueError("Site ID is required.")
@@ -10719,7 +10725,7 @@ class CoCANoTAPI:
         if len(equivalent) == 1:
             return equivalent[0]
 
-        return requested
+        return normalize_patient_id(requested)
 
     @staticmethod
     def _comparison_value(
@@ -11041,8 +11047,8 @@ class CoCANoTAPI:
                     if exact:
                         return {
                             **base,
-                            "difference_status": "Unchanged",
-                            "proposed_action": "Skip unchanged",
+                            "difference_status": "Duplicate",
+                            "proposed_action": "Skip duplicate",
                             "existing_record_id": str(
                                 record.get(
                                     "record_id",
@@ -11108,8 +11114,8 @@ class CoCANoTAPI:
                 ]
                 return {
                     **base,
-                    "difference_status": "Unchanged",
-                    "proposed_action": "Skip unchanged",
+                    "difference_status": "Duplicate",
+                    "proposed_action": "Skip duplicate",
                     "existing_record_id": str(
                         record.get(
                             "record_id",
@@ -11269,12 +11275,12 @@ class CoCANoTAPI:
             return {
                 **base,
                 "difference_status": (
-                    "Unchanged"
+                    "Duplicate"
                     if unchanged
                     else "Changed"
                 ),
                 "proposed_action": (
-                    "Skip unchanged"
+                    "Skip duplicate"
                     if unchanged
                     else "Update existing Surgical record"
                 ),
@@ -11498,7 +11504,7 @@ class CoCANoTAPI:
                 for item in preview
                 if item.get(
                     "difference_status"
-                ) == "Unchanged"
+                ) == "Duplicate"
             ),
             "rows": preview,
         }
@@ -11617,7 +11623,7 @@ class CoCANoTAPI:
                 if bool(item.get("include", True))
                 and item.get(
                     "difference_status"
-                ) != "Unchanged"
+                ) != "Duplicate"
             ),
             "rows": validated,
             "valid_count": sum(
@@ -11645,7 +11651,7 @@ class CoCANoTAPI:
                 for item in validated
                 if item.get(
                     "difference_status"
-                ) == "Unchanged"
+                ) == "Duplicate"
             ),
         }
 
@@ -11664,7 +11670,7 @@ class CoCANoTAPI:
             for item in validated["rows"]
             if item.get(
                 "difference_status"
-            ) == "Unchanged"
+            ) == "Duplicate"
         ]
 
         included = [
@@ -11673,7 +11679,7 @@ class CoCANoTAPI:
             if bool(item.get("include", True))
             and item.get(
                 "difference_status"
-            ) != "Unchanged"
+            ) != "Duplicate"
         ]
 
         blocked = [
@@ -11736,7 +11742,7 @@ class CoCANoTAPI:
                     "row_number": item[
                         "row_number"
                     ],
-                    "status": "Skipped - unchanged",
+                    "status": "Skipped - duplicate",
                     "record_id": str(
                         item.get(
                             "existing_record_id",
@@ -11745,7 +11751,7 @@ class CoCANoTAPI:
                         or ""
                     ),
                     "message": (
-                        "No metadata differences were detected."
+                        "Duplicate metadata already exists."
                     ),
                 }
             )
