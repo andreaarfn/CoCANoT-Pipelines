@@ -2360,8 +2360,8 @@ export default function MetadataDashboard({
 
 
         tableName={batchImport}
-        targetPatientId={loadedPatientId || ""}
-        backLabel="Back to Manage One Patient"
+        targetPatientId={view === "patients" ? loadedPatientId : ""}
+        backLabel={view === "patients" ? "Back to Manage One Patient" : "Back to Bulk Upload"}
 
 
 
