@@ -7539,7 +7539,7 @@ class CoCANoTAPI:
                 "field": key,
                 "raw": raw_header.get(key, ""),
                 "scrubbed": scrubbed_header.get(key, ""),
-                "editable": key in image.header,
+                "editable": key not in {"shape", "affine"},
             }
             for key in sorted(set(raw_header) | set(scrubbed_header))
         ]
