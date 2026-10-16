@@ -7534,19 +7534,15 @@ class CoCANoTAPI:
 
         raw_header = self._header_dict(prepared_path)
         scrubbed_header = self._header_dict(scrubbed_path)
-        protected_fields = {
-            "dim", "pixdim", "datatype", "bitpix", "vox_offset",
-            "qform_code", "sform_code", "quatern_b", "quatern_c", "quatern_d",
-            "qoffset_x", "qoffset_y", "qoffset_z",
-            "srow_x", "srow_y", "srow_z", "xyzt_units",
-            "scl_slope", "scl_inter", "magic",
-        }
+        review_overrides = self._load_review_state(self._imaging_review_items()[1]).get(item["key"], {}).get("header_review_overrides", {})
         header_rows = [
             {
                 "field": key,
                 "raw": raw_header.get(key, ""),
                 "scrubbed": scrubbed_header.get(key, ""),
-                "editable": key not in protected_fields and key not in {"shape", "affine"},
+                "editable": True,
+                "review_only": key in {"shape", "affine", "dim", "pixdim", "datatype", "bitpix", "vox_offset", "qform_code", "sform_code", "quatern_b", "quatern_c", "quatern_d", "qoffset_x", "qoffset_y", "qoffset_z", "srow_x", "srow_y", "srow_z", "xyzt_units", "scl_slope", "scl_inter", "magic"},
+                "review_override": review_overrides.get(key),
             }
             for key in sorted(set(raw_header) | set(scrubbed_header))
         ]
@@ -7623,16 +7619,26 @@ class CoCANoTAPI:
         scrubbed_path = Path(item["scrubbed_path"])
         image = nib.load(str(scrubbed_path))
         header = image.header.copy()
-        if field not in header:
-            raise ValueError("Computed fields such as shape and affine cannot be edited as header text.")
-        if field in {
-            "dim", "pixdim", "datatype", "bitpix", "vox_offset",
-            "qform_code", "sform_code", "quatern_b", "quatern_c", "quatern_d",
-            "qoffset_x", "qoffset_y", "qoffset_z",
-            "srow_x", "srow_y", "srow_z", "xyzt_units",
+        review_only_fields = {
+            "shape", "affine", "dim", "pixdim", "datatype", "bitpix",
+            "vox_offset", "qform_code", "sform_code", "quatern_b",
+            "quatern_c", "quatern_d", "qoffset_x", "qoffset_y",
+            "qoffset_z", "srow_x", "srow_y", "srow_z", "xyzt_units",
             "scl_slope", "scl_inter", "magic",
-        }:
-            raise ValueError("This field controls image geometry or voxel interpretation and cannot be changed through the header text editor.")
+        }
+        if field not in header and field not in {"shape", "affine"}:
+            raise ValueError("Unknown header field.")
+        if field in review_only_fields:
+            # Review-only annotation. This does not alter image geometry.
+            _, state_path = self._imaging_review_items()
+            state = self._load_review_state(state_path)
+            record = dict(state.get(item["key"], {}))
+            overrides = dict(record.get("header_review_overrides", {}))
+            overrides[field] = str(value or "")[:4000]
+            record["header_review_overrides"] = overrides
+            state[item["key"]] = record
+            self._save_review_state(state_path, state)
+            return self.imaging_review_get_item(index)
 
         original_shape = tuple(image.shape)
         original_affine = np.array(image.affine, copy=True)
