@@ -7534,7 +7534,8 @@ class CoCANoTAPI:
 
         raw_header = self._header_dict(prepared_path)
         scrubbed_header = self._header_dict(scrubbed_path)
-        review_overrides = self._load_review_state(self._imaging_review_items()[1]).get(item["key"], {}).get("header_review_overrides", {})
+        saved_review = self._load_review_state(self._imaging_review_items()[1]).get(item["key"], {})
+        review_overrides = {**saved_review.get("header_review_overrides", {}), **saved_review.get("header_annotations", {})}
         header_rows = [
             {
                 "field": key,
@@ -7633,9 +7634,10 @@ class CoCANoTAPI:
             _, state_path = self._imaging_review_items()
             state = self._load_review_state(state_path)
             record = dict(state.get(item["key"], {}))
-            overrides = dict(record.get("header_review_overrides", {}))
+            overrides = {**record.get("header_review_overrides", {}), **record.get("header_annotations", {})}
             overrides[field] = str(value or "")[:4000]
-            record["header_review_overrides"] = overrides
+            record["header_annotations"] = overrides
+            record.pop("header_review_overrides", None)
             state[item["key"]] = record
             self._save_review_state(state_path, state)
             return self.imaging_review_get_item(index)
