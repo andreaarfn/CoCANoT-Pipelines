@@ -2901,6 +2901,36 @@
 
 }
 
+.orientationEditor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.orientationEditor label {
+  display: flex;
+  justify-content: space-between;
+  text-transform: capitalize;
+}
+
+.orientationEditor button {
+  grid-column: 1 / -1;
+  padding: 5px 8px;
+  border: 1px solid #cbd7e3;
+  border-radius: 5px;
+  background: white;
+  color: #26384b;
+  cursor: pointer;
+}
+
+.orientationWarning {
+  color: #9b5500;
+  font-size: 10px;
+}
+
+.imageSideTop,
+.imageSideBottom,
 .imageSideLeft,
 .imageSideRight {
   position: absolute;
@@ -2918,6 +2948,8 @@
 
 .imageSideLeft { left: 5px; }
 .imageSideRight { right: 5px; }
+.imageSideTop { top: 5px; left: 50%; transform: translateX(-50%); }
+.imageSideBottom { top: auto; bottom: 5px; left: 50%; transform: translateX(-50%); }
 
 .imageCanvas img {
 
