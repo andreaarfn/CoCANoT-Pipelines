@@ -3449,7 +3449,7 @@ function BatchTable({
 
             <th>Patient ID</th>
 
-            <th>Difference</th>
+            <th>Status</th>
 
             <th>Proposed Action</th>
 
