@@ -2965,6 +2965,7 @@ export default function BatchImportWorkflow({
             <BatchImportWorkflow
 
               tableName="Clinical"
+              targetPatientId={scopedPatientId}
 
               backLabel="Return to Surgical Review"
 
