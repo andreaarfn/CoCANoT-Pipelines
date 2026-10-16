@@ -1511,10 +1511,13 @@ function ImagingPatientReview({
 
 
 
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, margin: "12px 0" }}>
-            <input type="checkbox" checked={showDirectionLabels} onChange={event => setShowDirectionLabels(event.target.checked)} />
-            Show anatomical direction annotations
-          </label>
+          <div className={styles.imageReviewToolbar}>
+            <label className={styles.directionToggle}>
+              <input type="checkbox" checked={showDirectionLabels} onChange={event => setShowDirectionLabels(event.target.checked)} />
+              <span>Anatomical direction annotations</span>
+              <span className={styles.directionToggleStatus}>{showDirectionLabels ? "Visible" : "Hidden"}</span>
+            </label>
+          </div>
           <div className={styles.imageGrid}>
 
 
@@ -1748,7 +1751,32 @@ function ImagingPatientReview({
 
 
 
-    </div>
+    
+      {preview && (
+        <section className={styles.linkedJsonCard}>
+          <div className={styles.linkedJsonHeader}>
+            <div className={styles.linkedJsonHeading}>
+              <strong>Linked JSON file</strong>
+              <span>{preview.linked_json_path ? preview.linked_json_path.split(/[\\/]/).pop() : "No matching JSON sidecar found"}</span>
+            </div>
+            <button type="button" className={styles.refreshButton} onClick={() => setShowLinkedJson(current => !current)} aria-expanded={showLinkedJson}>
+              {showLinkedJson ? "Hide JSON" : "View JSON"}
+            </button>
+          </div>
+          {showLinkedJson && (
+            <div className={styles.linkedJsonContent}>
+              {preview.linked_json_error ? (
+                <p role="alert" className={styles.errorBox}>Could not load linked JSON: {preview.linked_json_error}</p>
+              ) : preview.linked_json != null ? (
+                <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.linked_json, null, 2)}</pre>
+              ) : (
+                <p className={styles.linkedJsonEmpty}>No matching JSON sidecar was found beside the linked NIfTI image.</p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+      </div>
 
 
 
