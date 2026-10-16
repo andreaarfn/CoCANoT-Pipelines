@@ -2433,7 +2433,7 @@ function ImagingReview({
     try {
       const data = await bridge.imaging_review_save_header(selectedId, editField, editValue);
       setReview(data);
-      setEditValue(data.header_rows.find(row => row.field === editField)?.scrubbed ?? "");
+      setEditValue(data.header_rows.find(row => row.field === editField)?.review_override ?? data.header_rows.find(row => row.field === editField)?.scrubbed ?? "");
     } catch (error) {
       alert(`Unable to save header edit: ${String(error)}`);
     }
@@ -2508,12 +2508,12 @@ function ImagingReview({
                           className={editField === row.field ? styles.selectedHeader : ""}
                           onClick={() => {
                             setEditField(row.field);
-                            setEditValue(row.scrubbed ?? "");
+                            setEditValue(row.review_override ?? row.scrubbed ?? "");
                           }}
                         >
                           <td>{row.field}</td>
                           <td>{row.raw}</td>
-                          <td>{row.scrubbed}</td>
+                          <td>{row.review_override != null ? <><strong>{row.review_override}</strong> <small>(review annotation; file unchanged)</small></> : row.scrubbed}</td>
                           <td>{row.editable ? "Yes" : "No"}</td>
                         </tr>
                       ))}
@@ -2542,6 +2542,11 @@ function ImagingReview({
                     />
                   </label>
 
+                  {review.header_rows.find(row => row.field === editField)?.review_only && (
+                    <p className={styles.orientationWarning}>
+                      This field controls image geometry or voxel interpretation. Your edit is saved as a review annotation only; NIfTI file values remain unchanged.
+                    </p>
+                  )}
                   <div className={styles.headerEditActions}>
                     <button
                       type="button"
