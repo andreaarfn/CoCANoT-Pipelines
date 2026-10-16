@@ -2795,6 +2795,69 @@
 
 }
 
+
+/* Step 4 NIfTI header editor */
+.headerEdit {
+  grid-template-columns: minmax(160px, 0.8fr) minmax(240px, 1.7fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.headerEditFieldValue,
+.headerEditValue input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+}
+
+.headerEditValue input {
+  padding: 9px 12px;
+  border: 1px solid #cbd7e3;
+  border-radius: 7px;
+  background: #fff;
+  color: #26384b;
+}
+
+.headerEditActions {
+  align-self: end;
+  justify-content: flex-end;
+}
+
+.headerEditActions button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.headerEditNotice {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #f1dab0;
+  border-radius: 7px;
+  background: #fffaf0;
+  color: #875013;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1050px) {
+  .headerEdit {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  }
+  .headerEditActions {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 720px) {
+  .headerEdit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .headerEditActions {
+    grid-column: 1;
+  }
+}
+
 .imageGrid {
 
   display: grid;
