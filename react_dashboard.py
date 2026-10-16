@@ -11388,6 +11388,60 @@ class CoCANoTAPI:
 
         return problems
 
+    def _flag_surgical_batch_duplicates(
+        self,
+        rows: list[dict[str, Any]],
+        rules: list[dict[str, Any]],
+    ) -> None:
+        """Detect duplicate and conflicting surgery IDs within one upload.
+
+        A repeated row with equivalent metadata is a duplicate; different
+        metadata using the same surgery ID is a conflict requiring review.
+        Existing stored-record comparisons remain the first check.
+        """
+        seen: dict[tuple[str, str], tuple[dict[str, Any], int]] = {}
+        for row in rows:
+            metadata = dict(row.get("metadata") or {})
+            patient_id = self._canonical_patient_id_for_comparison(
+                metadata.get("CoCANoT Patient ID", "")
+            )
+            surgery_id = normalize_record_id(
+                "Surgical", metadata.get("Surgery ID", "")
+            )
+            if not patient_id or not surgery_id:
+                continue
+            key = (patient_id, surgery_id)
+            projection = self._metadata_comparison_projection(metadata, rules)
+            row_number = int(row.get("row_number") or 0)
+            if key not in seen:
+                seen[key] = (projection, row_number)
+                continue
+
+            first_projection, first_number = seen[key]
+            if first_projection == projection:
+                row["difference_status"] = "Duplicate"
+                row["status"] = "Duplicate"
+                row["proposed_action"] = f"Skip duplicate of row {first_number}"
+                row["has_changes"] = False
+                row["import_allowed"] = False
+                row["include"] = False
+            else:
+                detail = (
+                    f"Conflicts with row {first_number}: both use Surgery ID "
+                    f"{surgery_id} for the same patient but contain different metadata."
+                )
+                row["difference_status"] = "Needs Review"
+                row["status"] = "Needs attention"
+                row["proposed_action"] = "Resolve conflicting surgery IDs"
+                row["requires_review"] = True
+                row["import_allowed"] = False
+                row["include"] = False
+                row.setdefault("problems", []).append({
+                    "field_name": "Surgery ID",
+                    "status": "invalid",
+                    "message": detail,
+                })
+
     def metadata_batch_choose_file(
         self,
         table_name: str,
@@ -11519,6 +11573,9 @@ class CoCANoTAPI:
                     **difference,
                 }
             )
+
+        if table_name == "Surgical":
+            self._flag_surgical_batch_duplicates(preview, rules)
 
         return {
             "ok": True,
@@ -11663,6 +11720,9 @@ class CoCANoTAPI:
                     **difference,
                 }
             )
+
+        if table_name == "Surgical":
+            self._flag_surgical_batch_duplicates(validated, rules)
 
         return {
             "ok": not any(
