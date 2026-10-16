@@ -7484,6 +7484,29 @@ class CoCANoTAPI:
         # Normalize temporary review images to nearest RAS+ so storage-axis order
         # cannot be mistaken for sagittal/coronal/axial anatomical orientation.
         # No file is written or modified by this display transformation.
+        # Record suspicious spatial metadata instead of silently trusting an
+        # anatomical plane assignment from potentially inconsistent headers.
+        spatial_warnings = []
+        for name, image in (("Raw", raw_image), ("Defaced", defaced_image)):
+            matrix = np.asarray(image.affine, dtype=float)
+            if not np.all(np.isfinite(matrix)):
+                raise ValueError(f"{name} NIfTI has a non-finite spatial affine.")
+            linear = matrix[:3, :3]
+            if abs(float(np.linalg.det(linear))) < 1e-9:
+                raise ValueError(f"{name} NIfTI has a singular spatial affine; anatomical slice identification is unreliable.")
+            qform, qcode = image.get_qform(coded=True)
+            sform, scode = image.get_sform(coded=True)
+            if int(qcode) > 0 and int(scode) > 0 and not np.allclose(qform, sform, rtol=1e-4, atol=1e-2):
+                spatial_warnings.append(f"{name}: qform and sform disagree; verify anatomical orientation in a trusted viewer.")
+            if int(qcode) == 0 and int(scode) == 0:
+                spatial_warnings.append(f"{name}: no coded qform or sform; anatomical orientation is not reliably established.")
+            lengths = np.linalg.norm(linear, axis=0)
+            if np.any(lengths <= 0):
+                raise ValueError(f"{name} NIfTI has invalid voxel spacing.")
+            directions = linear / lengths
+            if np.max(np.abs(directions), axis=0).min() < 0.98:
+                spatial_warnings.append(f"{name}: oblique acquisition; slices are closest anatomical planes, not exact axial/coronal/sagittal cuts.")
+
         display_raw = nib.as_closest_canonical(raw_image)
         display_defaced = nib.as_closest_canonical(defaced_image)
         if display_raw.shape != display_defaced.shape:
@@ -7560,6 +7583,7 @@ class CoCANoTAPI:
             "shape": list(shape),
             "ndim": len(shape),
             "is_4d": len(shape) == 4,
+            "spatial_warnings": spatial_warnings,
             "display_orientation": {
                 "raw_original": list(nib.aff2axcodes(raw_image.affine)),
                 "defaced_original": list(nib.aff2axcodes(defaced_image.affine)),
