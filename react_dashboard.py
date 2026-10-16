@@ -7443,7 +7443,7 @@ class CoCANoTAPI:
     @staticmethod
     def _slice_png_data_url(array: np.ndarray, low: float, high: float) -> str:
         buffer = io.BytesIO()
-        mpl_image.imsave(buffer, array, cmap="gray", vmin=low, vmax=high, format="png", origin="lower")
+        mpl_image.imsave(buffer, array, cmap="gray", vmin=low, vmax=high, format="png", origin="upper")
         encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
         return "data:image/png;base64," + encoded
 
@@ -7521,9 +7521,9 @@ class CoCANoTAPI:
             for key in sorted(set(raw_header) | set(scrubbed_header))
         ]
 
-        # np.rot90 followed by imsave(origin="lower") makes image screen-right
-        # point along the positive first slice axis and screen-up along the
-        # negative second slice axis. Derive anatomical edges from the affine.
+        # np.rot90 followed by imsave(origin="upper") renders the second
+        # slice axis positive toward screen-up. Match orientation markers
+        # to the actual PNG pixel mapping, not just the stored voxel axes.
         def orientation_edges(image):
             try:
                 codes = nib.aff2axcodes(image.affine)
@@ -7534,8 +7534,8 @@ class CoCANoTAPI:
                     return {
                         "left": opposite[codes[first]],
                         "right": codes[first],
-                        "top": opposite[codes[second]],
-                        "bottom": codes[second],
+                        "top": codes[second],
+                        "bottom": opposite[codes[second]],
                     }
                 return {
                     "axial": edges(0, 1),
