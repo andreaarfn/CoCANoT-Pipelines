@@ -3378,8 +3378,10 @@ class CoCANoTAPI:
         used: set[Path] = set()
         for source in sources:
             for staged in candidates:
-                if staged in used or staged.name != source.name:
+                if staged in used:
                     continue
+                # The staged filename may have changed; a verified byte match
+                # is stronger than requiring the original name.
                 if self._files_match_for_imaging_resume(source, staged):
                     matches.append(staged)
                     used.add(staged)
