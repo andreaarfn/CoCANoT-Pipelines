@@ -2614,10 +2614,15 @@ function ImagingReview({
                     <p>Verify the original image orientation against a trusted reference before accepting. Changing preview flips or rotations does not repair the header.</p>
                   </div>
                 )}
-                {review.spatial_warnings?.some(warning => warning.includes("oblique acquisition")) && (
+                {review.spatial_warnings?.some(warning => warning.includes("oblique acquisition")) ? (
                   <div className={styles.notice} role="note">
-                    <strong>Oblique scan detected (informational)</strong>
-                    <p>At least one image axis aligns less than 98% (0.98) with its closest anatomical axis, corresponding to a tilt greater than approximately 11.5°. This is a viewing characteristic, not automatically a file error. The preview is resampled into straight anatomical planes; the NIfTI remains unchanged.</p>
+                    <strong>Oblique acquisition detected</strong>
+                    <p>At least one image axis aligns less than 98% (0.98) with its nearest anatomical axis, equivalent to a tilt greater than approximately 11.5°. This may be intentional rather than an error. CoCANoT uses the NIfTI spatial coordinates and interpolation to show straight axial, coronal, and sagittal cuts. The original file is unchanged.</p>
+                  </div>
+                ) : (
+                  <div className={styles.notice} role="note">
+                    <strong>How CoCANoT displays anatomical slices</strong>
+                    <p>CoCANoT uses the NIfTI spatial coordinates to show axial, coronal, and sagittal cuts. It estimates values between neighboring voxels when needed (interpolation). Only the preview is resampled; the original image and its header are unchanged.</p>
                   </div>
                 )}
                 {review.display_orientation && (
