@@ -2680,6 +2680,8 @@ function ImageView({ label, src, automaticLabels, sourcePlane, is4D, edits, onEd
   const [showLabels, setShowLabels] = useState(true);
   const [editingLabels, setEditingLabels] = useState(false);
   const rotation = edits.rotation ?? 0;
+  const flipHorizontal = edits.flipHorizontal ?? false;
+  const flipVertical = edits.flipVertical ?? false;
   const manualLabels = edits.manualLabels ?? null;
   const selectedPlane = edits.plane ?? (is4D ? "4D" : sourcePlane);
   const sourceLabels = automaticLabels ?? {};
@@ -2694,6 +2696,8 @@ function ImageView({ label, src, automaticLabels, sourcePlane, is4D, edits, onEd
     displayed.bottom = before.right;
     displayed.left = before.bottom;
   }
+  if (flipHorizontal) [displayed.left, displayed.right] = [displayed.right, displayed.left];
+  if (flipVertical) [displayed.top, displayed.bottom] = [displayed.bottom, displayed.top];
   function changeLabel(edge, value) {
     onEdit({ manualLabels: { ...sourceLabels, ...(manualLabels ?? {}), [edge]: value } });
   }
@@ -2716,9 +2720,12 @@ function ImageView({ label, src, automaticLabels, sourcePlane, is4D, edits, onEd
         <div className={styles.rotationControls} aria-label={`${label} rotation controls`}>
           <button type="button" title="Rotate 90° left" onClick={() => onEdit({ rotation: (rotation + 270) % 360 })}>↶ 90°</button>
           <button type="button" title="Rotate 90° right" onClick={() => onEdit({ rotation: (rotation + 90) % 360 })}>↷ 90°</button>
-          <button type="button" title="Reset rotation" onClick={() => onEdit({ rotation: 0 })}>Reset</button>
+          <button type="button" title="Flip horizontally (display only)" aria-pressed={flipHorizontal} onClick={() => onEdit({ flipHorizontal: !flipHorizontal })}>Flip H{flipHorizontal ? " ✓" : ""}</button>
+          <button type="button" title="Flip vertically (display only)" aria-pressed={flipVertical} onClick={() => onEdit({ flipVertical: !flipVertical })}>Flip V{flipVertical ? " ✓" : ""}</button>
+          <button type="button" title="Reset display orientation" onClick={() => onEdit({ rotation: 0, flipHorizontal: false, flipVertical: false })}>Reset</button>
           <button type="button" onClick={() => setEditingLabels(current => !current)}>{editingLabels ? "Done" : "Edit direction labels"}</button>
         </div>
+        <small>Display adjustments are for review only and do not modify the stored NIfTI.</small>
         {editingLabels && (
           <div className={styles.orientationEditor}>
             {EDGE_NAMES.map(edge => (
@@ -2739,7 +2746,7 @@ function ImageView({ label, src, automaticLabels, sourcePlane, is4D, edits, onEd
       <div className={styles.imageCanvas}>
         {src ? (
           <>
-            <img src={src} alt={`${label} — ${selectedPlane}`} style={{ transform: `rotate(${rotation}deg)` }} />
+            <img src={src} alt={`${label} — ${selectedPlane}`} style={{ transform: `scaleX(${flipHorizontal ? -1 : 1}) scaleY(${flipVertical ? -1 : 1}) rotate(${rotation}deg)` }} />
             {showLabels && EDGE_NAMES.map(edge => displayed[edge] ? (
               <span key={edge} className={styles[`imageSide${edge[0].toUpperCase() + edge.slice(1)}`]}>
                 {displayed[edge]}
