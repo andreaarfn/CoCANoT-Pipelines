@@ -3334,6 +3334,47 @@ class CoCANoTAPI:
 
         return expected
 
+    @staticmethod
+    def _files_match_for_imaging_resume(source: Path, prepared: Path) -> bool:
+        """Verify copied NIfTI contents, not merely a matching filename."""
+        if not source.is_file() or not prepared.is_file():
+            return False
+        if source.stat().st_size != prepared.stat().st_size:
+            return False
+        for path in (source, prepared):
+            if not path.is_file():
+                return False
+        digests = []
+        for path in (source, prepared):
+            digest = hashlib.sha256()
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            digests.append(digest.digest())
+        return digests[0] == digests[1]
+
+    def _verify_selected_nifti_copies(self, converted_dir: Path) -> bool:
+        """Recognize derivatives only for the currently selected NIfTI sources."""
+        if self.dicom_input_paths or not self.nifti_input_paths:
+            return False
+        checked = 0
+        for index, source_text in enumerate(self.nifti_input_paths, start=1):
+            source = Path(source_text).expanduser()
+            if source.is_file() and _is_nifti(source):
+                pairs = [(source, converted_dir / f"nifti-file-{index:03d}" / source.name)]
+            elif source.is_dir():
+                pairs = [
+                    (item, converted_dir / f"nifti-source-{index:03d}" / item.relative_to(source))
+                    for item in sorted(source.rglob("*")) if _is_nifti(item)
+                ]
+            else:
+                return False
+            for original, prepared in pairs:
+                if not self._files_match_for_imaging_resume(original, prepared):
+                    return False
+                checked += 1
+        return checked > 0
+
     def _verify_prepare_outputs(
         self,
         stages: dict[str, Path],
@@ -3588,6 +3629,36 @@ class CoCANoTAPI:
                     "current imaging selection."
                 ),
             }
+
+        # For direct NIfTI uploads, prove that each prepared derivative is a
+        # byte-for-byte copy of the corresponding currently selected source.
+        # This permits recovery when an older manifest is missing/stale, without
+        # treating files from an unrelated source as processed.
+        try:
+            matched_sources = self._verify_selected_nifti_copies(stages["converted"])
+            prepare_complete = matched_sources and self._verify_prepare_outputs(stages)
+            scrub_complete = prepare_complete and self._verify_scrub_outputs(stages)
+            deface_complete = scrub_complete and self._verify_deface_outputs(stages)
+        except (OSError, ValueError):
+            prepare_complete = scrub_complete = deface_complete = False
+
+        if prepare_complete:
+            review_complete = deface_complete and self._verify_review_complete()
+            self.imaging_stage_state = {
+                "prepare": "complete",
+                "scrub": "complete" if scrub_complete else "not_started",
+                "deface": "complete" if deface_complete else "not_started",
+                "review": "complete" if review_complete else "not_started",
+                "metadata_bids": "not_started",
+            }
+            if deface_complete and not review_complete:
+                self._refresh_imaging_review_stage()
+            note = (
+                "Verified selected NIfTI source copies against derivative files; "
+                "restored completed processing stages from matching outputs."
+            )
+            self._save_imaging_pipeline_state(config, note=note)
+            return {"source": "verified_outputs", "note": note}
 
         self.imaging_stage_state = {
             "prepare": "not_started",
