@@ -6257,6 +6257,8 @@ class CoCANoTAPI:
         missing_clinical_assessments: list[dict[str, str]] = []
         normalized_records: list[dict[str, Any]] = []
 
+        seen_image_ids: dict[tuple[str, str], str] = {}
+
         for record in included:
             source_label = str(
                 record.get(
@@ -6297,6 +6299,18 @@ class CoCANoTAPI:
                 )
                 or ""
             ).strip()
+
+            image_id = str(metadata.get("Image ID") or "").strip()
+            if patient_id and image_id:
+                identity = (patient_id, image_id)
+                if identity in seen_image_ids:
+                    problems.append(
+                        f"{source_label}: Patient {patient_id}, Image ID {image_id} "
+                        f"is also assigned to {seen_image_ids[identity]}. "
+                        "Each selected image must have a unique Image ID for the patient."
+                    )
+                    continue
+                seen_image_ids[identity] = source_label
 
             if patient_id:
                 participant_id = (
