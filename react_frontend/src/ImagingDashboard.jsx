@@ -2600,15 +2600,24 @@ function ImagingReview({
                 {review.spatial_warnings?.some(warning => !warning.includes("oblique acquisition")) && (
                   <div role="alert" className={styles.orientationWarning}>
                     <strong>Spatial orientation needs review</strong>
-                    <p>The image's position or direction information may be inconsistent. Please verify its orientation in a trusted medical imaging viewer before accepting it.</p>
-                    {review.spatial_warnings.filter(warning => !warning.includes("oblique acquisition")).map((warning, index) => <p key={index}>{warning}</p>)}
+                    <p>CoCANoT found a specific issue in the NIfTI spatial header:</p>
+                    {review.spatial_warnings.filter(warning => !warning.includes("oblique acquisition")).map((warning, index) => (
+                      <p key={index}>
+                        {warning}
+                        {warning.includes("qform and sform disagree")
+                          ? " The header contains two different voxel-to-anatomy mappings; the software cannot determine which one is correct."
+                          : warning.includes("no coded qform or sform")
+                            ? " Neither standard spatial transform is marked as valid, so the header does not establish a reliable anatomical orientation."
+                            : ""}
+                      </p>
+                    ))}
+                    <p>Verify the original image orientation against a trusted reference before accepting. Changing preview flips or rotations does not repair the header.</p>
                   </div>
                 )}
                 {review.spatial_warnings?.some(warning => warning.includes("oblique acquisition")) && (
                   <div className={styles.notice} role="note">
-                    <strong>Spatial orientation information</strong>
-                    <p>This scan was captured at an angle relative to the standard anatomical planes. This is common and does not by itself mean anything is wrong with the file.</p>
-                    <p>CoCANoT displays straight axial, coronal, and sagittal views for easier review. Only the preview is adjusted; the saved NIfTI image is unchanged.</p>
+                    <strong>Oblique scan detected (informational)</strong>
+                    <p>At least one image axis aligns less than 98% (0.98) with its closest anatomical axis, corresponding to a tilt greater than approximately 11.5°. This is a viewing characteristic, not automatically a file error. The preview is resampled into straight anatomical planes; the NIfTI remains unchanged.</p>
                   </div>
                 )}
                 {review.display_orientation && (
