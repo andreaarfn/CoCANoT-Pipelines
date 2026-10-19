@@ -7545,7 +7545,9 @@ class CoCANoTAPI:
                 data, source, order=1, mode="constant", cval=0.0,
                 prefilter=False,
             )
-            return np.rot90(sampled.reshape(xx.shape))
+            view = np.rot90(sampled.reshape(xx.shape))
+            # Anatomical sagittal convention: anterior on screen-left.
+            return np.fliplr(view) if plane == "sagittal" else view
 
         raw = self._volume_array(raw_image, volume_index)
         clean = self._volume_array(defaced_image, volume_index)
@@ -7594,7 +7596,7 @@ class CoCANoTAPI:
                 return {
                     "axial": edges(0, 1),
                     "coronal": edges(0, 2),
-                    "sagittal": edges(1, 2),
+                    "sagittal": {**edges(1, 2), "left": codes[1], "right": opposite[codes[1]]},
                 }
             except (ValueError, TypeError, np.linalg.LinAlgError):
                 return {}
@@ -9782,13 +9784,13 @@ class CoCANoTAPI:
                     :,
                 ]
             ),
-            "sagittal": np.rot90(
+            "sagittal": np.fliplr(np.rot90(
                 data[
                     x_index,
                     :,
                     :,
                 ]
-            ),
+            )),
         }
 
         codes = nib.aff2axcodes(image.affine)
@@ -9797,7 +9799,7 @@ class CoCANoTAPI:
             return {"left": opposite[codes[first]], "right": codes[first],
                     "top": codes[second], "bottom": opposite[codes[second]]}
         direction_labels = {
-            "axial": edges(0, 1), "coronal": edges(0, 2), "sagittal": edges(1, 2)
+            "axial": edges(0, 1), "coronal": edges(0, 2), "sagittal": {**edges(1, 2), "left": codes[1], "right": opposite[codes[1]]}
         }
         config_for_preview = load_imaging_config()
         try:
