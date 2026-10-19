@@ -5396,7 +5396,34 @@ class CoCANoTAPI:
         accepted = accepted_payload["files"]
 
         if not accepted:
+            # Never imply "all rejected" without checking the review state.
+            try:
+                review_items, _ = self._imaging_review_items()
+                review_statuses = [str(item.get("status", "Pending")) for item in review_items]
+            except Exception:
+                review_statuses = []
+            missing_outputs = sum(
+                1 for status in review_statuses
+                if status in {"Accepted", "Accepted - External"}
+            )
+            if missing_outputs:
+                accepted_warning = (
+                    f"{missing_outputs} image(s) were accepted in Step 4, but their accepted "
+                    "NIfTI files could not be found in the configured derivatives folder. "
+                    "Check your Step 2 folder and the imaging processing log."
+                )
+            elif not review_statuses:
+                accepted_warning = (
+                    "No Step 4 review items were found in the configured derivatives folder. "
+                    "Check that Step 2 still points to the folder used for this run."
+                )
+            else:
+                accepted_warning = (
+                    "No images are currently accepted for export. "
+                    "Return to Step 4 if you intended to include an image."
+                )
             return {
+                "accepted_warning": accepted_warning,
                 "site_id": self.get_site_id(),
                 "records": [],
                 "rules": [
@@ -13523,14 +13550,8 @@ class CoCANoTAPI:
 
         return_code = process.wait()
 
-        message = (
-            f"{description} completed."
-            if return_code == 0
-            else (
-                f"{description} exited with code "
-                f"{return_code}."
-            )
-        )
+        # Report the final outcome only after post-processing verification.
+        # A process returning zero is not necessarily a valid final export.
 
         if (
             return_code == 0
@@ -13550,6 +13571,12 @@ class CoCANoTAPI:
                         f"{exc}"
                     )
                 return_code = 1
+
+        message = (
+            f"{description} completed and verified."
+            if return_code == 0
+            else f"{description} FAILED (exit code {return_code}). Check the processing log; no completed export was confirmed."
+        )
 
         if on_complete is not None:
             try:
