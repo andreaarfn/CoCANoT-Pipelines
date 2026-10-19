@@ -2406,6 +2406,18 @@ function ImagingReview({
   const reviewRequestRef = useRef(0);
   const reviewCoordsRef = useRef({ x: 0, y: 0, z: 0, volume: 0 });
 
+  // Read persisted decisions immediately; the parent stage flag may not
+  // have refreshed yet when revisiting Step 4.
+  const finalReviewStatuses = new Set([
+    "Accepted",
+    "Accepted - External",
+    "Rejected - Not Included",
+    "On Hold - Needs Defaced Replacement",
+  ]);
+  const allReviewDecisionsSaved =
+    items.length > 0 &&
+    items.every(item => finalReviewStatuses.has(String(item.status ?? "").trim()));
+
   useEffect(() => {
     loadItems();
   }, []);
@@ -2725,7 +2737,7 @@ function ImagingReview({
                   <button className={styles.primaryButton} onClick={() => setStatus("Accepted")}>Accept</button>
                   <button
                     className={styles.primaryButton}
-                    disabled={stageState !== "complete"}
+                    disabled={!allReviewDecisionsSaved}
                     onClick={onContinue}
                   >
                     Continue to Step 5: Metadata & BIDS
