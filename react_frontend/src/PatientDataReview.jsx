@@ -1756,6 +1756,20 @@ function ImagingPatientReview({
         <section className={styles.linkedJsonCard}>
           <div className={styles.linkedJsonHeader}>
             <div className={styles.linkedJsonHeading}>
+              <strong>NIfTI header</strong>
+              <span>Header values read from the linked imaging file</span>
+            </div>
+          </div>
+          <div className={styles.linkedJsonContent}>
+            <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.linked_header ?? {}, null, 2)}</pre>
+          </div>
+        </section>
+      )}
+
+      {preview && (
+        <section className={styles.linkedJsonCard}>
+          <div className={styles.linkedJsonHeader}>
+            <div className={styles.linkedJsonHeading}>
               <strong>Linked JSON file</strong>
               <span>{preview.linked_json_path ? preview.linked_json_path.split(/[\\/]/).pop() : "No matching JSON sidecar found"}</span>
             </div>
