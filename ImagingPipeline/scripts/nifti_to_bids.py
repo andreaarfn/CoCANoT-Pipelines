@@ -765,6 +765,7 @@ def validate_record(
         ),
 
         "cocanot_metadata": metadata,
+        "sidecar_metadata": raw.get("sidecar_metadata", None),
 
         "imaging_modality": modality,
 
@@ -1281,6 +1282,19 @@ def copy_record(
 
 
     scrubbed_header = scrubbed_header_metadata(record)
+    edited_sidecar = record.get("sidecar_metadata")
+    if edited_sidecar is not None:
+        if not isinstance(edited_sidecar, dict):
+            raise ValueError("Edited imaging sidecar metadata must be a JSON object.")
+        # Step 5 edits replace the *scrubbed* source metadata, not raw DICOM.
+        # CoCANoT and BIDS identity fields are authored below from validation.
+        reserved = {"CoCANoTMetadata", "CoCANoTSiteID", "CoCANoTPatientID",
+                    "ClinicalAssessmentID", "ImageID", "SurgeryID",
+                    "ImagingModality", "MRISequence", "Defaced"}
+        scrubbed_header = {key: value for key, value in edited_sidecar.items()
+                           if key not in reserved}
+        scrubbed_header = {key: value for key, value in scrubbed_header.items()
+                           if key not in {"SourceFile", "PHIScrubbed", "PHIScrubbedBy", "imaging_session"}}
 
     metadata = record["cocanot_metadata"]
 
