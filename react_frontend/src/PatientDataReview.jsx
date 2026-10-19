@@ -1802,6 +1802,8 @@ function ImagingPatientReview({
 function ImagePanel({ label, src, showDirectionLabels, automaticLabels, annotations }) {
   const overlay = annotations?.manualLabels ?? automaticLabels ?? {};
   const rotation = annotations?.rotation ?? 0;
+  const flipHorizontal = annotations?.flipHorizontal ?? false;
+  const flipVertical = annotations?.flipVertical ?? false;
   const displayed = { ...overlay };
   for (let turn = 0; turn < rotation / 90; turn += 1) {
     const old = { ...displayed };
@@ -1810,6 +1812,8 @@ function ImagePanel({ label, src, showDirectionLabels, automaticLabels, annotati
     displayed.bottom = old.right;
     displayed.left = old.bottom;
   }
+  if (flipHorizontal) [displayed.left, displayed.right] = [displayed.right, displayed.left];
+  if (flipVertical) [displayed.top, displayed.bottom] = [displayed.bottom, displayed.top];
   const positions = {
     top: { top: 6, left: "50%", transform: "translateX(-50%)" },
     bottom: { bottom: 6, left: "50%", transform: "translateX(-50%)" },
@@ -1820,7 +1824,7 @@ function ImagePanel({ label, src, showDirectionLabels, automaticLabels, annotati
     <div className={styles.imagePanel}>
       <span>{label}</span>
       <div style={{ position: "relative", overflow: "hidden" }}>
-        <img src={src} alt={`${label} NIfTI slice`} style={{ transform: `rotate(${rotation}deg)`, objectFit: "contain", maxWidth: "100%" }} />
+        <img src={src} alt={`${label} NIfTI slice`} style={{ transform: `scaleX(${flipHorizontal ? -1 : 1}) scaleY(${flipVertical ? -1 : 1}) rotate(${rotation}deg)`, objectFit: "contain", maxWidth: "100%" }} />
         {showDirectionLabels && Object.entries(positions).map(([edge, position]) =>
           displayed[edge] ? <span key={edge} style={{ position: "absolute", ...position, padding: "2px 5px", borderRadius: 4, background: "rgba(0,0,0,0.8)", color: "white", fontWeight: 700, pointerEvents: "none" }}>{displayed[edge]}</span> : null
         )}
