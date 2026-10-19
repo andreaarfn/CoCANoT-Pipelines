@@ -2609,7 +2609,7 @@ function ImagingReview({
                           <td>{row.field}</td>
                           <td>{row.raw}</td>
                           <td>{row.review_override != null ? <><strong>{row.review_override}</strong> <small>(header annotation; file unchanged)</small></> : row.scrubbed}</td>
-                          <td>{row.editable ? "Yes" : "No"}</td>
+                          <td>{row.review_only ? "Annotation only" : row.editable ? "Yes — saved to NIfTI" : "No"}</td>
                         </tr>
                       ))}
                     </tbody>
