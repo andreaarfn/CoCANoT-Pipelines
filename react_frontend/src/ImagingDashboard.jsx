@@ -2404,6 +2404,8 @@ function ImagingReview({
         await bridge.imaging_review_save_direction_annotations(selectedId, panel, {
           manualLabels: merged.manualLabels ?? null,
           rotation: merged.rotation ?? 0,
+          flipHorizontal: merged.flipHorizontal ?? false,
+          flipVertical: merged.flipVertical ?? false,
         });
       } catch (error) {
         alert(`Unable to save direction annotations: ${String(error)}`);
