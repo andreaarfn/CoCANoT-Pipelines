@@ -10662,7 +10662,7 @@ class CoCANoTAPI:
             raise ValueError("Cannot rename imaging export: unsupported modality.")
         old_base = self._strip_nifti_suffix(old_path)
         session_match = re.search(r"(?:^|_)ses-([A-Za-z0-9+]+)(?:_|$)", old_base)
-        run_match = re.search(r"(?:^|_)run-(\\d+)(?:_|$)", old_base)
+        run_match = re.search(r"(?:^|_)run-(\d+)(?:_|$)", old_base)
         acq_match = re.search(r"(?:^|_)acq-([A-Za-z0-9+]+)(?:_|$)", old_base)
         parts = [f"sub-{self._derive_bids_subject(patient)}"]
         if session_match:
@@ -10700,6 +10700,16 @@ class CoCANoTAPI:
             sidecar["MRISequence"] = self._imaging_sequence_value(metadata)
         else:
             sidecar.pop("MRISequence", None)
+        for field_name, json_key in (
+            ("Purpose of Imaging (multiselect)", "PurposeOfImaging"),
+            ("Timing Relative to Surgery", "TimingRelativeToSurgery"),
+            ("Imaging Findings (multiselect)", "ImagingFindings"),
+            ("Other Imaging Findings (if applicable; free text)", "OtherImagingFindings"),
+            ("Other Purpose of Imaging (if applicable; free text)", "OtherPurposeOfImaging"),
+            ("Comments (free text)", "Comments"),
+        ):
+            if field_name in metadata:
+                sidecar[json_key] = metadata[field_name]
         surgery_id = str(metadata.get("Surgery ID") or "").strip()
         if surgery_id:
             sidecar["SurgeryID"] = surgery_id
@@ -10712,13 +10722,13 @@ class CoCANoTAPI:
                 if source != destination:
                     source.rename(destination)
                     moved.append((source, destination))
-            new_json.write_text(json.dumps(sidecar, indent=2, allow_nan=False) + "\\n", encoding="utf-8")
+            new_json.write_text(json.dumps(sidecar, indent=2, allow_nan=False) + "\n", encoding="utf-8")
             if new_extra.is_file():
                 extra = json.loads(new_extra.read_text(encoding="utf-8"))
                 if not isinstance(extra, dict):
                     extra = {}
                 extra["CoCANoTMetadata"] = dict(metadata)
-                new_extra.write_text(json.dumps(extra, indent=2, allow_nan=False) + "\\n", encoding="utf-8")
+                new_extra.write_text(json.dumps(extra, indent=2, allow_nan=False) + "\n", encoding="utf-8")
         except Exception:
             for source, destination in reversed(moved):
                 if destination.exists():
