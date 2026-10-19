@@ -6649,6 +6649,7 @@ class CoCANoTAPI:
                     "cocanot_metadata": record[
                         "cocanot_metadata"
                     ],
+                    "sidecar_metadata": record.get("sidecar_metadata", {}),
                     "datatype": record["datatype"],
                     "suffix": record["suffix"],
                     "metadata_confirmed": True,
@@ -9794,11 +9795,24 @@ class CoCANoTAPI:
                 return candidate.resolve()
 
         config = load_imaging_config()
-        output_dir = config.imaging.bids_output_dir
-        if output_dir.exists() and expected_patient and expected_image:
-            for candidate in sorted(output_dir.rglob("*.nii.gz")) + sorted(output_dir.rglob("*.nii")):
-                if matches_export(candidate):
-                    return candidate.resolve()
+        output_roots = []
+        for value in (
+            context.get("bids_output_dir"),
+            str(config.imaging.bids_output_dir),
+        ):
+            if not value:
+                continue
+            root = Path(str(value)).expanduser()
+            if root not in output_roots:
+                output_roots.append(root)
+
+        # A patient record can have been exported to a previous destination.
+        # Search its recorded final output folder before the current default.
+        for output_dir in output_roots:
+            if output_dir.is_dir() and expected_patient and expected_image:
+                for candidate in sorted(output_dir.rglob("*.nii.gz")) + sorted(output_dir.rglob("*.nii")):
+                    if matches_export(candidate):
+                        return candidate.resolve()
 
         # Older patient records may predate the BIDS link or complete sidecar.
         # Permit their explicitly linked image for review, but never claim it
@@ -9927,7 +9941,13 @@ class CoCANoTAPI:
         }
         config_for_preview = load_imaging_config()
         try:
-            linked_is_bids_export = path.resolve().is_relative_to(config_for_preview.imaging.bids_output_dir.resolve())
+            linked_is_bids_export = any(
+                path.resolve().is_relative_to(root.resolve())
+                for root in (
+                    config_for_preview.imaging.bids_output_dir,
+                    Path(str((record.get("context") or {}).get("bids_output_dir") or config_for_preview.imaging.bids_output_dir)),
+                )
+            )
         except (OSError, ValueError):
             linked_is_bids_export = False
         linked_header = self._header_dict(path)
