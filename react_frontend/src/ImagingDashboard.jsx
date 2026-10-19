@@ -1450,46 +1450,6 @@ function ImagingBidsStep({
   ]);
 
   useEffect(() => {
-    if (!activeId) return;
-
-    setRecords(current =>
-      current.map(record =>
-        record.id === activeId
-          ? {
-              ...record,
-              project,
-              project_description: projectDescription,
-              session_id: sessionId,
-              cocanot_metadata: JSON.parse(JSON.stringify(draftMetadata)),
-              sidecar_metadata: isValidSidecarText() ? JSON.parse(sidecarText) : record.sidecar_metadata ?? {},
-            }
-          : record
-      )
-    );
-
-    const active = records.find(record => record.id === activeId);
-    const bridge = api();
-    if (!active?.source_key || !bridge?.imaging_bids_save_draft) return;
-
-    bridge.imaging_bids_save_draft({
-      source_key: active.source_key,
-      include: Boolean(active.include),
-      project,
-      project_description: projectDescription,
-      session_id: sessionId,
-      cocanot_metadata: JSON.parse(JSON.stringify(draftMetadata)),
-      sidecar_metadata: isValidSidecarText() ? JSON.parse(sidecarText) : active.sidecar_metadata ?? {},
-    }).catch(() => {});
-  }, [
-    activeId,
-    draftMetadata,
-    project,
-    projectDescription,
-    sessionId,
-    sidecarText,
-  ]);
-
-  useEffect(() => {
     if (
       !autoValidate ||
       autoValidateStartedRef.current ||
@@ -1518,9 +1478,7 @@ function ImagingBidsStep({
 
   function selectRecord(record) {
     setActiveId(record.id);
-    if (!selectedIds.includes(record.id)) {
-      setSelectedIds([record.id]);
-    }
+    // Editing a row must not change which checkboxes are selected.
     loadRecordIntoDraft(record);
   }
 
@@ -1656,28 +1614,57 @@ function ImagingBidsStep({
     return anyMatch;
   }
 
-  function applyToSelected() {
+  async function applyToSelected() {
     if (selectedIds.length === 0) {
-      alert("Select one or more images first.");
+      setProblems(["Select one or more images before applying metadata changes."]);
       return;
     }
-
-    setRecords(current =>
-      current.map(record => {
-        if (!selectedIds.includes(record.id)) return record;
-
-        return {
-          ...record,
-          project,
-          project_description: projectDescription,
-          session_id: sessionId,
-          cocanot_metadata: JSON.parse(JSON.stringify(draftMetadata)),
-          status: "Ready for validation",
-        };
-      })
+    if (!isValidSidecarText()) {
+      setProblems(["Fix the linked JSON metadata before applying changes."]);
+      return;
+    }
+    const selected = new Set(selectedIds);
+    const metadata = JSON.parse(JSON.stringify(draftMetadata));
+    const linkedMetadata = JSON.parse(sidecarText);
+    const updated = records.map(record =>
+      selected.has(record.id)
+        ? {
+            ...record,
+            project,
+            project_description: projectDescription,
+            session_id: sessionId,
+            cocanot_metadata: JSON.parse(JSON.stringify(metadata)),
+            sidecar_metadata: JSON.parse(JSON.stringify(linkedMetadata)),
+            status: "Ready for validation",
+          }
+        : record
     );
-
+    setRecords(updated);
     setProblems([]);
+
+    // Persist only checked rows, sequentially to avoid concurrent edits
+    // racing to rewrite the same on-disk imaging draft JSON.
+    const bridge = api();
+    if (bridge?.imaging_bids_save_draft) {
+      try {
+        setBusy(true);
+        for (const record of updated.filter(record => selected.has(record.id))) {
+          await bridge.imaging_bids_save_draft({
+            source_key: record.source_key,
+            include: Boolean(record.include),
+            project: record.project ?? "",
+            project_description: record.project_description ?? "",
+            session_id: record.session_id ?? "",
+            cocanot_metadata: record.cocanot_metadata ?? {},
+            sidecar_metadata: record.sidecar_metadata ?? {},
+          });
+        }
+      } catch (error) {
+        setProblems([`Changes are shown locally but could not all be saved: ${String(error)}`]);
+      } finally {
+        setBusy(false);
+      }
+    }
   }
 
   function includeSelected(include) {
@@ -1772,10 +1759,7 @@ function ImagingBidsStep({
 
     try {
       setBusy(true);
-      const pending = records.map(record => record.id === activeId
-        ? { ...record, sidecar_metadata: JSON.parse(sidecarText) }
-        : record);
-      const result = await bridge.imaging_bids_validate({ records: pending, overwrite });
+      const result = await bridge.imaging_bids_validate({ records, overwrite });
 
       if (!result?.ok) {
         const missingClinical = result?.missing_clinical_assessments ?? [];
@@ -1814,10 +1798,7 @@ function ImagingBidsStep({
 
     try {
       setBusy(true);
-      const pending = records.map(record => record.id === activeId
-        ? { ...record, sidecar_metadata: JSON.parse(sidecarText) }
-        : record);
-      const result = await bridge.imaging_bids_convert({ records: pending, overwrite });
+      const result = await bridge.imaging_bids_convert({ records, overwrite });
 
       if (!result?.ok) {
         setProblems(result?.problems ?? ["BIDS conversion could not start."]);
@@ -2097,7 +2078,7 @@ function ImagingBidsStep({
                 Exclude Selected
               </button>
 
-              <button className={styles.secondaryButton} onClick={applyToSelected}>
+              <button className={styles.secondaryButton} disabled={busy} onClick={applyToSelected}>
                 Apply to Selected
               </button>
             </div>
