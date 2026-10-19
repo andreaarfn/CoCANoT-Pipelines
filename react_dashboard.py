@@ -9788,6 +9788,26 @@ class CoCANoTAPI:
             image_id = str(payload.get("ImageID") or embedded.get("Image ID") or "").strip()
             return bool(expected_patient and expected_image and patient == expected_patient and image_id == expected_image)
 
+        # The export worker writes authoritative final paths into the data
+        # link store, which may be newer than the patient record context.
+        link = {}
+        if expected_patient and expected_image:
+            try:
+                link = PatientDataLinkStore().get_link(
+                    self.get_site_id(), expected_patient, "Imaging", expected_image
+                ) or {}
+            except (OSError, ValueError):
+                link = {}
+        explicit_link = link.get("bids_data_path")
+        if explicit_link:
+            candidate = Path(str(explicit_link)).expanduser()
+            if matches_export(candidate):
+                return candidate.resolve()
+        for candidate_text in link.get("final_paths", []) or []:
+            candidate = Path(str(candidate_text)).expanduser()
+            if matches_export(candidate):
+                return candidate.resolve()
+
         explicit = context.get("bids_data_path", "")
         if explicit:
             candidate = Path(str(explicit)).expanduser()
@@ -9797,6 +9817,8 @@ class CoCANoTAPI:
         config = load_imaging_config()
         output_roots = []
         for value in (
+            link.get("final_output_root"),
+            context.get("final_output_root"),
             context.get("bids_output_dir"),
             str(config.imaging.bids_output_dir),
         ):
