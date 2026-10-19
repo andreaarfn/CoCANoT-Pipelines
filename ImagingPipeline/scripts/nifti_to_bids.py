@@ -932,105 +932,72 @@ def validate_record(
 
 
 def build_bids_base(
-
     record: Dict[str, Any],
-
     run_override: Optional[int] = None,
-
 ) -> str:
-
+    """Create a BIDS-inspired filename from validated image metadata."""
     parts = [f"sub-{record['participant']}"]
-
-
-
     if record["session"]:
-
         parts.append(f"ses-{record['session']}")
-
-
-
-    acq = str(
-
-        record["bids_entities"].get("acq", "")
-
-    ).strip()
-
-
-
+    acq = str(record["bids_entities"].get("acq", "")).strip()
     if acq:
-
         parts.append(f"acq-{acq}")
-
-
-
-    # Use a numeric Image ID suffix as the BIDS run entity when present.
-    # Non-numeric Image IDs keep standard subject/session/modality naming.
-    image_id = str(record.get("cocanot_metadata", {}).get("Image ID", "") or "")
-    image_number = re.search(r"(\\d+)$", image_id)
-    inferred_run = int(image_number.group(1)) if image_number else None
-    run_number = run_override if run_override is not None else inferred_run
-    if run_number is not None:
-        parts.append(f"run-{run_number:02d}")
-
-
-
+    # A CoCANoT Image ID is a database identifier, not a BIDS run number.
+    if run_override is not None:
+        parts.append(f"run-{run_override:02d}")
     parts.append(record["suffix"])
-
     return "_".join(parts)
 
 
-
-
-
-def choose_output_base(
-
-    data_dir: Path,
-
-    record: Dict[str, Any],
-
-    extension: str,
-
-    overwrite: bool,
-
-) -> str:
-
-    base = build_bids_base(record)
-
-
-
-    if overwrite or not (data_dir / f"{base}{extension}").exists():
-
-        return base
-
-
-
-    image_id = str(record.get("cocanot_metadata", {}).get("Image ID", "") or "")
-    match = re.search(r"(\\d+)$", image_id)
-    first_free_run = max(2, int(match.group(1)) + 1) if match else 2
-    for run in range(first_free_run, 10000):
-
-        candidate = build_bids_base(
-
-            record,
-
-            run_override=run,
-
-        )
-
-        if not (data_dir / f"{candidate}{extension}").exists():
-
-            return candidate
-
-
-
-    raise ValueError(
-
-        f"Could not find an available run number for {base}"
-
+def _base_has_output(data_dir: Path, base: str) -> bool:
+    """Check the whole linked output set, including either NIfTI extension."""
+    return any(
+        (data_dir / f"{base}{suffix}").exists()
+        for suffix in (".nii", ".nii.gz", ".json", "_cocanot.json", ".bval", ".bvec")
     )
 
 
+def _same_export_identity(data_dir: Path, base: str, record: Dict[str, Any]) -> bool:
+    """Only allow overwriting an output positively linked to this image."""
+    sidecar = data_dir / f"{base}.json"
+    if not sidecar.is_file():
+        return False
+    try:
+        metadata = load_json(sidecar)
+    except (OSError, ValueError):
+        return False
+    cocanot = record.get("cocanot_metadata", {})
+    return (
+        str(metadata.get("CoCANoTSiteID", "")) == str(record.get("site_id", ""))
+        and str(metadata.get("CoCANoTPatientID", "")) == str(cocanot.get("CoCANoT Patient ID", ""))
+        and str(metadata.get("ImageID", "")) == str(cocanot.get("Image ID", ""))
+        and bool(str(metadata.get("ImageID", "")).strip())
+    )
 
+
+def choose_output_base(
+    data_dir: Path,
+    record: Dict[str, Any],
+    extension: str,
+    overwrite: bool,
+) -> str:
+    """Use a run number only when the normal filename is already occupied."""
+    base = build_bids_base(record)
+    if not _base_has_output(data_dir, base):
+        return base
+    if overwrite and _same_export_identity(data_dir, base, record):
+        return base
+
+    # Reuse an existing numbered filename only for the identical export
+    # when overwrite was explicitly requested.
+    for run in range(1, 10000):
+        candidate = build_bids_base(record, run_override=run)
+        if not _base_has_output(data_dir, candidate):
+            return candidate
+        if overwrite and _same_export_identity(data_dir, candidate, record):
+            return candidate
+
+    raise ValueError(f"Could not find an available run number for {base}")
 
 
 def source_sidecar_metadata(path: Path) -> Dict[str, Any]:
