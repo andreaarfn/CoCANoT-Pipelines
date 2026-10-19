@@ -10618,6 +10618,121 @@ class CoCANoTAPI:
             saved
         )
 
+    def _sync_edited_imaging_export(
+        self, metadata: dict[str, Any], existing: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Update an already exported image and matching JSON after metadata edits.
+
+        Only operate on a verified final export with a sidecar matching this
+        patient and Image ID. Never rename original/derivative NIfTI files.
+        """
+        if not existing:
+            return None
+        patient = str(metadata.get("CoCANoT Patient ID") or "").strip()
+        image_id = str(metadata.get("Image ID") or "").strip()
+        link_store = PatientDataLinkStore()
+        link = link_store.get_link(self.get_site_id(), patient, "Imaging", image_id) or {}
+        old_context = dict(existing.get("context") or {})
+        candidate_text = str(link.get("bids_data_path") or old_context.get("bids_data_path") or "")
+        if not candidate_text:
+            return None
+        old_path = Path(candidate_text).expanduser()
+        old_json = _matching_json(old_path)
+        if not old_path.is_file() or old_json is None:
+            return None
+        sidecar = json.loads(old_json.read_text(encoding="utf-8"))
+        embedded = sidecar.get("CoCANoTMetadata")
+        if not isinstance(embedded, dict) or (
+            str(embedded.get("CoCANoT Patient ID") or "") != patient
+            or str(embedded.get("Image ID") or "") != image_id
+        ):
+            raise ValueError("Saved imaging sidecar identity does not match the patient record; export was not renamed.")
+        modality = str(metadata.get("Imaging Modality") or "").strip()
+        if modality == "CT":
+            suffix, datatype = "ct", "ct"
+        elif modality == "MRI":
+            sequence = self._imaging_sequence_value(metadata)
+            mapping = {"T1": ("anat", "T1w"), "T2": ("anat", "T2w"),
+                       "FLAIR": ("anat", "FLAIR"), "DWI": ("dwi", "dwi"),
+                       "SWI": ("anat", "T2starw")}
+            if sequence not in mapping:
+                raise ValueError("Cannot rename MRI export: unsupported sequence.")
+            datatype, suffix = mapping[sequence]
+        else:
+            raise ValueError("Cannot rename imaging export: unsupported modality.")
+        old_base = self._strip_nifti_suffix(old_path)
+        session_match = re.search(r"(?:^|_)ses-([A-Za-z0-9+]+)(?:_|$)", old_base)
+        run_match = re.search(r"(?:^|_)run-(\\d+)(?:_|$)", old_base)
+        acq_match = re.search(r"(?:^|_)acq-([A-Za-z0-9+]+)(?:_|$)", old_base)
+        parts = [f"sub-{self._derive_bids_subject(patient)}"]
+        if session_match:
+            parts.append(f"ses-{session_match.group(1)}")
+        if acq_match:
+            parts.append(f"acq-{acq_match.group(1)}")
+        if run_match:
+            parts.append(f"run-{run_match.group(1)}")
+        parts.append(suffix)
+        new_base = "_".join(parts)
+        # Keep the same project and optional session directories; move only
+        # the final datatype directory if the sequence/modality changes.
+        target_dir = old_path.parent if old_path.parent.name == datatype else old_path.parent.parent / datatype
+        extension = ".nii.gz" if old_path.name.endswith(".nii.gz") else ".nii"
+        new_path = target_dir / f"{new_base}{extension}"
+        new_json = target_dir / f"{new_base}.json"
+        old_extra = old_path.with_name(f"{old_base}_cocanot.json")
+        new_extra = target_dir / f"{new_base}_cocanot.json"
+        movements = [(old_path, new_path), (old_json, new_json)]
+        if old_extra.is_file():
+            movements.append((old_extra, new_extra))
+        for suffix_ext in (".bval", ".bvec"):
+            old_associated = old_path.with_name(f"{old_base}{suffix_ext}")
+            if old_associated.is_file():
+                movements.append((old_associated, target_dir / f"{new_base}{suffix_ext}"))
+        for source, destination in movements:
+            if source != destination and destination.exists():
+                raise ValueError(f"Edited imaging filename already exists: {destination}")
+        sidecar["CoCANoTMetadata"] = dict(metadata)
+        sidecar["CoCANoTPatientID"] = patient
+        sidecar["ImageID"] = image_id
+        sidecar["ClinicalAssessmentID"] = metadata.get("Clinical Assessment ID")
+        sidecar["ImagingModality"] = modality
+        if modality == "MRI":
+            sidecar["MRISequence"] = self._imaging_sequence_value(metadata)
+        else:
+            sidecar.pop("MRISequence", None)
+        surgery_id = str(metadata.get("Surgery ID") or "").strip()
+        if surgery_id:
+            sidecar["SurgeryID"] = surgery_id
+        else:
+            sidecar.pop("SurgeryID", None)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        moved = []
+        try:
+            for source, destination in movements:
+                if source != destination:
+                    source.rename(destination)
+                    moved.append((source, destination))
+            new_json.write_text(json.dumps(sidecar, indent=2, allow_nan=False) + "\\n", encoding="utf-8")
+            if new_extra.is_file():
+                extra = json.loads(new_extra.read_text(encoding="utf-8"))
+                if not isinstance(extra, dict):
+                    extra = {}
+                extra["CoCANoTMetadata"] = dict(metadata)
+                new_extra.write_text(json.dumps(extra, indent=2, allow_nan=False) + "\\n", encoding="utf-8")
+        except Exception:
+            for source, destination in reversed(moved):
+                if destination.exists():
+                    destination.rename(source)
+            raise
+        updated = {**old_context, **link, "bids_data_path": str(new_path.resolve()),
+                   "bids_sidecar_path": str(new_json.resolve()),
+                   "final_output_root": str(Path(link.get("final_output_root") or old_context.get("bids_output_dir") or new_path.parent.parent).resolve()),
+                   "final_paths": [str(dest.resolve()) for _, dest in movements]}
+        if new_extra.is_file():
+            updated["cocanot_metadata_path"] = str(new_extra.resolve())
+        link_store.save_link(self.get_site_id(), patient, "Imaging", image_id, updated)
+        return updated
+
     def metadata_save_record(
         self,
         table_name: str,
@@ -10805,14 +10920,20 @@ class CoCANoTAPI:
                     "before importing this record to avoid losing associations."
                 )
 
+        saved_context = dict(context or {})
+        if table_name == "Imaging":
+            existing_record = self.repository.get_record(
+                self.get_site_id(), "Imaging", canonical_record_id,
+                patient_id=clean.get("CoCANoT Patient ID", "")
+            )
+            synced = self._sync_edited_imaging_export(clean, existing_record)
+            if synced is not None:
+                saved_context.update(synced)
+            elif existing_record:
+                saved_context = {**dict(existing_record.get("context") or {}), **saved_context}
         return self.repository.save_record(
-            self.get_site_id(),
-            table_name,
-            clean,
-            source="metadata_dashboard",
-            context=dict(
-                context or {}
-            ),
+            self.get_site_id(), table_name, clean,
+            source="metadata_dashboard", context=saved_context,
         )
 
     def metadata_validate_record(
