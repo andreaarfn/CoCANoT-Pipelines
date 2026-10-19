@@ -2597,10 +2597,18 @@ function ImagingReview({
 
               <section className={styles.card}>
                 <h3>Interactive raw versus defaced image review</h3>
-                {review.spatial_warnings?.length > 0 && (
+                {review.spatial_warnings?.some(warning => !warning.includes("oblique acquisition")) && (
                   <div role="alert" className={styles.orientationWarning}>
-                    <strong>Check spatial orientation before accepting:</strong>
-                    {review.spatial_warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+                    <strong>Spatial orientation needs review</strong>
+                    <p>The image's position or direction information may be inconsistent. Please verify its orientation in a trusted medical imaging viewer before accepting it.</p>
+                    {review.spatial_warnings.filter(warning => !warning.includes("oblique acquisition")).map((warning, index) => <p key={index}>{warning}</p>)}
+                  </div>
+                )}
+                {review.spatial_warnings?.some(warning => warning.includes("oblique acquisition")) && (
+                  <div className={styles.notice} role="note">
+                    <strong>Spatial orientation information</strong>
+                    <p>This scan was captured at an angle relative to the standard anatomical planes. This is common and does not by itself mean anything is wrong with the file.</p>
+                    <p>CoCANoT displays straight axial, coronal, and sagittal views for easier review. Only the preview is adjusted; the saved NIfTI image is unchanged.</p>
                   </div>
                 )}
                 {review.display_orientation && (
