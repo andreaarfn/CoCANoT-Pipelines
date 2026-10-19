@@ -9954,6 +9954,7 @@ class CoCANoTAPI:
             "direction_annotations": review_annotations,
             "linked_is_bids_export": linked_is_bids_export,
             "linked_json_has_cocanot_metadata": isinstance(sidecar, dict) and isinstance(sidecar.get("CoCANoTMetadata"), dict),
+            "record_cocanot_metadata": dict(record.get("metadata") or {}),
             "linked_header": linked_header,
             "linked_json": sidecar,
             "linked_json_path": str(sidecar_path) if sidecar_path else "",
