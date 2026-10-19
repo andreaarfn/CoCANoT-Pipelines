@@ -6694,136 +6694,33 @@ class CoCANoTAPI:
                 "--overwrite"
             )
 
-        site_id = self.get_site_id()
-        saved_count = 0
-
-        for record in included:
-            metadata = dict(
-                record["cocanot_metadata"]
-            )
-            patient_id = str(
-                metadata.get(
-                    "CoCANoT Patient ID",
-                    "",
-                )
-                or ""
-            ).strip()
-            image_id = str(
-                metadata.get(
-                    "Image ID",
-                    "",
-                )
-                or ""
-            ).strip()
-
-            if not patient_id:
-                raise ValueError(
-                    "CoCANoT Patient ID is required before Imaging metadata can be saved."
-                )
-
-            if not image_id:
-                raise ValueError(
-                    "Image ID is required before Imaging metadata can be saved."
-                )
-
-            context = {
-                "project": record["project"],
-                "project_description": str(
-                    record.get(
-                        "project_description",
-                        "",
-                    )
-                    or ""
-                ),
-                "session_id": str(
-                    record.get(
-                        "session_id",
-                        "",
-                    )
-                    or ""
-                ),
-                "source_label": str(
-                    record.get(
-                        "source_label",
-                        "",
-                    )
-                    or ""
-                ),
-                "source_key": str(
-                    record.get(
-                        "source_key",
-                        "",
-                    )
-                    or ""
-                ),
-                "nifti_path": str(
-                    record.get(
-                        "nifti_path",
-                        "",
-                    )
-                    or ""
-                ),
-                "defacing_source": str(
-                    record.get(
-                        "defacing_source",
-                        "pydeface",
-                    )
-                    or "pydeface"
-                ),
-                "bids_output_dir": str(
-                    output_dir
-                ),
-            }
-
-            self.metadata_save_record(
-                "Imaging",
-                metadata,
-                context=context,
-            )
-
-            patient_summary = self.metadata_get_patient(
-                site_id,
-                patient_id,
-            )
-            verified = any(
-                str(
-                    saved.get(
-                        "record_id",
-                        "",
-                    )
-                    or ""
-                ).strip() == image_id
-                or str(
-                    (
-                        saved.get(
-                            "metadata",
-                            {},
-                        )
-                        or {}
-                    ).get(
-                        "Image ID",
-                        "",
-                    )
-                    or ""
-                ).strip() == image_id
-                for saved in patient_summary.get(
-                    "imaging",
-                    [],
-                )
-            )
-
-            if not verified:
-                raise RuntimeError(
-                    f"Imaging record {image_id} for patient {patient_id} was not visible in Metadata Management after save."
-                )
-
-            saved_count += 1
-
-        self._imaging_log(
-            f"Saved and verified {saved_count} Imaging record(s) in Metadata Management before BIDS conversion."
-        )
+        # The worker owns the final export and saves authoritative patient
+        # links only AFTER the renamed NIfTI and JSON have been written.
+        # Do not create a metadata-only "completed" record before export.
 
         def clear_drafts_after_success() -> None:
+            # A zero exit code must also correspond to an actual final
+            # export for EACH selected image, not just a saved patient record.
+            links = PatientDataLinkStore()
+            for record in included:
+                metadata = record["cocanot_metadata"]
+                patient_id = str(metadata.get("CoCANoT Patient ID") or "").strip()
+                image_id = str(metadata.get("Image ID") or "").strip()
+                link = links.get_link(self.get_site_id(), patient_id, "Imaging", image_id) or {}
+                path_text = str(link.get("bids_data_path") or "")
+                final_path = Path(path_text) if path_text else None
+                if final_path is None or not final_path.is_file():
+                    raise RuntimeError(f"Final BIDS NIfTI missing for patient {patient_id}, image {image_id}")
+                if not final_path.resolve().is_relative_to(output_dir.resolve()):
+                    raise RuntimeError(f"Final BIDS image is outside the selected output folder: {final_path}")
+                sidecar_path = _matching_json(final_path)
+                if sidecar_path is None:
+                    raise RuntimeError(f"Final BIDS sidecar missing: {final_path}")
+                payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                embedded = payload.get("CoCANoTMetadata")
+                if not isinstance(embedded, dict) or str(embedded.get("Image ID") or "") != image_id or str(embedded.get("CoCANoT Patient ID") or "") != patient_id:
+                    raise RuntimeError(f"Final JSON is missing correct CoCANoTMetadata: {sidecar_path}")
+            self._imaging_log(f"Verified {len(included)} renamed BIDS image(s), matching JSON sidecars and CoCANoTMetadata.")
             draft_path = self._imaging_stage_paths(
                 config
             )["bids_drafts"]
@@ -13638,6 +13535,7 @@ class CoCANoTAPI:
                         "Post-conversion action failed: "
                         f"{exc}"
                     )
+                return_code = 1
 
         if on_complete is not None:
             try:
