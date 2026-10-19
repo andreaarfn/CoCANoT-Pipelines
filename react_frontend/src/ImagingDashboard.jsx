@@ -1339,6 +1339,8 @@ function ImagingBidsStep({
   const [selectedIds, setSelectedIds] = useState([]);
   const [activeId, setActiveId] = useState("");
   const [draftMetadata, setDraftMetadata] = useState({});
+  const [sidecarText, setSidecarText] = useState("{}");
+  const [sidecarError, setSidecarError] = useState("");
   const [project, setProject] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
   const [sessionId, setSessionId] = useState("");
@@ -1362,6 +1364,7 @@ function ImagingBidsStep({
       setSelectedIds(resumeState.selectedIds ?? []);
       setActiveId(resumeState.activeId ?? resumedRecords[0]?.id ?? "");
       setDraftMetadata({ ...(resumeState.draftMetadata ?? {}) });
+      setSidecarText(JSON.stringify(resumeState.records?.find(r => r.id === resumeState.activeId)?.sidecar_metadata ?? {}, null, 2));
       setProject(resumeState.project ?? "");
       setProjectDescription(resumeState.projectDescription ?? "");
       setSessionId(resumeState.sessionId ?? "");
@@ -1380,6 +1383,7 @@ function ImagingBidsStep({
       setActiveId("");
       setSelectedIds([]);
       setDraftMetadata({});
+      setSidecarText("{}");
       setProject("");
       setProjectDescription("");
       setSessionId("");
@@ -1457,6 +1461,7 @@ function ImagingBidsStep({
               project_description: projectDescription,
               session_id: sessionId,
               cocanot_metadata: JSON.parse(JSON.stringify(draftMetadata)),
+              sidecar_metadata: isValidSidecarText() ? JSON.parse(sidecarText) : record.sidecar_metadata ?? {},
             }
           : record
       )
@@ -1473,6 +1478,7 @@ function ImagingBidsStep({
       project_description: projectDescription,
       session_id: sessionId,
       cocanot_metadata: JSON.parse(JSON.stringify(draftMetadata)),
+      sidecar_metadata: isValidSidecarText() ? JSON.parse(sidecarText) : active.sidecar_metadata ?? {},
     }).catch(() => {});
   }, [
     activeId,
@@ -1480,6 +1486,7 @@ function ImagingBidsStep({
     project,
     projectDescription,
     sessionId,
+    sidecarText,
   ]);
 
   useEffect(() => {
@@ -1498,6 +1505,8 @@ function ImagingBidsStep({
 
   function loadRecordIntoDraft(record) {
     setDraftMetadata({ ...(record?.cocanot_metadata ?? {}) });
+    setSidecarText(JSON.stringify(record?.sidecar_metadata ?? {}, null, 2));
+    setSidecarError("");
     setProject(record?.project ?? "");
     setProjectDescription(record?.project_description ?? "");
     setSessionId(record?.session_id ?? "");
@@ -1547,6 +1556,7 @@ function ImagingBidsStep({
       session_id: isActive
         ? sessionId
         : record.session_id ?? "",
+      sidecar_metadata: isActive && isValidSidecarText() ? JSON.parse(sidecarText) : record.sidecar_metadata ?? {},
       cocanot_metadata: JSON.parse(
         JSON.stringify(
           isActive
@@ -1712,7 +1722,28 @@ function ImagingBidsStep({
       project,
       projectDescription,
       sessionId,
+      sidecarText,
     };
+  }
+
+  function isValidSidecarText() {
+    try {
+      const value = JSON.parse(sidecarText);
+      return value !== null && typeof value === "object" && !Array.isArray(value);
+    } catch {
+      return false;
+    }
+  }
+
+  function editSidecarText(text) {
+    setSidecarText(text);
+    try {
+      const value = JSON.parse(text);
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Metadata must be a JSON object.");
+      setSidecarError("");
+    } catch (error) {
+      setSidecarError(String(error.message ?? error));
+    }
   }
 
   async function reviewAndConvert() {
@@ -1720,6 +1751,11 @@ function ImagingBidsStep({
 
     if (!bridge?.imaging_bids_validate) {
       alert("The Imaging BIDS validation API is unavailable.");
+      return;
+    }
+
+    if (sidecarError || !isValidSidecarText()) {
+      setProblems(["Fix the linked JSON metadata before proceeding. It must be a valid JSON object."]);
       return;
     }
 
@@ -1736,7 +1772,10 @@ function ImagingBidsStep({
 
     try {
       setBusy(true);
-      const result = await bridge.imaging_bids_validate({ records, overwrite });
+      const pending = records.map(record => record.id === activeId
+        ? { ...record, sidecar_metadata: JSON.parse(sidecarText) }
+        : record);
+      const result = await bridge.imaging_bids_validate({ records: pending, overwrite });
 
       if (!result?.ok) {
         const missingClinical = result?.missing_clinical_assessments ?? [];
@@ -1775,7 +1814,10 @@ function ImagingBidsStep({
 
     try {
       setBusy(true);
-      const result = await bridge.imaging_bids_convert({ records, overwrite });
+      const pending = records.map(record => record.id === activeId
+        ? { ...record, sidecar_metadata: JSON.parse(sidecarText) }
+        : record);
+      const result = await bridge.imaging_bids_convert({ records: pending, overwrite });
 
       if (!result?.ok) {
         setProblems(result?.problems ?? ["BIDS conversion could not start."]);
@@ -1975,6 +2017,25 @@ function ImagingBidsStep({
                   />
                 ))}
             </div>
+          </section>
+
+          <section className={styles.card}>
+            <h3>Linked acquisition metadata (JSON)</h3>
+            <p className={styles.helpText}>
+              {active.sidecar_source_name || "CoCANoT-generated NIfTI sidecar"}.
+              Review and edit the scrubbed acquisition metadata for this image.
+              Files uploaded without a JSON sidecar receive a generated JSON during header scrubbing.
+              The original source file is never modified. Check for identifying information before exporting.
+            </p>
+            <textarea
+              aria-label="Linked acquisition JSON metadata"
+              value={sidecarText}
+              onChange={event => editSidecarText(event.target.value)}
+              spellCheck={false}
+              rows={14}
+              style={{ width: "100%", boxSizing: "border-box", fontFamily: "monospace", fontSize: 12, padding: 12, borderRadius: 8 }}
+            />
+            {sidecarError && <p role="alert" className={styles.orientationWarning}>Invalid JSON: {sidecarError}</p>}
           </section>
 
           <section className={styles.card}>
