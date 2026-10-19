@@ -7658,7 +7658,14 @@ class CoCANoTAPI:
         state = self._load_review_state(state_path)
         entry = dict(state.get(items[index]["key"], {}))
         annotations = dict(entry.get("direction_annotations", {}))
-        annotations[panel] = {"manualLabels": labels, "rotation": rotation}
+        if type(edits.get("flipHorizontal", False)) is not bool or type(edits.get("flipVertical", False)) is not bool:
+            raise ValueError("Display flip settings must be booleans.")
+        annotations[panel] = {
+            "manualLabels": labels,
+            "rotation": rotation,
+            "flipHorizontal": edits.get("flipHorizontal", False),
+            "flipVertical": edits.get("flipVertical", False),
+        }
         entry["direction_annotations"] = annotations
         state[items[index]["key"]] = entry
         self._save_review_state(state_path, state)
