@@ -1784,6 +1784,13 @@ function ImagingPatientReview({
                 : "This existing BIDS JSON predates the complete CoCANoT metadata export. Re-export from Step 5 to update the actual JSON file."}
             </p>
           )}
+          {!preview.linked_json_has_cocanot_metadata && Object.keys(preview.record_cocanot_metadata ?? {}).length > 0 && (
+            <div className={styles.linkedJsonContent}>
+              <strong>CoCANoT metadata saved in patient record (not yet embedded in this JSON file)</strong>
+              <p>The linked file shown above is missing CoCANoTMetadata. The values below are from the local patient database, not from the linked JSON. Complete a successful Step 5 export to create the combined final sidecar.</p>
+              <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.record_cocanot_metadata, null, 2)}</pre>
+            </div>
+          )}
           {showLinkedJson && (
             <div className={styles.linkedJsonContent}>
               {preview.linked_json_error ? (
