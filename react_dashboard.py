@@ -3353,27 +3353,68 @@ class CoCANoTAPI:
             digests.append(digest.digest())
         return digests[0] == digests[1]
 
-    def _verify_selected_nifti_copies(self, converted_dir: Path) -> bool:
-        """Recognize derivatives only for the currently selected NIfTI sources."""
+    def _matched_selected_nifti_derivatives(self, converted_dir: Path) -> list[Path]:
+        """Locate selected NIfTI sources by content, independent of source index.
+
+        Source indices change as folders are added/reordered. Compare the
+        selected images with staged derivatives instead of relying on their
+        former nifti-file-001 or nifti-source-001 directories.
+        """
         if self.dicom_input_paths or not self.nifti_input_paths:
-            return False
-        checked = 0
-        for index, source_text in enumerate(self.nifti_input_paths, start=1):
-            source = Path(source_text).expanduser()
+            return []
+        sources: list[Path] = []
+        for text in self.nifti_input_paths:
+            source = Path(text).expanduser()
             if source.is_file() and _is_nifti(source):
-                pairs = [(source, converted_dir / f"nifti-file-{index:03d}" / source.name)]
+                sources.append(source)
             elif source.is_dir():
-                pairs = [
-                    (item, converted_dir / f"nifti-source-{index:03d}" / item.relative_to(source))
-                    for item in sorted(source.rglob("*")) if _is_nifti(item)
-                ]
+                sources.extend(sorted(p for p in source.rglob("*") if _is_nifti(p)))
             else:
-                return False
-            for original, prepared in pairs:
-                if not self._files_match_for_imaging_resume(original, prepared):
-                    return False
-                checked += 1
-        return checked > 0
+                return []
+        if not sources:
+            return []
+        candidates = self._all_nifti_files(converted_dir)
+        matches: list[Path] = []
+        used: set[Path] = set()
+        for source in sources:
+            for staged in candidates:
+                if staged in used or staged.name != source.name:
+                    continue
+                if self._files_match_for_imaging_resume(source, staged):
+                    matches.append(staged)
+                    used.add(staged)
+                    break
+            else:
+                return []
+        return matches
+
+    def _verify_selected_nifti_copies(self, converted_dir: Path) -> bool:
+        return bool(self._matched_selected_nifti_derivatives(converted_dir))
+
+    def _verify_selected_nifti_stages(self, stages: dict[str, Path]) -> tuple[bool, bool, bool]:
+        prepared = self._matched_selected_nifti_derivatives(stages["converted"])
+        if not prepared:
+            return False, False, False
+        scrubbed: list[Path] = []
+        for path in prepared:
+            relative = path.relative_to(stages["converted"])
+            base = self._strip_nifti_suffix(path)
+            next_path = next((p for p in (
+                stages["scrubbed"] / relative.parent / f"{base}_scrubbed.nii.gz",
+                stages["scrubbed"] / relative.parent / f"{base}_scrubbed.nii",
+            ) if p.is_file()), None)
+            if next_path is None:
+                return True, False, False
+            scrubbed.append(next_path)
+        for path in scrubbed:
+            relative = path.relative_to(stages["scrubbed"])
+            base = self._strip_nifti_suffix(path)
+            if not any(p.is_file() for p in (
+                stages["defaced"] / relative.parent / f"{base}_defaced.nii.gz",
+                stages["defaced"] / relative.parent / f"{base}_defaced.nii",
+            )):
+                return True, True, False
+        return True, True, True
 
     def _verify_prepare_outputs(
         self,
@@ -3535,30 +3576,23 @@ class CoCANoTAPI:
             return "not_started"
 
         if same_context:
-            # The saved manifest establishes DICOM provenance. For NIfTI-only
-            # inputs, matching prepared copies also establish provenance when
-            # the recorded stage flags are stale.
-            try:
-                verified_nifti = (
-                    not self.dicom_input_paths
-                    and self._verify_selected_nifti_copies(stages["converted"])
+            if not self.dicom_input_paths and self.nifti_input_paths:
+                prepare_complete, scrub_complete, deface_complete = (
+                    self._verify_selected_nifti_stages(stages)
                 )
-            except (OSError, ValueError):
-                verified_nifti = False
-            prepare_complete = (
-                (saved_stages.get("prepare") == "complete" or verified_nifti)
-                and self._verify_prepare_outputs(stages)
-            )
-            scrub_complete = (
-                prepare_complete
-                and (saved_stages.get("scrub") == "complete" or verified_nifti)
-                and self._verify_scrub_outputs(stages)
-            )
-            deface_complete = (
-                scrub_complete
-                and (saved_stages.get("deface") == "complete" or verified_nifti)
-                and self._verify_deface_outputs(stages)
-            )
+            else:
+                prepare_complete = (
+                    saved_stages.get("prepare") == "complete"
+                    and self._verify_prepare_outputs(stages)
+                )
+                scrub_complete = (
+                    prepare_complete and saved_stages.get("scrub") == "complete"
+                    and self._verify_scrub_outputs(stages)
+                )
+                deface_complete = (
+                    scrub_complete and saved_stages.get("deface") == "complete"
+                    and self._verify_deface_outputs(stages)
+                )
             review_complete = (
                 deface_complete
                 and saved_stages.get("review") == "complete"
@@ -3637,15 +3671,12 @@ class CoCANoTAPI:
                 ),
             }
 
-        # For direct NIfTI uploads, prove that each prepared derivative is a
-        # byte-for-byte copy of the corresponding currently selected source.
-        # This permits recovery when an older manifest is missing/stale, without
-        # treating files from an unrelated source as processed.
+        # Restore completed NIfTI processing stages from matching files even
+        # when the last run manifest belongs to another selection.
         try:
-            matched_sources = self._verify_selected_nifti_copies(stages["converted"])
-            prepare_complete = matched_sources and self._verify_prepare_outputs(stages)
-            scrub_complete = prepare_complete and self._verify_scrub_outputs(stages)
-            deface_complete = scrub_complete and self._verify_deface_outputs(stages)
+            prepare_complete, scrub_complete, deface_complete = (
+                self._verify_selected_nifti_stages(stages)
+            )
         except (OSError, ValueError):
             prepare_complete = scrub_complete = deface_complete = False
 
