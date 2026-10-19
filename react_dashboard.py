@@ -9856,88 +9856,61 @@ class CoCANoTAPI:
                 "Only 3D and 4D NIfTI images are supported."
             )
 
-        # Use the same anatomical coordinate convention as Step 4.
-        image = nib.as_closest_canonical(image)
+        # Match Step 4: display isotropic, world-aligned anatomical slices.
+        # This prevents anisotropic voxel grids from looking squashed.
+        from scipy.ndimage import map_coordinates
 
-        shape = tuple(
-            int(value)
-            for value in image.shape
-        )
-        is_4d = len(
-            shape
-        ) == 4
+        original_shape = tuple(int(value) for value in image.shape)
+        is_4d = len(original_shape) == 4
+        corners = np.array([
+            [i, j, k, 1.0]
+            for i in (-0.5, original_shape[0] - 0.5)
+            for j in (-0.5, original_shape[1] - 0.5)
+            for k in (-0.5, original_shape[2] - 0.5)
+        ], dtype=float).T
+        world_corners = (image.affine @ corners)[:3]
+        world_min = world_corners.min(axis=1)
+        world_max = world_corners.max(axis=1)
+        voxel_sizes = np.linalg.norm(image.affine[:3, :3], axis=0)
+        spacing = float(np.min(voxel_sizes))
+        if not np.isfinite(spacing) or spacing <= 0:
+            raise ValueError("Invalid imaging voxel spacing for anatomical review.")
+        lengths = world_max - world_min
+        spacing = max(spacing, float(np.max(lengths) / 511.0))
+        shape3d = tuple(max(2, int(np.ceil(length / spacing)) + 1) for length in lengths)
+        shape = shape3d + (original_shape[3],) if is_4d else shape3d
+        origin = world_min + 0.5 * spacing
+        axes = [origin[axis] + np.arange(shape3d[axis]) * spacing for axis in range(3)]
+        x_index = self._clamp_review_index(shape3d[0] // 2 if x is None else x, shape3d[0])
+        y_index = self._clamp_review_index(shape3d[1] // 2 if y is None else y, shape3d[1])
+        z_index = self._clamp_review_index(shape3d[2] // 2 if z is None else z, shape3d[2])
+        volume_count = original_shape[3] if is_4d else 1
+        volume_index = self._clamp_review_index(0 if volume is None else volume, volume_count)
+        data = self._volume_array(image, volume_index)
+        low, high = self._intensity_limits(data, data)
+        inverse = np.linalg.inv(image.affine)
 
-        x_index = self._clamp_review_index(
-            shape[0] // 2
-            if x is None
-            else x,
-            shape[0],
-        )
-        y_index = self._clamp_review_index(
-            shape[1] // 2
-            if y is None
-            else y,
-            shape[1],
-        )
-        z_index = self._clamp_review_index(
-            shape[2] // 2
-            if z is None
-            else z,
-            shape[2],
-        )
+        def anatomical_slice(plane):
+            if plane == "axial":
+                xx, yy = np.meshgrid(axes[0], axes[1], indexing="ij")
+                zz = np.full_like(xx, axes[2][z_index])
+            elif plane == "coronal":
+                xx, zz = np.meshgrid(axes[0], axes[2], indexing="ij")
+                yy = np.full_like(xx, axes[1][y_index])
+            else:
+                yy, zz = np.meshgrid(axes[1], axes[2], indexing="ij")
+                xx = np.full_like(yy, axes[0][x_index])
+            world = np.stack((xx, yy, zz), axis=0).reshape(3, -1)
+            source = inverse[:3, :3] @ world + inverse[:3, 3, None]
+            sampled = map_coordinates(data, source, order=1, mode="constant", cval=0.0, prefilter=False)
+            view = np.rot90(sampled.reshape(xx.shape))
+            return np.fliplr(view) if plane == "sagittal" else view
 
-        volume_count = (
-            shape[3]
-            if is_4d
-            else 1
-        )
-        volume_index = self._clamp_review_index(
-            0
-            if volume is None
-            else volume,
-            volume_count,
-        )
-
-        data = self._volume_array(
-            image,
-            volume_index,
-        )
-        low, high = self._intensity_limits(
-            data,
-            data,
-        )
-
-        views = {
-            "axial": np.rot90(
-                data[
-                    :,
-                    :,
-                    z_index,
-                ]
-            ),
-            "coronal": np.rot90(
-                data[
-                    :,
-                    y_index,
-                    :,
-                ]
-            ),
-            "sagittal": np.fliplr(np.rot90(
-                data[
-                    x_index,
-                    :,
-                    :,
-                ]
-            )),
-        }
-
-        codes = nib.aff2axcodes(image.affine)
-        opposite = {"R": "L", "L": "R", "A": "P", "P": "A", "S": "I", "I": "S"}
-        def edges(first, second):
-            return {"left": opposite[codes[first]], "right": codes[first],
-                    "top": codes[second], "bottom": opposite[codes[second]]}
+        views = {plane: anatomical_slice(plane) for plane in ("axial", "coronal", "sagittal")}
         direction_labels = {
-            "axial": edges(0, 1), "coronal": edges(0, 2), "sagittal": {**edges(1, 2), "left": codes[1], "right": opposite[codes[1]]}
+            "axial": {"left": "L", "right": "R", "top": "A", "bottom": "P"},
+            "coronal": {"left": "L", "right": "R", "top": "S", "bottom": "I"},
+            "sagittal": {"left": "A", "right": "P", "top": "S", "bottom": "I"},
         }
         config_for_preview = load_imaging_config()
         try:
