@@ -1880,6 +1880,14 @@ function ImagingBidsStep({
           </button>
         </div>
 
+        {records.length === 0 && (
+          <div className={styles.notice} role="status">
+            No images are currently accepted for metadata review or export.
+            Step 4 can be complete even when every image was excluded or placed on hold.
+            Return to Step 4 to accept an image if you want to create BIDS output.
+          </div>
+        )}
+
         {Number(bidsState?.held_count ?? 0) > 0 && (
           <div className={styles.notice}>
             {bidsState.held_count} image{bidsState.held_count === 1 ? "" : "s"} remain
@@ -2734,8 +2742,9 @@ function ImagingReview({
           <div className={styles.modal}>
             <h3>Defacing Rejected</h3>
             <p>
-              Choose what should happen to this image. Images placed on hold or rejected
-              will not continue to Metadata & BIDS.
+              Choose what should happen to this image. This decision completes review for the image.
+              Rejected or on-hold images will not be included in the Step 5 export,
+              but you can proceed to Step 5 once every image has a review decision.
             </p>
             <button className={styles.primaryButton} onClick={chooseExternalReplacement}>Upload Replacement</button>
             <button className={styles.secondaryButton} onClick={() => setStatus("On Hold - Needs Defaced Replacement")}>Put on Hold</button>
