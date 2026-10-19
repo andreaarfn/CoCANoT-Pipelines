@@ -217,16 +217,14 @@ def write_json(path: Path, payload: Dict[str, Any]) -> None:
 
 
 def clean_project(value: str) -> str:
-
-    cleaned = re.sub(r"[\x00-\x1f/\\\]+", "-", value.strip()).strip(" .-")
-
+    # Remove control characters and replace path separators on every OS.
+    cleaned = "".join(
+        "-" if ord(character) < 32 or character in ("/", "\\") else character
+        for character in value.strip()
+    ).strip(" .-")
     if not cleaned:
-
         raise ValueError("Project must contain a usable folder name.")
-
     return cleaned
-
-
 
 
 
