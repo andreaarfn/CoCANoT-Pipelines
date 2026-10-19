@@ -1863,9 +1863,7 @@ function ImagingBidsStep({
 
         {records.length === 0 && (
           <div className={styles.notice} role="status">
-            No images are currently accepted for metadata review or export.
-            Step 4 can be complete even when every image was excluded or placed on hold.
-            Return to Step 4 to accept an image if you want to create BIDS output.
+            {bidsState?.accepted_warning || "No accepted images were found. Check the imaging processing log and your Step 4 decisions."}
           </div>
         )}
 
