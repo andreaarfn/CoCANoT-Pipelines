@@ -3287,74 +3287,150 @@ class CoCANoTAPI:
 
         return expected
 
+    def _selected_prepared_nifti_files(
+        self,
+        stages: dict[str, Path],
+    ) -> list[Path] | None:
+        """Resolve Step 1 inputs to their own Step 2 derivative outputs.
+
+        None means the correspondence cannot be verified; an empty list
+        means that the selected inputs have no converted NIfTI output.
+        """
+        converted = stages["converted"]
+        selected: list[Path] = []
+        dicom_sources, nifti_sources = self._classify_imaging_sources()
+
+        for index, source_text in enumerate(nifti_sources, start=1):
+            source = Path(source_text).expanduser()
+            if source.is_file() and _is_nifti(source):
+                destination = converted / f"nifti-file-{index:03d}" / source.name
+                if not destination.is_file():
+                    return []
+                selected.append(destination)
+            elif source.is_dir():
+                inputs = sorted(p for p in source.rglob("*") if _is_nifti(p))
+                if not inputs:
+                    return []
+                for input_path in inputs:
+                    destination = (
+                        converted / f"nifti-source-{index:03d}"
+                        / input_path.relative_to(source)
+                    )
+                    if not destination.is_file():
+                        return []
+                    selected.append(destination)
+
+        dicom_dirs: list[Path] = []
+        selected_files: list[Path] = []
+        for source_text in dicom_sources:
+            source = Path(source_text).expanduser()
+            if source.is_dir():
+                dicom_dirs.append(source)
+            elif source.is_file():
+                selected_files.append(source)
+
+        if selected_files:
+            # Single-file DICOM selections share a staging directory.
+            # Without a matching source manifest, its converted output
+            # cannot reliably be attributed to an individual source file.
+            return None
+
+        multiple_sources = len(dicom_dirs) > 1
+        for index, root in enumerate(dicom_dirs, start=1):
+            dicom_folders: list[Path] = []
+            for folder in [root, *sorted(p for p in root.rglob("*") if p.is_dir())]:
+                try:
+                    has_dicom = any(
+                        p.is_file() and not p.name.startswith(".")
+                        and p.suffix.lower() in {".dcm", ".ima", ""}
+                        for p in folder.iterdir()
+                    )
+                except (OSError, PermissionError):
+                    return None
+                if has_dicom:
+                    dicom_folders.append(folder)
+            if not dicom_folders:
+                return []
+            for folder in dicom_folders:
+                output_dir = (
+                    converted / f"source-{index:03d}"
+                    if multiple_sources else converted
+                )
+                output_dir = output_dir / folder.relative_to(root)
+                # Check direct children: descendants may belong to a
+                # different DICOM series and must not satisfy this folder.
+                if not output_dir.is_dir():
+                    return []
+                prepared = sorted(
+                    p for p in output_dir.iterdir()
+                    if p.is_file() and _is_nifti(p)
+                )
+                if not prepared:
+                    return []
+                selected.extend(prepared)
+
+        return list(dict.fromkeys(selected))
+
     def _verify_prepare_outputs(
         self,
         stages: dict[str, Path],
     ) -> bool:
-        expected = self._expected_prepared_nifti_paths(
-            stages["converted"]
+        prepared = self._selected_prepared_nifti_files(stages)
+        return prepared is not None and bool(prepared) and all(
+            path.is_file() and path.stat().st_size > 0 for path in prepared
         )
 
-        if expected is not None:
-            return bool(expected) and all(
-                path.is_file()
-                for path in expected
+    def _selected_scrubbed_nifti_files(
+        self,
+        stages: dict[str, Path],
+    ) -> list[Path]:
+        prepared = self._selected_prepared_nifti_files(stages)
+        if not prepared:
+            return []
+        selected: list[Path] = []
+        for input_path in prepared:
+            relative = input_path.relative_to(stages["converted"])
+            base = self._strip_nifti_suffix(input_path)
+            candidates = [
+                stages["scrubbed"] / relative.parent / f"{base}_scrubbed.nii.gz",
+                stages["scrubbed"] / relative.parent / f"{base}_scrubbed.nii",
+            ]
+            found = next(
+                (p for p in candidates if p.is_file() and p.stat().st_size > 0),
+                None,
             )
-
-        return bool(
-            self._all_nifti_files(stages["converted"])
-        )
+            if found is None:
+                return []
+            selected.append(found)
+        return selected
 
     def _verify_scrub_outputs(
         self,
         stages: dict[str, Path],
     ) -> bool:
-        converted = self._all_nifti_files(
-            stages["converted"]
+        prepared = self._selected_prepared_nifti_files(stages)
+        return bool(prepared) and (
+            len(self._selected_scrubbed_nifti_files(stages)) == len(prepared)
         )
-        if not converted:
-            return False
-
-        for input_path in converted:
-            relative = input_path.relative_to(stages["converted"])
-            base = self._strip_nifti_suffix(input_path)
-            candidates = [
-                stages["scrubbed"]
-                / relative.parent
-                / f"{base}_scrubbed.nii.gz",
-                stages["scrubbed"]
-                / relative.parent
-                / f"{base}_scrubbed.nii",
-            ]
-            if not any(candidate.is_file() for candidate in candidates):
-                return False
-
-        return True
 
     def _verify_deface_outputs(
         self,
         stages: dict[str, Path],
     ) -> bool:
-        scrubbed = self._all_nifti_files(
-            stages["scrubbed"]
-        )
-        if not scrubbed:
+        scrubbed = self._selected_scrubbed_nifti_files(stages)
+        if not scrubbed or not self._verify_scrub_outputs(stages):
             return False
-
         for input_path in scrubbed:
             relative = input_path.relative_to(stages["scrubbed"])
             base = self._strip_nifti_suffix(input_path)
             candidates = [
-                stages["defaced"]
-                / relative.parent
-                / f"{base}_defaced.nii.gz",
-                stages["defaced"]
-                / relative.parent
-                / f"{base}_defaced.nii",
+                stages["defaced"] / relative.parent / f"{base}_defaced.nii.gz",
+                stages["defaced"] / relative.parent / f"{base}_defaced.nii",
             ]
-            if not any(candidate.is_file() for candidate in candidates):
+            if not any(
+                p.is_file() and p.stat().st_size > 0 for p in candidates
+            ):
                 return False
-
         return True
 
     def _verify_review_complete(self) -> bool:
@@ -3532,11 +3608,7 @@ class CoCANoTAPI:
 
         detected = False
 
-        if (
-            not self.dicom_input_paths
-            and self.nifti_input_paths
-            and self._verify_prepare_outputs(stages)
-        ):
+        if self._verify_prepare_outputs(stages):
             self.imaging_stage_state["prepare"] = "complete"
             detected = True
 
@@ -6801,6 +6873,19 @@ class CoCANoTAPI:
         )
 
         if operation == "prepare":
+            if not overwrite and self._verify_prepare_outputs(stages):
+                self._sync_imaging_stage_state_from_disk(config)
+                self._imaging_log(
+                    "Prepared NIfTI outputs already exist for the selected "
+                    "imaging sources. Skipping conversion."
+                )
+                return {
+                    "ok": True,
+                    "state": "complete",
+                    "status": "Existing prepared NIfTI outputs verified",
+                    "process_stages": dict(self.imaging_stage_state),
+                    "active_operation": self.imaging_active_operation,
+                }
             cleanup_roots = [
                 stages["converted"],
                 config.imaging.derivatives_dir
