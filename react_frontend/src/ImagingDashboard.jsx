@@ -2617,12 +2617,12 @@ function ImagingReview({
                 {review.spatial_warnings?.some(warning => warning.includes("oblique acquisition")) ? (
                   <div className={styles.notice} role="note">
                     <strong>Oblique acquisition detected</strong>
-                    <p>At least one image axis aligns less than 98% (0.98) with its nearest anatomical axis, equivalent to a tilt greater than approximately 11.5°. This may be intentional rather than an error. CoCANoT uses the NIfTI spatial coordinates and interpolation to show straight axial, coronal, and sagittal cuts. The original file is unchanged.</p>
+                    <p>At least one image axis aligns less than 98% (0.98) with its nearest anatomical axis, equivalent to a tilt greater than approximately 11.5°. This may be intentional rather than an error. CoCANoT uses the NIfTI spatial coordinates and interpolation to show straight axial, coronal, and sagittal cuts. Interpolation estimates intensities where a viewing plane passes between the original voxels. Only the image displayed in the preview is resampled; the original image and its header are unchanged.</p>
                   </div>
                 ) : (
                   <div className={styles.notice} role="note">
                     <strong>How CoCANoT displays anatomical slices</strong>
-                    <p>CoCANoT uses the NIfTI spatial coordinates to show axial, coronal, and sagittal cuts. It estimates values between neighboring voxels when needed (interpolation). Only the preview is resampled; the original image and its header are unchanged.</p>
+                    <p>CoCANoT uses the NIfTI spatial coordinates to show axial, coronal, and sagittal cuts. Interpolation is used when a viewing plane passes between the original voxel centers, estimating intensities from neighboring voxels. Only the image displayed in the preview is resampled; the original image and its header are unchanged.</p>
                   </div>
                 )}
                 {review.display_orientation && (
