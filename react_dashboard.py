@@ -2831,16 +2831,18 @@ class CoCANoTAPI:
                 self.imaging_stage_state["review"] = "not_started"
             return
 
-        accepted_statuses = {
+        final_statuses = {
             "Accepted",
             "Accepted - External",
+            "Rejected - Not Included",
+            "On Hold - Needs Defaced Replacement",
         }
         statuses = [
             str(item.get("status", "Pending") or "Pending")
             for item in items
         ]
 
-        if statuses and all(status in accepted_statuses for status in statuses):
+        if statuses and all(status in final_statuses for status in statuses):
             self.imaging_stage_state["review"] = "complete"
         elif any(status != "Pending" for status in statuses):
             self.imaging_stage_state["review"] = "running"
@@ -3411,14 +3413,16 @@ class CoCANoTAPI:
         if not items:
             return False
 
-        accepted_statuses = {
+        final_statuses = {
             "Accepted",
             "Accepted - External",
+            "Rejected - Not Included",
+            "On Hold - Needs Defaced Replacement",
         }
 
         return all(
             str(item.get("status", "Pending") or "Pending")
-            in accepted_statuses
+            in final_statuses
             for item in items
         )
 
