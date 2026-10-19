@@ -1244,6 +1244,39 @@ def copy_record(
 
     shutil.copy2(path, output_nifti)
 
+    # Step 4 edits the scrubbed header, while the accepted defaced image
+    # was created earlier. Apply reviewed non-geometric fields to the final
+    # BIDS NIfTI, without modifying any source or intermediate image.
+    header_source = next((
+        Path(str(value)).expanduser()
+        for value in record.get("derivative_paths", [])
+        if Path(str(value)).is_file()
+        and Path(str(value)).name.endswith((".nii", ".nii.gz"))
+        and "_scrubbed" in Path(str(value)).name
+        and "_defaced" not in Path(str(value)).name
+        and "_external_defaced" not in Path(str(value)).name
+    ), None)
+    if header_source is not None:
+        import nibabel as nib
+        import numpy as np
+        reviewed = nib.load(str(header_source))
+        exported = nib.load(str(output_nifti))
+        updated_header = exported.header.copy()
+        for field in ("descrip", "aux_file", "intent_name"):
+            updated_header[field] = reviewed.header[field]
+        replacement = nib.Nifti1Image(
+            np.asanyarray(exported.dataobj), exported.affine, updated_header
+        )
+        qform, qcode = exported.get_qform(coded=True)
+        sform, scode = exported.get_sform(coded=True)
+        replacement.set_qform(qform, int(qcode))
+        replacement.set_sform(sform, int(scode))
+        if (replacement.shape != exported.shape
+                or not np.allclose(replacement.affine, exported.affine)
+                or replacement.get_data_dtype() != exported.get_data_dtype()):
+            raise ValueError("Reviewed header cannot be applied without changing imaging geometry.")
+        nib.save(replacement, str(output_nifti))
+
 
 
     scrubbed_header = scrubbed_header_metadata(record)
