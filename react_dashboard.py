@@ -2592,6 +2592,7 @@ class CoCANoTAPI:
                     "cocanot_metadata": record[
                         "cocanot_metadata"
                     ],
+                    "sidecar_metadata": record.get("sidecar_metadata", {}),
                     "metadata_confirmed": True,
                 }
                 for record in included
@@ -5211,6 +5212,7 @@ class CoCANoTAPI:
             "cocanot_metadata": dict(
                 payload.get("cocanot_metadata", {}) or {}
             ),
+            "sidecar_metadata": dict(payload.get("sidecar_metadata", {}) or {}),
         }
         self._save_imaging_bids_drafts(state_path, drafts)
         return {"ok": True}
@@ -5374,6 +5376,32 @@ class CoCANoTAPI:
             )
             if not isinstance(draft, dict):
                 draft = {}
+
+            # Prefer the scrubbed sidecar (never the raw DICOM-derived JSON).
+            # A NIfTI-only upload receives a generated JSON in the scrub step.
+            sidecar_candidates = [
+                Path(str(value)) for value in self._imaging_derivative_paths_for_export(
+                    {"nifti_path": str(nifti_path), "source_key": source_key}, config
+                ) if "_scrubbed" in Path(str(value)).name.lower()
+                and "_defaced" not in Path(str(value)).name.lower()
+            ]
+            sidecar_candidates.append(nifti_path)
+            source_sidecar = None
+            for source_candidate in sidecar_candidates:
+                candidate_json = _matching_json(source_candidate)
+                if candidate_json is not None:
+                    source_sidecar = candidate_json
+                    break
+            sidecar_metadata = {}
+            if source_sidecar is not None:
+                try:
+                    loaded_sidecar = json.loads(source_sidecar.read_text(encoding="utf-8"))
+                    if isinstance(loaded_sidecar, dict):
+                        sidecar_metadata = loaded_sidecar
+                except (OSError, json.JSONDecodeError):
+                    pass
+            if "sidecar_metadata" in draft:
+                sidecar_metadata = dict(draft.get("sidecar_metadata") or {})
 
             draft_metadata = draft.get(
                 "cocanot_metadata",
@@ -5920,6 +5948,8 @@ class CoCANoTAPI:
                         participant_id
                     ),
                     "cocanot_metadata": cocanot_metadata,
+                    "sidecar_metadata": sidecar_metadata,
+                    "sidecar_source_name": source_sidecar.name if source_sidecar else "No JSON sidecar found",
                     "datatype": "",
                     "suffix": "",
                     "existing_export": existing_export,
@@ -6339,6 +6369,11 @@ class CoCANoTAPI:
             normalized["project"] = project
             normalized["participant_id"] = participant_id
             normalized["cocanot_metadata"] = metadata
+            sidecar_edits = record.get("sidecar_metadata", {})
+            if not isinstance(sidecar_edits, dict):
+                problems.append(f"{source_label}: Linked metadata must be a JSON object.")
+                continue
+            normalized["sidecar_metadata"] = sidecar_edits
             normalized["datatype"] = datatype
             normalized["suffix"] = suffix
             normalized["metadata_validation"] = validation
@@ -9813,6 +9848,7 @@ class CoCANoTAPI:
             linked_is_bids_export = path.resolve().is_relative_to(config_for_preview.imaging.bids_output_dir.resolve())
         except (OSError, ValueError):
             linked_is_bids_export = False
+        linked_header = self._header_dict(path)
         sidecar_path = _matching_json(path)
         sidecar = None
         sidecar_error = None
@@ -9843,6 +9879,7 @@ class CoCANoTAPI:
             "direction_annotations": review_annotations,
             "linked_is_bids_export": linked_is_bids_export,
             "linked_json_has_cocanot_metadata": isinstance(sidecar, dict) and isinstance(sidecar.get("CoCANoTMetadata"), dict),
+            "linked_header": linked_header,
             "linked_json": sidecar,
             "linked_json_path": str(sidecar_path) if sidecar_path else "",
             "linked_json_error": sidecar_error,
