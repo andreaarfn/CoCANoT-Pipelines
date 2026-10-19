@@ -3535,21 +3535,28 @@ class CoCANoTAPI:
             return "not_started"
 
         if same_context:
-            # A completed output from another cycle is not proof that the
-            # current input selection has passed this stage. Require both
-            # a completion recorded for this source signature and files.
+            # The saved manifest establishes DICOM provenance. For NIfTI-only
+            # inputs, matching prepared copies also establish provenance when
+            # the recorded stage flags are stale.
+            try:
+                verified_nifti = (
+                    not self.dicom_input_paths
+                    and self._verify_selected_nifti_copies(stages["converted"])
+                )
+            except (OSError, ValueError):
+                verified_nifti = False
             prepare_complete = (
-                saved_stages.get("prepare") == "complete"
+                (saved_stages.get("prepare") == "complete" or verified_nifti)
                 and self._verify_prepare_outputs(stages)
             )
             scrub_complete = (
                 prepare_complete
-                and saved_stages.get("scrub") == "complete"
+                and (saved_stages.get("scrub") == "complete" or verified_nifti)
                 and self._verify_scrub_outputs(stages)
             )
             deface_complete = (
                 scrub_complete
-                and saved_stages.get("deface") == "complete"
+                and (saved_stages.get("deface") == "complete" or verified_nifti)
                 and self._verify_deface_outputs(stages)
             )
             review_complete = (
