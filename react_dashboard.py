@@ -7849,6 +7849,37 @@ class CoCANoTAPI:
             os.replace(temp_path, scrubbed_path)
         finally:
             temp_path.unlink(missing_ok=True)
+        # The accepted PyDeface output was created before this review edit.
+        # Mirror the safe header field into that derivative so Step 5 exports
+        # the reviewed value, while leaving voxel geometry unchanged.
+        defaced_path = Path(item["automated_defaced_path"])
+        if defaced_path.is_file():
+            defaced = nib.load(str(defaced_path))
+            defaced_header = defaced.header.copy()
+            defaced_header[field] = header[field]
+            defaced_affine = np.array(defaced.affine, copy=True)
+            dqform, dqcode = defaced.get_qform(coded=True)
+            dsform, dscode = defaced.get_sform(coded=True)
+            defaced_updated = nib.Nifti1Image(
+                np.asanyarray(defaced.dataobj), defaced_affine, defaced_header
+            )
+            defaced_updated.set_qform(dqform, int(dqcode))
+            defaced_updated.set_sform(dsform, int(dscode))
+            with tempfile.NamedTemporaryFile(
+                suffix=".nii.gz" if str(defaced_path).endswith(".gz") else ".nii",
+                prefix=".header_edit_", dir=str(defaced_path.parent), delete=False
+            ) as temporary:
+                defaced_temp = Path(temporary.name)
+            try:
+                nib.save(defaced_updated, str(defaced_temp))
+                check = nib.load(str(defaced_temp))
+                if (check.shape != defaced.shape
+                        or check.get_data_dtype() != defaced.get_data_dtype()
+                        or not np.allclose(check.affine, defaced_affine, atol=1e-6, rtol=1e-6)):
+                    raise ValueError("Defaced header synchronization failed integrity checks.")
+                os.replace(defaced_temp, defaced_path)
+            finally:
+                defaced_temp.unlink(missing_ok=True)
         self._imaging_log(f"Saved scrubbed NIfTI header edit: {item['key']} | {field}")
         return self.imaging_review_get_item(index)
 
