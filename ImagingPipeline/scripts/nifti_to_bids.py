@@ -174,6 +174,30 @@ def matching_extra_sidecars(path: Path) -> list[Path]:
 
 
 
+def resolve_dwi_gradients(raw: Dict[str, Any], nifti_path: Path) -> Dict[str, Path]:
+    """Resolve diffusion gradients from the accepted image or its derivatives.
+
+    Prefer an exact matching basename; search only explicitly linked
+    derivative NIfTIs and their same-stem companions. Never fabricate
+    gradient tables or combine unrelated sets.
+    """
+    images = [nifti_path]
+    for value in raw.get("derivative_paths", []) or []:
+        candidate = Path(str(value)).expanduser()
+        if candidate.is_file() and candidate.name.endswith((".nii", ".nii.gz")):
+            if candidate not in images:
+                images.append(candidate)
+    for image in images:
+        base = strip_nifti_suffix(image)
+        gradients = {
+            extension: image.with_name(f"{base}{extension}")
+            for extension in (".bval", ".bvec")
+        }
+        if all(p.is_file() and p.stat().st_size > 0 for p in gradients.values()):
+            return gradients
+    return {}
+
+
 def load_json(path: Path) -> Dict[str, Any]:
 
     try:
@@ -879,27 +903,25 @@ def validate_record(
 
         if sequence == "DWI":
 
-            base = strip_nifti_suffix(path)
+            gradients = resolve_dwi_gradients(raw, path)
 
-            missing = [
-
-                ext
-
-                for ext in (".bval", ".bvec")
-
-                if not path.with_name(f"{base}{ext}").exists()
-
-            ]
-
-            if missing:
+            if not gradients:
 
                 raise ValueError(
 
-                    f"Record {index} is DWI but is missing: "
+                    f"Record {index} is classified as DWI but no matching "
 
-                    + ", ".join(missing)
+                    "non-empty .bval/.bvec pair was found beside the accepted "
+
+                    "NIfTI or its linked derivatives. Supply both diffusion "
+
+                    "gradient files, or correct the MRI sequence if this "
+
+                    "image is not DWI."
 
                 )
+
+            record["dwi_gradient_paths"] = gradients
 
 
 
@@ -1482,18 +1504,15 @@ def copy_record(
 
     extra_outputs: list[Path] = []
 
-    for extra in matching_extra_sidecars(path):
-
+    gradients = record.get("dwi_gradient_paths", {})
+    extras = (
+        [gradients[ext] for ext in (".bval", ".bvec")]
+        if record.get("mri_sequence") == "DWI"
+        else matching_extra_sidecars(path)
+    )
+    for extra in extras:
         output_extra = data_dir / f"{base}{extra.suffix}"
-
-        shutil.copy2(
-
-            extra,
-
-            output_extra,
-
-        )
-
+        shutil.copy2(extra, output_extra)
         extra_outputs.append(output_extra)
 
 
