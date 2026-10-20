@@ -2603,10 +2603,11 @@ function ImagingReview({
             <>
               <section className={styles.card}>
                 <h3>Raw header versus scrubbed header</h3>
+                <p role="alert" className={styles.headerEditNotice}><strong>NIfTI Header Editing — Caution.</strong> Editing NIfTI header values can affect image integrity. Only modify values you understand and have verified are appropriate. Incorrect changes may corrupt the image or alter its scientific interpretation.</p>
                 <div className={styles.headerTableWrap}>
                   <table className={styles.table}>
                     <thead>
-                      <tr><th>Field</th><th>Raw</th><th>Scrubbed</th><th>Editable</th></tr>
+                      <tr><th>Field</th><th>Raw</th><th>Scrubbed</th></tr>
                     </thead>
                     <tbody>
                       {review.header_rows.map(row => (
@@ -2621,7 +2622,7 @@ function ImagingReview({
                           <td>{row.field}</td>
                           <td>{row.raw}</td>
                           <td>{row.review_override != null ? <><strong>{row.review_override}</strong> <small>(header annotation; file unchanged)</small></> : row.scrubbed}</td>
-                          <td>{row.review_only ? "Derived — not directly editable" : row.editable ? "Edit with integrity validation" : "Not editable"}</td>
+                          
                         </tr>
                       ))}
                     </tbody>
