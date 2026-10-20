@@ -3417,7 +3417,7 @@ class CoCANoTAPI:
             else:
                 # Older history records were keyed to the entire selection.
                 # Find a completed single-source record for each currently
-            # selected source without depending on selection order.
+                # selected source without depending on selection order.
                 for kind, item in selected_sources:
                     key = source_key(kind, item)
                     matching = [
