@@ -193,6 +193,10 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--skip-dicom-dir", action="append", type=Path, default=[],
+        help="Previously prepared DICOM leaf directory to skip (repeatable).",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Allow dcm2niix to overwrite existing converted files.",
@@ -250,11 +254,17 @@ def main() -> None:
             "configured imaging input directories."
         )
 
+    skip_dirs = {p.expanduser().resolve() for p in args.skip_dicom_dir}
+    skipped = 0
     processed = 0
     failed = 0
     multiple_sources = len(input_dirs) > 1
 
     for source_index, input_root, dicom_dir in jobs:
+        if dicom_dir.resolve() in skip_dirs and not args.overwrite:
+            skipped += 1
+            print("Skipping previously prepared DICOM series:", dicom_dir)
+            continue
         out_subdir = build_output_subdir(
             output_dir=output_dir,
             input_root=input_root,
@@ -274,6 +284,7 @@ def main() -> None:
 
     print("\nDICOM to NIfTI conversion complete.")
     print(f"Converted folders: {processed}")
+    print(f"Skipped completed folders: {skipped}")
     print(f"Failed folders:    {failed}")
     print("Output folder:", output_dir)
 
