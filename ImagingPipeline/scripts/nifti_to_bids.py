@@ -955,14 +955,26 @@ def build_bids_base(
     record: Dict[str, Any],
     run_override: Optional[int] = None,
 ) -> str:
-    """Create a BIDS-inspired filename from validated image metadata."""
-    parts = [f"sub-{record['participant']}"]
+    """Build a CoCANoT imaging basename with its stable Image ID.
+
+    Pattern: sub-<subject>_img-<imageid>[_ses-<session>][_<acquisition>]_<suffix>
+    The img- entity is CoCANoT-specific rather than a standard BIDS entity.
+    """
+    image_id = str(
+        (record.get("cocanot_metadata") or {}).get("Image ID") or ""
+    ).strip()
+    # CoCANoT IDs can contain punctuation (e.g. IMG-005). Strip that
+    # punctuation only from the filename, retaining the original in JSON.
+    safe_image_id = re.sub(r"[^A-Za-z0-9]+", "", image_id)
+    if not safe_image_id:
+        raise ValueError("CoCANoT Image ID is required for imaging export naming.")
+
+    parts = [f"sub-{record['participant']}", f"img-{safe_image_id}"]
     if record["session"]:
         parts.append(f"ses-{record['session']}")
     acq = str(record["bids_entities"].get("acq", "")).strip()
     if acq:
         parts.append(f"acq-{acq}")
-    # A CoCANoT Image ID is a database identifier, not a BIDS run number.
     if run_override is not None:
         parts.append(f"run-{run_override:02d}")
     parts.append(record["suffix"])
