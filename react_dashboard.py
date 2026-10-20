@@ -11096,7 +11096,12 @@ class CoCANoTAPI:
         session_match = re.search(r"(?:^|_)ses-([A-Za-z0-9+]+)(?:_|$)", old_base)
         run_match = re.search(r"(?:^|_)run-(\d+)(?:_|$)", old_base)
         acq_match = re.search(r"(?:^|_)acq-([A-Za-z0-9+]+)(?:_|$)", old_base)
-        parts = [f"sub-{self._derive_bids_subject(patient)}"]
+        # Mirror Step 5 export naming: include the stable CoCANoT Image ID.
+        # Keep the original ID (with punctuation) in the sidecar/record.
+        filename_image_id = re.sub(r"[^A-Za-z0-9]+", "", image_id)
+        if not filename_image_id:
+            raise ValueError("Cannot rename imaging export without a valid Image ID.")
+        parts = [f"sub-{self._derive_bids_subject(patient)}", filename_image_id]
         if session_match:
             parts.append(f"ses-{session_match.group(1)}")
         if acq_match:
