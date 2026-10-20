@@ -3321,27 +3321,62 @@ class CoCANoTAPI:
     def _restore_imaging_completion_history(
         self, config, stages: dict[str, Path],
     ) -> tuple[bool, bool, bool] | None:
-        entry = self._read_imaging_completion_history(config).get(
-            self._imaging_selection_signature()
-        )
-        if not isinstance(entry, dict):
+        """Restore one or several independently completed source selections.
+
+        A multi-source selection is complete at a stage only when EVERY
+        selected source has matching, verified outputs at that stage.
+        """
+        history = self._read_imaging_completion_history(config)
+        fingerprint = self._imaging_selection_fingerprint()
+        selected_sources = [
+            (kind, item)
+            for kind in ("dicom", "nifti")
+            for item in fingerprint.get(kind, [])
+        ]
+        if not selected_sources:
             return None
-        records = entry.get("stages", {})
-        names = entry.get("prepared_files", [])
-        if not isinstance(records, dict) or not isinstance(names, list) or not names:
-            return None
+
+        def source_key(kind: str, item: dict[str, Any]) -> str:
+            return json.dumps([kind, item], sort_keys=True, separators=(",", ":"))
+
+        def entry_sources(entry: dict[str, Any]) -> list[str]:
+            saved = entry.get("sources", {})
+            if not isinstance(saved, dict):
+                return []
+            return [
+                source_key(kind, item)
+                for kind in ("dicom", "nifti")
+                for item in saved.get(kind, [])
+                if isinstance(item, dict)
+            ]
+
+        exact = history.get(self._imaging_selection_signature())
+        selected_keys = [source_key(kind, item) for kind, item in selected_sources]
+        selected_set = set(selected_keys)
+        records_to_check: list[dict[str, Any]] = []
+        if (
+            isinstance(exact, dict)
+            and len(entry_sources(exact)) == len(selected_keys)
+            and set(entry_sources(exact)) == selected_set
+        ):
+            records_to_check = [exact]
+        else:
+            # Older history records were keyed to the entire selection.
+            # Find a completed single-source record for each currently
+            # selected source without depending on selection order.
+            for key in selected_keys:
+                matching = [
+                    entry for entry in history.values()
+                    if isinstance(entry, dict) and entry_sources(entry) == [key]
+                    and isinstance(entry.get("prepared_files"), list)
+                    and entry.get("prepared_files")
+                ]
+                if len(matching) != 1:
+                    return None
+                records_to_check.append(matching[0])
+
         converted = stages["converted"].resolve()
-        prepared = []
-        for name in names:
-            candidate = (converted / str(name)).resolve()
-            if not candidate.is_relative_to(converted) or not (
-                candidate.is_file() and _is_nifti(candidate)
-                and candidate.stat().st_size > 0
-            ):
-                return None
-            prepared.append(candidate)
-        if not prepared:
-            return None
+
         def paired(paths: list[Path], input_root: Path,
                    output_root: Path, suffix: str) -> list[Path]:
             result = []
@@ -3357,14 +3392,39 @@ class CoCANoTAPI:
                 result.append(match)
             return result
 
-        prepare_ok = records.get("prepare") == "complete"
-        if not prepare_ok:
-            return None
-        scrubbed = paired(prepared, stages["converted"], stages["scrubbed"], "scrubbed")
-        scrub_ok = records.get("scrub") == "complete" and len(scrubbed) == len(prepared)
-        defaced = paired(scrubbed, stages["scrubbed"], stages["defaced"], "defaced") if scrub_ok else []
-        deface_ok = records.get("deface") == "complete" and len(defaced) == len(scrubbed) and scrub_ok
-        return True, scrub_ok, deface_ok
+        stage_results = []
+        for entry in records_to_check:
+            records = entry.get("stages", {})
+            names = entry.get("prepared_files", [])
+            if not isinstance(records, dict) or not isinstance(names, list) or not names:
+                return None
+            prepared = []
+            for name in names:
+                candidate = (converted / str(name)).resolve()
+                if not candidate.is_relative_to(converted) or not (
+                    candidate.is_file() and _is_nifti(candidate)
+                    and candidate.stat().st_size > 0
+                ):
+                    return None
+                prepared.append(candidate)
+            if records.get("prepare") != "complete":
+                return None
+            scrubbed = paired(prepared, stages["converted"], stages["scrubbed"], "scrubbed")
+            scrub_ok = (
+                records.get("scrub") == "complete"
+                and len(scrubbed) == len(prepared)
+            )
+            defaced = (
+                paired(scrubbed, stages["scrubbed"], stages["defaced"], "defaced")
+                if scrub_ok else []
+            )
+            deface_ok = (
+                records.get("deface") == "complete"
+                and scrub_ok and len(defaced) == len(scrubbed)
+            )
+            stage_results.append((True, scrub_ok, deface_ok))
+
+        return tuple(all(row[index] for row in stage_results) for index in range(3))
 
     def _save_imaging_pipeline_state(
         self,
