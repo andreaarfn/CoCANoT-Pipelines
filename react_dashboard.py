@@ -3622,7 +3622,7 @@ class CoCANoTAPI:
             next_path = next((p for p in (
                 stages["scrubbed"] / relative.parent / f"{base}_scrubbed.nii.gz",
                 stages["scrubbed"] / relative.parent / f"{base}_scrubbed.nii",
-            ) if p.is_file()), None)
+            ) if p.is_file() and p.stat().st_size > 0), None)
             if next_path is None:
                 return True, False, False
             scrubbed.append(next_path)
