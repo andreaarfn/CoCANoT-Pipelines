@@ -3912,6 +3912,36 @@ class CoCANoTAPI:
             return {"source": "selection_history",
                     "note": "Existing imaging outputs were matched to the saved source selection."}
 
+        # A removal or reordering changes the combined selection signature.
+        # Verify ONLY the currently selected sources against real derivatives,
+        # without requiring the original group to remain selected. This is
+        # especially important for subsets of previously processed groups.
+        if not same_context and (
+            bool(self.nifti_input_paths) != bool(self.dicom_input_paths)
+        ):
+            if self.nifti_input_paths:
+                verified = self._verify_selected_nifti_stages(stages)
+            else:
+                verified = self._verify_selected_dicom_stages(stages)
+            if any(verified):
+                prepare_complete, scrub_complete, deface_complete = verified
+                self.imaging_stage_state = {
+                    "prepare": "complete" if prepare_complete else "not_started",
+                    "scrub": "complete" if scrub_complete else "not_started",
+                    "deface": "complete" if deface_complete else "not_started",
+                    "review": "not_started",
+                    "metadata_bids": "not_started",
+                }
+                if deface_complete:
+                    self._refresh_imaging_review_stage()
+                self._save_imaging_pipeline_state(
+                    config, note="Verified remaining selected sources against existing derivatives."
+                )
+                return {
+                    "source": "selected_derivatives",
+                    "note": "Step 3 checked only the currently selected files and folders.",
+                }
+
         if same_context:
             if not self.dicom_input_paths and self.nifti_input_paths:
                 prepare_complete, scrub_complete, deface_complete = (
