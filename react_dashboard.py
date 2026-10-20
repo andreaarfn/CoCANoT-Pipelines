@@ -7003,6 +7003,27 @@ class CoCANoTAPI:
             for path in expanded
         ]
 
+    def _imaging_header_annotations_for_export(self, source_key: str, config) -> dict[str, str]:
+        """Read review-only header notes without modifying NIfTI headers."""
+        state_path = self._imaging_stage_paths(config)["review_state"]
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(state, dict):
+            return {}
+        entry = state.get(source_key, {})
+        if not isinstance(entry, dict):
+            return {}
+        notes = entry.get("header_annotations", entry.get("header_review_overrides", {}))
+        if not isinstance(notes, dict):
+            return {}
+        return {
+            str(field): str(note)
+            for field, note in notes.items()
+            if str(field).strip() and str(note).strip()
+        }
+
     def imaging_bids_convert(
         self,
         payload: dict[str, Any],
@@ -7065,6 +7086,9 @@ class CoCANoTAPI:
                             "",
                         )
                         or ""
+                    ),
+                    "header_annotations": self._imaging_header_annotations_for_export(
+                        str(record.get("source_key", "") or ""), config
                     ),
                     "source_label": str(
                         record.get(
