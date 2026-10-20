@@ -3336,6 +3336,99 @@ class CoCANoTAPI:
         if not selected_sources:
             return None
 
+        # Reconstruct multi-source completion from any combination of saved
+        # groups, independent of selection order and folder depth.  Entries
+        # contribute only the input files they actually covered; never infer
+        # completion of a new source from a different processed source.
+        def file_ids(sources: dict[str, Any]) -> set[tuple[str, str, int, int]] | None:
+            identities: set[tuple[str, str, int, int]] = set()
+            try:
+                for kind in ("dicom", "nifti"):
+                    for item in sources.get(kind, []):
+                        root = Path(str(item["path"])).expanduser()
+                        if item.get("kind") == "file":
+                            files = [(root, item)]
+                        elif item.get("kind") == "directory":
+                            files = []
+                            for child in item.get("entries", []):
+                                relative = Path(str(child["path"]))
+                                if relative.is_absolute() or ".." in relative.parts:
+                                    return None
+                                files.append((root / relative, child))
+                        else:
+                            return None
+                        for path, details in files:
+                            # Match real input identity; a renamed folder alone
+                            # must not invalidate a completed series.
+                            identities.add((
+                                kind, str(path.resolve()),
+                                int(details["size"]), int(details["mtime_ns"]),
+                            ))
+            except (KeyError, TypeError, ValueError, OSError):
+                return None
+            return identities or None
+
+        selected_ids = file_ids(fingerprint)
+        if selected_ids:
+            converted_root = stages["converted"].resolve()
+            covered = {"prepare": set(), "scrub": set(), "deface": set()}
+            for entry in history.values():
+                if not isinstance(entry, dict) or not isinstance(entry.get("sources"), dict):
+                    continue
+                entry_ids = file_ids(entry["sources"])
+                if not entry_ids or not entry_ids.issubset(selected_ids):
+                    continue
+                names = entry.get("prepared_files", [])
+                recorded = entry.get("stages", {})
+                if not isinstance(names, list) or not names or not isinstance(recorded, dict):
+                    continue
+                prepared = []
+                for name in names:
+                    candidate = (converted_root / str(name)).resolve()
+                    if not candidate.is_relative_to(converted_root) or not (
+                        candidate.is_file() and _is_nifti(candidate)
+                        and candidate.stat().st_size > 0
+                    ):
+                        break
+                    prepared.append(candidate)
+                else:
+                    if recorded.get("prepare") != "complete":
+                        continue
+                    covered["prepare"].update(entry_ids)
+                    scrubbed = []
+                    for source in prepared:
+                        relative = source.relative_to(converted_root)
+                        base = self._strip_nifti_suffix(source)
+                        options = (
+                            stages["scrubbed"] / relative.parent / f"{base}_scrubbed.nii.gz",
+                            stages["scrubbed"] / relative.parent / f"{base}_scrubbed.nii",
+                        )
+                        match = next((p for p in options if p.is_file() and p.stat().st_size > 0), None)
+                        if match is None:
+                            break
+                        scrubbed.append(match)
+                    if recorded.get("scrub") != "complete" or len(scrubbed) != len(prepared):
+                        continue
+                    covered["scrub"].update(entry_ids)
+                    for source in scrubbed:
+                        relative = source.relative_to(stages["scrubbed"])
+                        base = self._strip_nifti_suffix(source)
+                        options = (
+                            stages["defaced"] / relative.parent / f"{base}_defaced.nii.gz",
+                            stages["defaced"] / relative.parent / f"{base}_defaced.nii",
+                        )
+                        if not any(p.is_file() and p.stat().st_size > 0 for p in options):
+                            break
+                    else:
+                        if recorded.get("deface") == "complete":
+                            covered["deface"].update(entry_ids)
+            if selected_ids.issubset(covered["prepare"]):
+                return (
+                    True,
+                    selected_ids.issubset(covered["scrub"]),
+                    selected_ids.issubset(covered["deface"]),
+                )
+
         def source_key(kind: str, item: dict[str, Any]) -> str:
             return json.dumps([kind, item], sort_keys=True, separators=(",", ":"))
 
