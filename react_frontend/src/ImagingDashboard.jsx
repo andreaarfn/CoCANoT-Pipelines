@@ -74,6 +74,7 @@ export default function ImagingDashboard({
   const [completionNotice, setCompletionNotice] = useState(false);
   const outputSettingsDirtyRef = useRef(false);
   const metadataBidsTerminalRefreshRef = useRef("");
+  const metadataBidsWasRunningRef = useRef(false);
   const bidsRecordsRef = useRef([]);
 
   function showImagingHome() {
@@ -115,23 +116,34 @@ export default function ImagingDashboard({
 
       const metadataBidsState =
         state?.process_stages?.metadata_bids ?? "";
+      const isBidsRunning =
+        state?.process_running === true &&
+        state?.active_operation === "metadata_bids";
+      const conversionJustFinished =
+        metadataBidsWasRunningRef.current && !isBidsRunning;
+      metadataBidsWasRunningRef.current = isBidsRunning;
 
+      // Completion can reach the database before the stage status settles.
+      // Refresh from durable records whenever conversion finishes, not only
+      // when the status happens to equal "complete" or "failed".
       const terminalKey =
         view === "metadata" &&
-        state?.process_running === false &&
+        !isBidsRunning &&
         ["complete", "failed", "stopped"].includes(metadataBidsState)
           ? metadataBidsState
           : "";
 
       if (
-        terminalKey &&
-        metadataBidsTerminalRefreshRef.current !== terminalKey
+        view === "metadata" &&
+        (conversionJustFinished ||
+          (terminalKey &&
+            metadataBidsTerminalRefreshRef.current !== terminalKey))
       ) {
         metadataBidsTerminalRefreshRef.current = terminalKey;
         await loadBidsState();
       }
 
-      if (state?.process_running === true) {
+      if (isBidsRunning) {
         metadataBidsTerminalRefreshRef.current = "";
       }
     } catch (error) {
