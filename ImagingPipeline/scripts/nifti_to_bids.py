@@ -957,8 +957,8 @@ def build_bids_base(
 ) -> str:
     """Build a CoCANoT imaging basename with its stable Image ID.
 
-    Pattern: sub-<subject>_img-<imageid>[_ses-<session>][_<acquisition>]_<suffix>
-    The img- entity is CoCANoT-specific rather than a standard BIDS entity.
+    Pattern: sub-<subject>_<imageid>[_ses-<session>][_<acquisition>]_<suffix>
+    The Image ID component is CoCANoT-specific rather than a standard BIDS entity.
     """
     image_id = str(
         (record.get("cocanot_metadata") or {}).get("Image ID") or ""
@@ -969,7 +969,7 @@ def build_bids_base(
     if not safe_image_id:
         raise ValueError("CoCANoT Image ID is required for imaging export naming.")
 
-    parts = [f"sub-{record['participant']}", f"img-{safe_image_id}"]
+    parts = [f"sub-{record['participant']}", safe_image_id]
     if record["session"]:
         parts.append(f"ses-{record['session']}")
     acq = str(record["bids_entities"].get("acq", "")).strip()
