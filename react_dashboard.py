@@ -3296,6 +3296,19 @@ class CoCANoTAPI:
             ]
         else:
             recorded_paths = list(previous.get("prepared_files", []))
+        # The process itself knows which new outputs it produced even when
+        # legacy directory names cannot be inferred from the source path.
+        context = self._imaging_cleanup_context or {}
+        if context.get("operation") == "prepare":
+            root_key = _resolve_text(stages["converted"])
+            before = set(context.get("before", {}).get(root_key, set()))
+            produced = [
+                str(p.relative_to(stages["converted"]))
+                for p in self._all_nifti_files(stages["converted"])
+                if _resolve_text(p) not in before
+            ]
+            if produced:
+                recorded_paths = produced
         history[signature] = {
             "sources": self._imaging_selection_fingerprint(),
             "stages": recorded,
@@ -4047,12 +4060,6 @@ class CoCANoTAPI:
         if self.imaging_active_operation == operation:
             self.imaging_active_operation = ""
 
-        if (
-            self._imaging_cleanup_context
-            and self._imaging_cleanup_context.get("operation") == operation
-        ):
-            self._imaging_cleanup_context = None
-
         try:
             config = load_imaging_config()
             if return_code == 0 and operation in {"prepare", "scrub", "deface"}:
@@ -4060,6 +4067,12 @@ class CoCANoTAPI:
             self._save_imaging_pipeline_state(config)
         except Exception:
             pass
+
+        if (
+            self._imaging_cleanup_context
+            and self._imaging_cleanup_context.get("operation") == operation
+        ):
+            self._imaging_cleanup_context = None
 
     def _fail_imaging_stage(
         self,
