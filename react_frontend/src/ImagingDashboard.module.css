@@ -2609,6 +2609,42 @@
 
 }
 
+.reviewFilePending {
+  background: #eef6fb;
+  border-color: #c5dfee;
+  color: #2c5f7e;
+}
+
+.reviewFileHold {
+  background: #fff8e6;
+  border-color: #ecd69b;
+  color: #846012;
+}
+
+.reviewFileAccepted {
+  background: #eaf7ef;
+  border-color: #b7dec3;
+  color: #276842;
+}
+
+.reviewFileRejected {
+  background: #fff0f1;
+  border-color: #efc2c7;
+  color: #a63a45;
+}
+
+.reviewFilePending:hover,
+.reviewFileHold:hover,
+.reviewFileAccepted:hover,
+.reviewFileRejected:hover {
+  filter: brightness(0.97);
+}
+
+.reviewFileActive {
+  outline: 2px solid #79aaca;
+  outline-offset: 1px;
+}
+
 .reviewFileActive {
 
   border-color: #8ab4cf;
