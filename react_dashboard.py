@@ -3418,6 +3418,94 @@ class CoCANoTAPI:
                 return True, True, False
         return True, True, True
 
+    def _matched_selected_dicom_derivatives(
+        self, stages: dict[str, Path],
+    ) -> list[Path]:
+        """Find derivatives for the selected DICOM folders, independent of order.
+
+        Only accept a unique output match for each DICOM-containing folder.
+        Ambiguous or missing outputs are not evidence of completion.
+        """
+        if not self.dicom_input_paths or self.nifti_input_paths:
+            return []
+        roots = [Path(v).expanduser().resolve() for v in self.dicom_input_paths]
+        if not roots or any(not root.is_dir() for root in roots):
+            return []
+        converted = stages["converted"]
+        output_roots = [converted] + sorted(
+            p for p in converted.glob("source-[0-9][0-9][0-9]")
+            if p.is_dir()
+        )
+        selected: list[Path] = []
+        for root in roots:
+            dicom_dirs: list[Path] = []
+            for directory in [root, *sorted(p for p in root.rglob("*") if p.is_dir())]:
+                try:
+                    if any(
+                        p.is_file() and not p.name.startswith(".")
+                        and p.suffix.lower() in {".dcm", ".ima", ""}
+                        for p in directory.iterdir()
+                    ):
+                        dicom_dirs.append(directory)
+                except (OSError, PermissionError):
+                    return []
+            if not dicom_dirs:
+                return []
+            for folder in dicom_dirs:
+                # A folder's output can be under its relative location,
+                # or under a numbered root from a previous multi-source run.
+                relative = folder.relative_to(root)
+                candidates = [
+                    output_root / relative for output_root in output_roots
+                ]
+                # When the user reselects a nested folder, its former
+                # parent-relative path may include one or more ancestors.
+                for n in range(1, len(folder.parts) + 1):
+                    suffix = Path(*folder.parts[-n:])
+                    candidates.extend(output_root / suffix for output_root in output_roots)
+                direct_matches = []
+                for destination in dict.fromkeys(candidates):
+                    if destination.is_dir():
+                        files = [
+                            p for p in destination.iterdir()
+                            if p.is_file() and _is_nifti(p) and p.stat().st_size > 0
+                        ]
+                        if files:
+                            direct_matches.append(sorted(files))
+                # A single folder selected as the sole source converts to
+                # converted_nifti directly in the original converter.
+                if len(direct_matches) != 1:
+                    return []
+                selected.extend(direct_matches[0])
+        return list(dict.fromkeys(selected))
+
+    def _verify_selected_dicom_stages(
+        self, stages: dict[str, Path],
+    ) -> tuple[bool, bool, bool]:
+        prepared = self._matched_selected_dicom_derivatives(stages)
+        if not prepared:
+            return False, False, False
+        scrubbed = []
+        for path in prepared:
+            relative = path.relative_to(stages["converted"])
+            base = self._strip_nifti_suffix(path)
+            found = next((p for p in (
+                stages["scrubbed"] / relative.parent / f"{base}_scrubbed.nii.gz",
+                stages["scrubbed"] / relative.parent / f"{base}_scrubbed.nii",
+            ) if p.is_file() and p.stat().st_size > 0), None)
+            if found is None:
+                return True, False, False
+            scrubbed.append(found)
+        for path in scrubbed:
+            relative = path.relative_to(stages["scrubbed"])
+            base = self._strip_nifti_suffix(path)
+            if not any(p.is_file() and p.stat().st_size > 0 for p in (
+                stages["defaced"] / relative.parent / f"{base}_defaced.nii.gz",
+                stages["defaced"] / relative.parent / f"{base}_defaced.nii",
+            )):
+                return True, True, False
+        return True, True, True
+
     def _verify_prepare_outputs(
         self,
         stages: dict[str, Path],
@@ -3582,6 +3670,10 @@ class CoCANoTAPI:
                 prepare_complete, scrub_complete, deface_complete = (
                     self._verify_selected_nifti_stages(stages)
                 )
+            elif self.dicom_input_paths and not self.nifti_input_paths:
+                prepare_complete, scrub_complete, deface_complete = (
+                    self._verify_selected_dicom_stages(stages)
+                )
             else:
                 prepare_complete = (
                     saved_stages.get("prepare") == "complete"
@@ -3681,6 +3773,14 @@ class CoCANoTAPI:
             )
         except (OSError, ValueError):
             prepare_complete = scrub_complete = deface_complete = False
+
+        if not prepare_complete and self.dicom_input_paths and not self.nifti_input_paths:
+            try:
+                prepare_complete, scrub_complete, deface_complete = (
+                    self._verify_selected_dicom_stages(stages)
+                )
+            except (OSError, ValueError):
+                prepare_complete = scrub_complete = deface_complete = False
 
         if prepare_complete:
             review_complete = deface_complete and self._verify_review_complete()
@@ -6903,6 +7003,29 @@ class CoCANoTAPI:
         )
 
         if operation == "prepare":
+            if not overwrite:
+                try:
+                    if self.dicom_input_paths and not self.nifti_input_paths:
+                        already_prepared = self._verify_selected_dicom_stages(stages)[0]
+                    elif self.nifti_input_paths and not self.dicom_input_paths:
+                        already_prepared = self._verify_selected_nifti_stages(stages)[0]
+                    else:
+                        already_prepared = False
+                except (OSError, ValueError):
+                    already_prepared = False
+                if already_prepared:
+                    self._sync_imaging_stage_state_from_disk(config)
+                    self._imaging_log(
+                        "Selected imaging sources already have verified "
+                        "derivative outputs; skipping NIfTI preparation."
+                    )
+                    return {
+                        "ok": True,
+                        "state": "complete",
+                        "status": "Existing prepared NIfTI outputs verified",
+                        "process_stages": dict(self.imaging_stage_state),
+                        "active_operation": self.imaging_active_operation,
+                    }
             cleanup_roots = [
                 stages["converted"],
                 config.imaging.derivatives_dir
