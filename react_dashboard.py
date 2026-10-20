@@ -8224,7 +8224,67 @@ class CoCANoTAPI:
 
     def imaging_review_get_items(self) -> list[dict[str, Any]]:
         items, _ = self._imaging_review_items()
-        return [{"id": i["id"], "key": i["key"], "status": i["status"], "defacing_source": i["defacing_source"]} for i in items]
+        exported_keys: set[str] = set()
+        try:
+            config = load_imaging_config()
+            output_root = config.imaging.bids_output_dir.resolve()
+            # Reuse Step 5's authoritative source-to-record resolution rather
+            # than matching a similarly named NIfTI to a different image.
+            bids_records = self.imaging_bids_get_state().get("records", [])
+            for record in bids_records:
+                if record.get("record_state") != "completed_recorded":
+                    continue
+                exported = record.get("existing_export")
+                if not isinstance(exported, dict):
+                    continue
+                image_path = Path(str(exported.get("nifti_path") or "")).expanduser()
+                try:
+                    image_path = image_path.resolve()
+                    if not image_path.is_relative_to(output_root) or not image_path.is_file():
+                        continue
+                    sidecar_path = _matching_json(image_path)
+                    if sidecar_path is None:
+                        continue
+                    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                    if not isinstance(sidecar, dict):
+                        continue
+                    identity = sidecar.get("CoCANoTMetadata")
+                    if not isinstance(identity, dict):
+                        identity = exported.get("cocanot_metadata")
+                    if not isinstance(identity, dict):
+                        continue
+                    expected = record.get("cocanot_metadata")
+                    if not isinstance(expected, dict):
+                        continue
+                    if not all(
+                        str(identity.get(field) or "").strip()
+                        and str(identity.get(field) or "").strip()
+                        == str(expected.get(field) or "").strip()
+                        for field in ("CoCANoT Patient ID", "Image ID")
+                    ):
+                        continue
+                    key = str(record.get("source_key") or "")
+                    if key:
+                        exported_keys.add(key)
+                except (OSError, ValueError, json.JSONDecodeError):
+                    continue
+        except Exception:
+            # The review sidebar must remain available if Step 5 is unconfigured
+            # or its export index cannot be read.
+            pass
+        return [
+            {
+                "id": item["id"],
+                "key": item["key"],
+                "status": item["status"],
+                "defacing_source": item["defacing_source"],
+                "exported": (
+                    item["status"] in {"Accepted", "Accepted - External"}
+                    and item["key"] in exported_keys
+                ),
+            }
+            for item in items
+        ]
 
     @staticmethod
     def _header_dict(path: Path) -> dict[str, str]:
