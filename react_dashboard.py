@@ -3358,6 +3358,9 @@ class CoCANoTAPI:
             isinstance(exact, dict)
             and len(entry_sources(exact)) == len(selected_keys)
             and set(entry_sources(exact)) == selected_set
+            and isinstance(exact.get("prepared_files"), list)
+            and bool(exact.get("prepared_files"))
+            and exact.get("stages", {}).get("prepare") == "complete"
         ):
             records_to_check = [exact]
         else:
