@@ -3255,6 +3255,104 @@ class CoCANoTAPI:
 
         return payload if isinstance(payload, dict) else {}
 
+    def _imaging_completion_history_path(self, config) -> Path:
+        return config.imaging.derivatives_dir / "imaging_selection_history.json"
+
+    def _read_imaging_completion_history(self, config) -> dict[str, Any]:
+        path = self._imaging_completion_history_path(config)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _record_imaging_completion_history(self, config) -> None:
+        """Preserve stage completions for each selection across removal/re-add."""
+        signature = self._imaging_selection_signature()
+        if not self.dicom_input_paths and not self.nifti_input_paths:
+            return
+        history = self._read_imaging_completion_history(config)
+        previous = history.get(signature, {})
+        if not isinstance(previous, dict):
+            previous = {}
+        stages = self._imaging_stage_paths(config)
+        recorded = dict(previous.get("stages", {}))
+        for key in ("prepare", "scrub", "deface"):
+            if self.imaging_stage_state.get(key) == "complete":
+                recorded[key] = "complete"
+        # Record actual derivative paths when possible. Also preserve
+        # previously recorded paths, because selecting fewer sources
+        # should not overwrite their records.
+        prepared = (
+            self._matched_selected_nifti_derivatives(stages["converted"])
+            if self.nifti_input_paths and not self.dicom_input_paths
+            else self._matched_selected_dicom_derivatives(stages)
+            if self.dicom_input_paths and not self.nifti_input_paths
+            else []
+        )
+        if prepared:
+            recorded_paths = [
+                str(p.relative_to(stages["converted"])) for p in prepared
+            ]
+        else:
+            recorded_paths = list(previous.get("prepared_files", []))
+        history[signature] = {
+            "sources": self._imaging_selection_fingerprint(),
+            "stages": recorded,
+            "prepared_files": recorded_paths,
+        }
+        path = self._imaging_completion_history_path(config)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
+
+    def _restore_imaging_completion_history(
+        self, config, stages: dict[str, Path],
+    ) -> tuple[bool, bool, bool] | None:
+        entry = self._read_imaging_completion_history(config).get(
+            self._imaging_selection_signature()
+        )
+        if not isinstance(entry, dict):
+            return None
+        records = entry.get("stages", {})
+        names = entry.get("prepared_files", [])
+        if not isinstance(records, dict) or not isinstance(names, list) or not names:
+            return None
+        converted = stages["converted"].resolve()
+        prepared = []
+        for name in names:
+            candidate = (converted / str(name)).resolve()
+            if not candidate.is_relative_to(converted) or not (
+                candidate.is_file() and _is_nifti(candidate)
+                and candidate.stat().st_size > 0
+            ):
+                return None
+            prepared.append(candidate)
+        if not prepared:
+            return None
+        def paired(paths: list[Path], input_root: Path,
+                   output_root: Path, suffix: str) -> list[Path]:
+            result = []
+            for source in paths:
+                relative = source.relative_to(input_root)
+                base = self._strip_nifti_suffix(source)
+                match = next((p for p in (
+                    output_root / relative.parent / f"{base}_{suffix}.nii.gz",
+                    output_root / relative.parent / f"{base}_{suffix}.nii",
+                ) if p.is_file() and p.stat().st_size > 0), None)
+                if match is None:
+                    return []
+                result.append(match)
+            return result
+
+        prepare_ok = records.get("prepare") == "complete"
+        if not prepare_ok:
+            return None
+        scrubbed = paired(prepared, stages["converted"], stages["scrubbed"], "scrubbed")
+        scrub_ok = records.get("scrub") == "complete" and len(scrubbed) == len(prepared)
+        defaced = paired(scrubbed, stages["scrubbed"], stages["defaced"], "defaced") if scrub_ok else []
+        deface_ok = records.get("deface") == "complete" and len(defaced) == len(scrubbed) and scrub_ok
+        return True, scrub_ok, deface_ok
+
     def _save_imaging_pipeline_state(
         self,
         config,
@@ -3676,6 +3774,24 @@ class CoCANoTAPI:
                 return saved
             return "not_started"
 
+        restored_history = self._restore_imaging_completion_history(config, stages)
+        if restored_history is not None:
+            prepare_complete, scrub_complete, deface_complete = restored_history
+            self.imaging_stage_state = {
+                "prepare": "complete" if prepare_complete else "not_started",
+                "scrub": "complete" if scrub_complete else "not_started",
+                "deface": "complete" if deface_complete else "not_started",
+                "review": "not_started",
+                "metadata_bids": "not_started",
+            }
+            if deface_complete:
+                self._refresh_imaging_review_stage()
+            self._save_imaging_pipeline_state(
+                config, note="Restored previously completed imaging stages for this selection."
+            )
+            return {"source": "selection_history",
+                    "note": "Existing imaging outputs were matched to the saved source selection."}
+
         if same_context:
             if not self.dicom_input_paths and self.nifti_input_paths:
                 prepare_complete, scrub_complete, deface_complete = (
@@ -3778,6 +3894,11 @@ class CoCANoTAPI:
             ):
                 self.imaging_stage_state["metadata_bids"] = "running"
 
+            if prepare_complete:
+                try:
+                    self._record_imaging_completion_history(config)
+                except (OSError, ValueError):
+                    pass
             self._save_imaging_pipeline_state(
                 config,
                 note=(
@@ -3825,6 +3946,10 @@ class CoCANoTAPI:
                 "Verified selected NIfTI source copies against derivative files; "
                 "restored completed processing stages from matching outputs."
             )
+            try:
+                self._record_imaging_completion_history(config)
+            except (OSError, ValueError):
+                pass
             self._save_imaging_pipeline_state(config, note=note)
             return {"source": "verified_outputs", "note": note}
 
@@ -3929,7 +4054,10 @@ class CoCANoTAPI:
             self._imaging_cleanup_context = None
 
         try:
-            self._save_imaging_pipeline_state(load_imaging_config())
+            config = load_imaging_config()
+            if return_code == 0 and operation in {"prepare", "scrub", "deface"}:
+                self._record_imaging_completion_history(config)
+            self._save_imaging_pipeline_state(config)
         except Exception:
             pass
 
