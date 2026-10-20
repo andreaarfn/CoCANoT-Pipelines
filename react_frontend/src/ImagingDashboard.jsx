@@ -2621,7 +2621,7 @@ function ImagingReview({
                           <td>{row.field}</td>
                           <td>{row.raw}</td>
                           <td>{row.review_override != null ? <><strong>{row.review_override}</strong> <small>(header annotation; file unchanged)</small></> : row.scrubbed}</td>
-                          <td>{row.review_only ? "Annotation only" : row.editable ? "Yes — saved to NIfTI" : "No"}</td>
+                          <td>{row.review_only ? "Derived — not directly editable" : row.editable ? "Edit with integrity validation" : "Not editable"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2661,7 +2661,7 @@ function ImagingReview({
                   </div>
                   {review.header_rows.find(row => row.field === editField)?.review_only && (
                     <p className={styles.headerEditNotice}>
-                      <strong>Saved as a header annotation, not a NIfTI header edit.</strong> The value you enter is stored in this image's local review record (under header_annotations). The actual NIfTI header remains unchanged, and this annotation is not automatically included in BIDS exports.
+                      <strong>Derived property.</strong> This value is calculated from other image information and cannot be edited independently. Select an actual NIfTI header field to attempt a validated edit.
                     </p>
                   )}
                 </div>
