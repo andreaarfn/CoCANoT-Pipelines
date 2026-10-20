@@ -462,23 +462,37 @@ def process_one_file(
         output_nifti
     )
 
-    if (
-        output_nifti.exists()
-        and not overwrite
-    ):
+    if output_nifti.exists() and not overwrite:
+        # A NIfTI file alone is not enough: a failed prior run can leave
+        # a truncated image or an absent/incomplete metadata sidecar.
+        # Only skip when the existing pair passes validation.
+        valid_existing = False
+        try:
+            if output_nifti.stat().st_size > 0 and output_json.is_file():
+                verify_nifti(input_path, output_nifti)
+                with output_json.open("r", encoding="utf-8") as handle:
+                    sidecar = json.load(handle)
+                valid_existing = (
+                    isinstance(sidecar, dict)
+                    and sidecar.get("PHIScrubbed") is True
+                )
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+            valid_existing = False
+
+        if valid_existing:
+            print(
+                "Skipping verified existing scrubbed output: "
+                f"{output_nifti.relative_to(output_dir)}"
+            )
+            return "skipped"
+
         print(
-            "Skipping existing: "
+            "Repairing incomplete scrubbed output: "
             f"{output_nifti.relative_to(output_dir)}"
         )
-        return "skipped"
 
-    if overwrite:
-        output_nifti.unlink(
-            missing_ok=True
-        )
-        output_json.unlink(
-            missing_ok=True
-        )
+    # Do not unlink existing files before a successful replacement;
+    # a failed retry must not destroy an earlier usable result.
 
     scrub_nifti_header(
         input_path=input_path,
