@@ -2589,8 +2589,9 @@ function ImagingReview({
                 const status = String(item.status || "").trim().toLowerCase();
                 if (status.startsWith("pending")) return 0;
                 if (status.startsWith("on hold")) return 1;
+                if (item.exported && status.startsWith("accepted")) return 3;
                 if (status.startsWith("accepted")) return 2;
-                if (status.startsWith("rejected")) return 3;
+                if (status.startsWith("rejected")) return 4;
                 return 1;
               };
               return rank(a) - rank(b);
@@ -2600,12 +2601,13 @@ function ImagingReview({
                 className={`${styles.reviewFile} ${String(item.id) === selectedId ? styles.reviewFileActive : ""} ${
                   String(item.status || "").toLowerCase().startsWith("pending") ? styles.reviewFilePending :
                   String(item.status || "").toLowerCase().startsWith("on hold") ? styles.reviewFileHold :
+                  item.exported && String(item.status || "").toLowerCase().startsWith("accepted") ? styles.reviewFileExported :
                   String(item.status || "").toLowerCase().startsWith("accepted") ? styles.reviewFileAccepted :
                   String(item.status || "").toLowerCase().startsWith("rejected") ? styles.reviewFileRejected : ""
                 }`}
                 onClick={() => loadItem(String(item.id))}
               >
-                [{item.status}] {item.key}
+                [{item.exported && String(item.status || "").startsWith("Accepted") ? "Exported" : item.status}] {item.key}
               </button>
             ))}
           </div>
