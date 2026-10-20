@@ -2584,10 +2584,25 @@ function ImagingReview({
         <aside className={styles.reviewSidebar}>
           <h3>NIfTI files</h3>
           <div className={styles.reviewFileList}>
-            {items.map(item => (
+            {[...items].sort((a, b) => {
+              const rank = item => {
+                const status = String(item.status || "").trim().toLowerCase();
+                if (status.startsWith("pending")) return 0;
+                if (status.startsWith("on hold")) return 1;
+                if (status.startsWith("accepted")) return 2;
+                if (status.startsWith("rejected")) return 3;
+                return 1;
+              };
+              return rank(a) - rank(b);
+            }).map(item => (
               <button
                 key={item.id}
-                className={`${styles.reviewFile} ${String(item.id) === selectedId ? styles.reviewFileActive : ""}`}
+                className={`${styles.reviewFile} ${String(item.id) === selectedId ? styles.reviewFileActive : ""} ${
+                  String(item.status || "").toLowerCase().startsWith("pending") ? styles.reviewFilePending :
+                  String(item.status || "").toLowerCase().startsWith("on hold") ? styles.reviewFileHold :
+                  String(item.status || "").toLowerCase().startsWith("accepted") ? styles.reviewFileAccepted :
+                  String(item.status || "").toLowerCase().startsWith("rejected") ? styles.reviewFileRejected : ""
+                }`}
                 onClick={() => loadItem(String(item.id))}
               >
                 [{item.status}] {item.key}
