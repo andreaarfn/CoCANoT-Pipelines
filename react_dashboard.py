@@ -3706,6 +3706,69 @@ class CoCANoTAPI:
             p for p in converted.glob("source-[0-9][0-9][0-9]")
             if p.is_dir()
         )
+        # For a selected SER/OBJ folder, previous conversions may have been
+        # launched from its parent SER folder (or directly from OBJ).
+        # Historical mappings are safer than guessing which source-NNN
+        # output belongs to a similarly named patient series.
+        history = self._read_imaging_completion_history(
+            load_imaging_config()
+        )
+        current_fingerprint = self._imaging_selection_fingerprint()
+
+        def dicom_identity(fingerprint: dict[str, Any]) -> list[tuple[str, int, int]]:
+            result = []
+            for item in fingerprint.get("dicom", []):
+                if not isinstance(item, dict):
+                    continue
+                base = Path(str(item.get("path", "")))
+                entries = (
+                    [(base, item)] if item.get("kind") == "file"
+                    else [
+                        (base / str(child.get("path", "")), child)
+                        for child in item.get("entries", [])
+                        if isinstance(child, dict)
+                    ] if item.get("kind") == "directory" else []
+                )
+                for file_path, detail in entries:
+                    if file_path.suffix.lower() not in {".dcm", ".ima", ""}:
+                        continue
+                    result.append((
+                        str(file_path.resolve()),
+                        int(detail.get("size", -1)),
+                        int(detail.get("mtime_ns", -1)),
+                    ))
+            return sorted(set(result))
+
+        selected_identity = dicom_identity(current_fingerprint)
+        historical_prepared = []
+        if selected_identity:
+            for entry in history.values():
+                if not isinstance(entry, dict):
+                    continue
+                sources = entry.get("sources", {})
+                if not isinstance(sources, dict) or sources.get("nifti"):
+                    continue
+                if dicom_identity(sources) != selected_identity:
+                    continue
+                if entry.get("stages", {}).get("prepare") != "complete":
+                    continue
+                prepared_files = entry.get("prepared_files", [])
+                if not isinstance(prepared_files, list) or not prepared_files:
+                    continue
+                candidates = []
+                for relative_text in prepared_files:
+                    candidate = (converted / str(relative_text)).resolve()
+                    if not candidate.is_relative_to(converted.resolve()) or not (
+                        candidate.is_file() and _is_nifti(candidate)
+                        and candidate.stat().st_size > 0
+                    ):
+                        break
+                    candidates.append(candidate)
+                else:
+                    historical_prepared = candidates
+                    break
+        if historical_prepared:
+            return historical_prepared
 
         def outputs(directory: Path) -> list[Path]:
             if not directory.is_dir():
