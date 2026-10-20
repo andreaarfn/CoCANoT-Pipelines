@@ -788,6 +788,11 @@ def validate_record(
 
         "cocanot_metadata": metadata,
         "sidecar_metadata": raw.get("sidecar_metadata", None),
+        "header_annotations": {
+            str(field): str(note)
+            for field, note in (raw.get("header_annotations") or {}).items()
+            if str(field).strip() and str(note).strip()
+        },
 
         "imaging_modality": modality,
 
@@ -1332,6 +1337,8 @@ def copy_record(
 
 
 
+    header_annotations = record.get("header_annotations", {})
+
     write_json(
 
         output_metadata,
@@ -1342,6 +1349,8 @@ def copy_record(
 
             "ScrubbedHeader": scrubbed_header,
 
+            "HeaderAnnotations": header_annotations,
+
         },
 
     )
@@ -1351,6 +1360,10 @@ def copy_record(
     sidecar = dict(scrubbed_header)
     # Keep the full validated CoCANoT dictionary together with this image sidecar.
     sidecar["CoCANoTMetadata"] = dict(metadata)
+
+    # Review-only notes travel with the BIDS metadata. They must not
+    # modify geometry, spatial orientation, or native NIfTI header values.
+    sidecar["HeaderAnnotations"] = dict(header_annotations)
 
     sidecar["Defaced"] = True
 
