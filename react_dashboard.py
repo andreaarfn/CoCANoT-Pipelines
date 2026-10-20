@@ -3421,10 +3421,11 @@ class CoCANoTAPI:
     def _matched_selected_dicom_derivatives(
         self, stages: dict[str, Path],
     ) -> list[Path]:
-        """Find derivatives for the selected DICOM folders, independent of order.
+        """Find conversion outputs without depending on Step 1 list indices.
 
-        Only accept a unique output match for each DICOM-containing folder.
-        Ambiguous or missing outputs are not evidence of completion.
+        Prefer the converter's exact relative layout, then legacy roots
+        from prior selections. Duplicate paths are ignored. A candidate
+        must contain real non-empty NIfTI files.
         """
         if not self.dicom_input_paths or self.nifti_input_paths:
             return []
@@ -3436,47 +3437,57 @@ class CoCANoTAPI:
             p for p in converted.glob("source-[0-9][0-9][0-9]")
             if p.is_dir()
         )
+
+        def outputs(directory: Path) -> list[Path]:
+            if not directory.is_dir():
+                return []
+            return sorted(
+                p for p in directory.iterdir()
+                if p.is_file() and _is_nifti(p) and p.stat().st_size > 0
+            )
+
         selected: list[Path] = []
         for root in roots:
             dicom_dirs: list[Path] = []
             for directory in [root, *sorted(p for p in root.rglob("*") if p.is_dir())]:
                 try:
-                    if any(
+                    contains_dicom = any(
                         p.is_file() and not p.name.startswith(".")
                         and p.suffix.lower() in {".dcm", ".ima", ""}
                         for p in directory.iterdir()
-                    ):
-                        dicom_dirs.append(directory)
+                    )
                 except (OSError, PermissionError):
                     return []
+                if contains_dicom:
+                    dicom_dirs.append(directory)
             if not dicom_dirs:
                 return []
             for folder in dicom_dirs:
-                # A folder's output can be under its relative location,
-                # or under a numbered root from a previous multi-source run.
                 relative = folder.relative_to(root)
-                candidates = [
-                    output_root / relative for output_root in output_roots
-                ]
-                # When the user reselects a nested folder, its former
-                # parent-relative path may include one or more ancestors.
-                for n in range(1, len(folder.parts) + 1):
-                    suffix = Path(*folder.parts[-n:])
-                    candidates.extend(output_root / suffix for output_root in output_roots)
-                direct_matches = []
-                for destination in dict.fromkeys(candidates):
-                    if destination.is_dir():
-                        files = [
-                            p for p in destination.iterdir()
-                            if p.is_file() and _is_nifti(p) and p.stat().st_size > 0
-                        ]
-                        if files:
-                            direct_matches.append(sorted(files))
-                # A single folder selected as the sole source converts to
-                # converted_nifti directly in the original converter.
-                if len(direct_matches) != 1:
+                # Try the current converter layout first. Re-addition can
+                # change the source-NNN prefix or select a nested ancestor.
+                suffixes = [relative]
+                for count in range(1, len(folder.parts) + 1):
+                    candidate = Path(*folder.parts[-count:])
+                    if candidate not in suffixes:
+                        suffixes.append(candidate)
+                matches = []
+                for suffix in suffixes:
+                    for output_root in output_roots:
+                        destination = output_root / suffix
+                        files = outputs(destination)
+                        if files and destination not in [m[0] for m in matches]:
+                            matches.append((destination, files, len(suffix.parts)))
+                if not matches:
                     return []
-                selected.extend(direct_matches[0])
+                # Prefer the longest distinctive relative path. If multiple
+                # former numbered roots match that path, their files must
+                # be uniquely attributable; do not guess between them.
+                highest = max(score for _, _, score in matches)
+                best = [item for item in matches if item[2] == highest]
+                if len(best) != 1:
+                    return []
+                selected.extend(best[0][1])
         return list(dict.fromkeys(selected))
 
     def _verify_selected_dicom_stages(
@@ -3674,6 +3685,23 @@ class CoCANoTAPI:
                 prepare_complete, scrub_complete, deface_complete = (
                     self._verify_selected_dicom_stages(stages)
                 )
+                # A successfully completed conversion in this exact
+                # selection is authoritative when output files exist.
+                # Folder-layout heuristics must not reset 3A to unstarted.
+                if (
+                    not prepare_complete
+                    and saved_stages.get("prepare") == "complete"
+                    and bool(self._all_nifti_files(stages["converted"]))
+                ):
+                    prepare_complete = True
+                if prepare_complete and saved_stages.get("scrub") == "complete":
+                    scrub_complete = (
+                        scrub_complete or self._verify_scrub_outputs(stages)
+                    )
+                if scrub_complete and saved_stages.get("deface") == "complete":
+                    deface_complete = (
+                        deface_complete or self._verify_deface_outputs(stages)
+                    )
             else:
                 prepare_complete = (
                     saved_stages.get("prepare") == "complete"
