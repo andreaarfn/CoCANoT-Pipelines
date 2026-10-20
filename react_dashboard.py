@@ -3364,63 +3364,114 @@ class CoCANoTAPI:
         ):
             records_to_check = [exact]
         else:
-            # Older history records were keyed to the entire selection.
-            # Find a completed single-source record for each currently
-            # selected source without depending on selection order.
-            for kind, item in selected_sources:
-                key = source_key(kind, item)
-                matching = [
-                    entry for entry in history.values()
-                    if isinstance(entry, dict) and entry_sources(entry) == [key]
-                    and isinstance(entry.get("prepared_files"), list)
-                    and entry.get("prepared_files")
-                ]
-                if len(matching) == 1:
-                    records_to_check.append(matching[0])
-                    continue
+            # A parent folder and its only child folder may contain exactly
+            # the same source files. Treat them as the same selection using
+            # absolute file identities, not their container paths.
+            def expanded_files(sources: dict[str, Any]) -> list[tuple[str, str, int, int]] | None:
+                identities = []
+                for kind in ("dicom", "nifti"):
+                    for item in sources.get(kind, []):
+                        if not isinstance(item, dict):
+                            return None
+                        root = Path(str(item.get("path", ""))).expanduser()
+                        if item.get("kind") == "file":
+                            files = [(root, item)]
+                        elif item.get("kind") == "directory":
+                            files = []
+                            for child in item.get("entries", []):
+                                if not isinstance(child, dict):
+                                    return None
+                                rel = Path(str(child.get("path", "")))
+                                if rel.is_absolute() or ".." in rel.parts:
+                                    return None
+                                files.append((root / rel, child))
+                        else:
+                            return None
+                        for file_path, detail in files:
+                            # Include all files, not merely NIfTI/DICOM suffixes:
+                            # selecting an extra source must not inherit a
+                            # completion record for a smaller selection.
+                            identities.append((
+                                kind, str(file_path.resolve()),
+                                int(detail.get("size", -1)),
+                                int(detail.get("mtime_ns", -1)),
+                            ))
+                return sorted(identities) if identities else None
 
-                # An individually selected file and its containing folder
-                # have different selection signatures. Expand the folder
-                # into its imaging files and combine their saved records.
-                # Never consider a folder complete if even one input is
-                # missing from the history.
-                if item.get("kind") != "directory":
-                    return None
-                folder = Path(str(item.get("path", "")))
-                children = []
-                for child in item.get("entries", []):
-                    if not isinstance(child, dict):
-                        continue
-                    relative = Path(str(child.get("path", "")))
-                    if relative.is_absolute() or ".." in relative.parts:
-                        return None
-                    suffix = (folder / relative).suffix.lower()
-                    if kind == "nifti":
-                        valid = str(relative).lower().endswith((".nii", ".nii.gz"))
-                    else:
-                        valid = suffix in {".dcm", ".ima", ""}
-                    if not valid:
-                        continue
-                    child_item = {
-                        "path": str(folder / relative),
-                        "kind": "file",
-                        "size": child.get("size"),
-                        "mtime_ns": child.get("mtime_ns"),
-                    }
-                    children.append(source_key(kind, child_item))
-                if not children:
-                    return None
-                for child_key in children:
-                    child_matches = [
+            selected_files = expanded_files(fingerprint)
+            equivalent = [
+                entry for entry in history.values()
+                if isinstance(entry, dict)
+                and isinstance(entry.get("sources"), dict)
+                and selected_files is not None
+                and expanded_files(entry["sources"]) == selected_files
+                and entry.get("stages", {}).get("prepare") == "complete"
+                and isinstance(entry.get("prepared_files"), list)
+                and bool(entry["prepared_files"])
+            ]
+            if equivalent:
+                # Equivalent history records may exist for both the parent
+                # and child selection. Verify every candidate's actual
+                # derivative paths below; don't rely on selection labels.
+                records_to_check = [equivalent[-1]]
+            else:
+                # Older history records were keyed to the entire selection.
+                # Find a completed single-source record for each currently
+            # selected source without depending on selection order.
+                for kind, item in selected_sources:
+                    key = source_key(kind, item)
+                    matching = [
                         entry for entry in history.values()
-                        if isinstance(entry, dict)
-                        and entry_sources(entry) == [child_key]
+                        if isinstance(entry, dict) and entry_sources(entry) == [key]
                         and isinstance(entry.get("prepared_files"), list)
                         and entry.get("prepared_files")
                     ]
-                    if len(child_matches) != 1:
+                    if len(matching) == 1:
+                        records_to_check.append(matching[0])
+                        continue
+
+                    # An individually selected file and its containing folder
+                    # have different selection signatures. Expand the folder
+                    # into its imaging files and combine their saved records.
+                    # Never consider a folder complete if even one input is
+                    # missing from the history.
+                    if item.get("kind") != "directory":
                         return None
-                    records_to_check.append(child_matches[0])
+                    folder = Path(str(item.get("path", "")))
+                    children = []
+                    for child in item.get("entries", []):
+                        if not isinstance(child, dict):
+                            continue
+                        relative = Path(str(child.get("path", "")))
+                        if relative.is_absolute() or ".." in relative.parts:
+                            return None
+                        suffix = (folder / relative).suffix.lower()
+                        if kind == "nifti":
+                            valid = str(relative).lower().endswith((".nii", ".nii.gz"))
+                        else:
+                            valid = suffix in {".dcm", ".ima", ""}
+                        if not valid:
+                            continue
+                        child_item = {
+                            "path": str(folder / relative),
+                            "kind": "file",
+                            "size": child.get("size"),
+                            "mtime_ns": child.get("mtime_ns"),
+                        }
+                        children.append(source_key(kind, child_item))
+                    if not children:
+                        return None
+                    for child_key in children:
+                        child_matches = [
+                            entry for entry in history.values()
+                            if isinstance(entry, dict)
+                            and entry_sources(entry) == [child_key]
+                            and isinstance(entry.get("prepared_files"), list)
+                            and entry.get("prepared_files")
+                        ]
+                        if len(child_matches) != 1:
+                            return None
+                        records_to_check.append(child_matches[0])
 
         converted = stages["converted"].resolve()
 
