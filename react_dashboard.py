@@ -3629,7 +3629,7 @@ class CoCANoTAPI:
         for path in scrubbed:
             relative = path.relative_to(stages["scrubbed"])
             base = self._strip_nifti_suffix(path)
-            if not any(p.is_file() for p in (
+            if not any(p.is_file() and p.stat().st_size > 0 for p in (
                 stages["defaced"] / relative.parent / f"{base}_defaced.nii.gz",
                 stages["defaced"] / relative.parent / f"{base}_defaced.nii",
             )):
