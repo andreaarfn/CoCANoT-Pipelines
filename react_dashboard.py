@@ -3367,16 +3367,60 @@ class CoCANoTAPI:
             # Older history records were keyed to the entire selection.
             # Find a completed single-source record for each currently
             # selected source without depending on selection order.
-            for key in selected_keys:
+            for kind, item in selected_sources:
+                key = source_key(kind, item)
                 matching = [
                     entry for entry in history.values()
                     if isinstance(entry, dict) and entry_sources(entry) == [key]
                     and isinstance(entry.get("prepared_files"), list)
                     and entry.get("prepared_files")
                 ]
-                if len(matching) != 1:
+                if len(matching) == 1:
+                    records_to_check.append(matching[0])
+                    continue
+
+                # An individually selected file and its containing folder
+                # have different selection signatures. Expand the folder
+                # into its imaging files and combine their saved records.
+                # Never consider a folder complete if even one input is
+                # missing from the history.
+                if item.get("kind") != "directory":
                     return None
-                records_to_check.append(matching[0])
+                folder = Path(str(item.get("path", "")))
+                children = []
+                for child in item.get("entries", []):
+                    if not isinstance(child, dict):
+                        continue
+                    relative = Path(str(child.get("path", "")))
+                    if relative.is_absolute() or ".." in relative.parts:
+                        return None
+                    suffix = (folder / relative).suffix.lower()
+                    if kind == "nifti":
+                        valid = str(relative).lower().endswith((".nii", ".nii.gz"))
+                    else:
+                        valid = suffix in {".dcm", ".ima", ""}
+                    if not valid:
+                        continue
+                    child_item = {
+                        "path": str(folder / relative),
+                        "kind": "file",
+                        "size": child.get("size"),
+                        "mtime_ns": child.get("mtime_ns"),
+                    }
+                    children.append(source_key(kind, child_item))
+                if not children:
+                    return None
+                for child_key in children:
+                    child_matches = [
+                        entry for entry in history.values()
+                        if isinstance(entry, dict)
+                        and entry_sources(entry) == [child_key]
+                        and isinstance(entry.get("prepared_files"), list)
+                        and entry.get("prepared_files")
+                    ]
+                    if len(child_matches) != 1:
+                        return None
+                    records_to_check.append(child_matches[0])
 
         converted = stages["converted"].resolve()
 
