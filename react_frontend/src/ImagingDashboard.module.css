@@ -2627,6 +2627,12 @@
   color: #276842;
 }
 
+.reviewFileExported {
+  background: #f0f2f5;
+  border-color: #d6dce3;
+  color: #526174;
+}
+
 .reviewFileRejected {
   background: #fff0f1;
   border-color: #efc2c7;
@@ -2636,6 +2642,7 @@
 .reviewFilePending:hover,
 .reviewFileHold:hover,
 .reviewFileAccepted:hover,
+.reviewFileExported:hover,
 .reviewFileRejected:hover {
   filter: brightness(0.97);
 }
