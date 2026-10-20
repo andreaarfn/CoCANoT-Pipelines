@@ -8082,8 +8082,8 @@ class CoCANoTAPI:
                 "field": key,
                 "raw": raw_header.get(key, ""),
                 "scrubbed": scrubbed_header.get(key, ""),
-                "editable": True,
-                "review_only": key in {"shape", "affine", "dim", "pixdim", "datatype", "bitpix", "vox_offset", "qform_code", "sform_code", "quatern_b", "quatern_c", "quatern_d", "qoffset_x", "qoffset_y", "qoffset_z", "srow_x", "srow_y", "srow_z", "xyzt_units", "scl_slope", "scl_inter", "magic"},
+                "editable": key in scrubbed_header and key not in {"shape", "affine"},
+                "review_only": key in {"shape", "affine"},
                 "review_override": review_overrides.get(key),
             }
             for key in sorted(set(raw_header) | set(scrubbed_header))
@@ -8195,27 +8195,14 @@ class CoCANoTAPI:
         scrubbed_path = Path(item["scrubbed_path"])
         image = nib.load(str(scrubbed_path))
         header = image.header.copy()
-        review_only_fields = {
-            "shape", "affine", "dim", "pixdim", "datatype", "bitpix",
-            "vox_offset", "qform_code", "sform_code", "quatern_b",
-            "quatern_c", "quatern_d", "qoffset_x", "qoffset_y",
-            "qoffset_z", "srow_x", "srow_y", "srow_z", "xyzt_units",
-            "scl_slope", "scl_inter", "magic",
-        }
-        if field not in header and field not in {"shape", "affine"}:
-            raise ValueError("Unknown header field.")
-        if field in review_only_fields:
-            # Review-only annotation. This does not alter image geometry.
-            _, state_path = self._imaging_review_items()
-            state = self._load_review_state(state_path)
-            record = dict(state.get(item["key"], {}))
-            overrides = {**record.get("header_review_overrides", {}), **record.get("header_annotations", {})}
-            overrides[field] = str(value or "")[:4000]
-            record["header_annotations"] = overrides
-            record.pop("header_review_overrides", None)
-            state[item["key"]] = record
-            self._save_review_state(state_path, state)
-            return self.imaging_review_get_item(index)
+        # Derived properties are not independently serialized header fields.
+        # Every actual header field is eligible for a validated edit; nothing
+        # is silently made annotation-only merely because of its name.
+        if field not in header:
+            raise ValueError(
+                f"{field} is a derived or unsupported property, not a writable "
+                "NIfTI header entry. It cannot be changed independently."
+            )
 
         original_shape = tuple(image.shape)
         original_affine = np.array(image.affine, copy=True)
@@ -8268,7 +8255,18 @@ class CoCANoTAPI:
             if (tuple(checked.shape) != original_shape or
                     not np.allclose(checked.affine, original_affine, atol=1e-6, rtol=1e-6) or
                     checked.get_data_dtype() != original_dtype):
-                raise ValueError("Header edit failed spatial integrity checks and was not saved.")
+                raise ValueError(
+                    "Cannot edit this field: it would alter image geometry or voxel type."
+                )
+            # Reject fields that the NIfTI writer normalizes, ignores, or
+            # cannot round-trip safely. Do not report success for a no-op.
+            intended = np.asarray(header[field])
+            actual = np.asarray(checked.header[field])
+            if not np.array_equal(intended, actual):
+                raise ValueError(
+                    f"Cannot edit {field}: the NIfTI format recalculates or "
+                    "normalizes this value when the image is saved."
+                )
             os.replace(temp_path, scrubbed_path)
         finally:
             temp_path.unlink(missing_ok=True)
