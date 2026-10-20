@@ -7818,6 +7818,77 @@ class CoCANoTAPI:
             f"Unknown Imaging operation: {operation}"
         )
 
+    def _completed_dicom_series_for_prepare(
+        self, config, stages: dict[str, Path],
+    ) -> set[Path]:
+        """DICOM leaf folders covered by verified successful preparations."""
+        converted = stages["converted"].resolve()
+        completed_files: set[tuple[str, int, int]] = set()
+        for entry in self._read_imaging_completion_history(config).values():
+            if not isinstance(entry, dict) or entry.get("stages", {}).get("prepare") != "complete":
+                continue
+            names = entry.get("prepared_files", [])
+            if not isinstance(names, list) or not names:
+                continue
+            if not all(
+                (converted / str(name)).resolve().is_relative_to(converted)
+                and (converted / str(name)).is_file()
+                and _is_nifti(converted / str(name))
+                and (converted / str(name)).stat().st_size > 0
+                for name in names
+            ):
+                continue
+            sources = entry.get("sources", {})
+            if not isinstance(sources, dict):
+                continue
+            for item in sources.get("dicom", []):
+                if not isinstance(item, dict):
+                    continue
+                root = Path(str(item.get("path", ""))).expanduser()
+                if item.get("kind") == "file":
+                    pairs = [(root, item)]
+                elif item.get("kind") == "directory":
+                    pairs = [
+                        (root / str(child.get("path", "")), child)
+                        for child in item.get("entries", [])
+                        if isinstance(child, dict)
+                    ]
+                else:
+                    continue
+                for file_path, detail in pairs:
+                    if file_path.suffix.lower() not in {".dcm", ".ima", ""}:
+                        continue
+                    try:
+                        completed_files.add((
+                            str(file_path.resolve()),
+                            int(detail["size"]), int(detail["mtime_ns"]),
+                        ))
+                    except (KeyError, TypeError, ValueError):
+                        pass
+
+        selected_dirs: set[Path] = set()
+        for source_text in self.dicom_input_paths:
+            root = Path(source_text).expanduser()
+            directories = [root] if root.is_file() else [
+                root, *sorted(p for p in root.rglob("*") if p.is_dir())
+            ] if root.is_dir() else []
+            for folder in directories:
+                if not folder.is_dir():
+                    continue
+                try:
+                    files = [
+                        p for p in folder.iterdir()
+                        if p.is_file() and not p.name.startswith(".")
+                        and p.suffix.lower() in {".dcm", ".ima", ""}
+                    ]
+                    if files and all((
+                        str(p.resolve()), p.stat().st_size, p.stat().st_mtime_ns
+                    ) in completed_files for p in files):
+                        selected_dirs.add(folder.resolve())
+                except (OSError, PermissionError):
+                    continue
+        return selected_dirs
+
     def _prepare_imaging(
         self,
         *,
@@ -7910,6 +7981,15 @@ class CoCANoTAPI:
                     str(input_dir),
                 ]
             )
+        if not overwrite:
+            skipped_dicom = self._completed_dicom_series_for_prepare(config, stages)
+            for series_dir in sorted(skipped_dicom):
+                command.extend(["--skip-dicom-dir", str(series_dir)])
+            if skipped_dicom:
+                self._imaging_log(
+                    f"Skipping {len(skipped_dicom)} previously prepared DICOM series; "
+                    "converting only series not already verified."
+                )
 
         command.extend(
             [
@@ -8003,6 +8083,15 @@ class CoCANoTAPI:
                     destination_dir
                     / nifti_path.name
                 )
+
+                if not overwrite and any(
+                    self._files_match_for_imaging_resume(nifti_path, staged)
+                    for staged in self._all_nifti_files(converted_dir)
+                ):
+                    self._imaging_log(
+                        f"Skipping previously staged NIfTI source: {nifti_path}"
+                    )
+                    continue
 
                 if destination.exists() and not overwrite:
                     self._imaging_log(
