@@ -1994,12 +1994,15 @@ function EDFReview({
   const [previewSource, setPreviewSource] = useState("scrubbed");
   const [previewStart, setPreviewStart] = useState(0);
   const [previewWindow, setPreviewWindow] = useState(10);
+  const [previewMode, setPreviewMode] = useState("stacked");
+  const [previewSliderStart, setPreviewSliderStart] = useState(0);
   const [previewChannels, setPreviewChannels] = useState([]);
   const [previewError, setPreviewError] = useState("");
   const [previewBusy, setPreviewBusy] = useState(false);
   useEffect(() => {
     setPreview(null);
     setPreviewStart(0);
+    setPreviewSliderStart(0);
     setPreviewChannels([]);
   }, [review?.id]);
   useEffect(() => {
@@ -2417,9 +2420,32 @@ function EDFReview({
                       {[5,10,30,60].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}
                     </select>
                   </label>
-                  <button type="button" className={styles.secondary} disabled={previewStart <= 0} onClick={() => setPreviewStart(Math.max(0, previewStart-previewWindow))}>Previous</button>
-                  <button type="button" className={styles.secondary} disabled={previewStart + previewWindow >= Number(preview?.duration_seconds ?? Infinity)} onClick={() => setPreviewStart(previewStart+previewWindow)}>Next</button>
+                  <button type="button" className={styles.secondary} disabled={previewStart <= 0} onClick={() => { const next = Math.max(0, previewStart-previewWindow); setPreviewSliderStart(next); setPreviewStart(next); }}>Previous</button>
+                  <button type="button" className={styles.secondary} disabled={previewStart + previewWindow >= Number(preview?.duration_seconds ?? Infinity)} onClick={() => { const next = Math.min(Math.max(0, Number(preview?.duration_seconds ?? 0) - previewWindow), previewStart+previewWindow); setPreviewSliderStart(next); setPreviewStart(next); }}>Next</button>
                 </div>
+                <div className={styles.ephysPreviewModeControls} role="group" aria-label="Waveform display mode">
+                  <button type="button" className={previewMode === "stacked" ? styles.ephysPreviewModeActive : ""} aria-pressed={previewMode === "stacked"} onClick={() => setPreviewMode("stacked")}>Stacked</button>
+                  <button type="button" className={previewMode === "overlay" ? styles.ephysPreviewModeActive : ""} aria-pressed={previewMode === "overlay"} onClick={() => setPreviewMode("overlay")}>Overlay</button>
+                </div>
+                {preview && (
+                  <div className={styles.ephysPreviewWindowSlider}>
+                    <label htmlFor="ephys-step4-start-slider">Viewing window start: {previewSliderStart.toFixed(1)} sec</label>
+                    <input id="ephys-step4-start-slider" type="range" min="0"
+                      max={Math.max(0, Number(preview.duration_seconds ?? 0) - previewWindow)}
+                      step="0.5" value={Math.min(previewSliderStart, Math.max(0, Number(preview.duration_seconds ?? 0) - previewWindow))}
+                      onChange={e => setPreviewSliderStart(Number(e.target.value))}
+                      onPointerUp={() => setPreviewStart(previewSliderStart)}
+                      onKeyUp={() => setPreviewStart(previewSliderStart)}
+                      onMouseUp={() => setPreviewStart(previewSliderStart)}
+                      onTouchEnd={() => setPreviewStart(previewSliderStart)}
+                    />
+                    <div className={styles.ephysPreviewSliderLabels}>
+                      <span>0 sec</span>
+                      <button type="button" className={styles.secondary} onClick={() => setPreviewStart(previewSliderStart)}>Go to selected time</button>
+                      <span>{Math.max(0, Number(preview.duration_seconds ?? 0) - previewWindow).toFixed(1)} sec</span>
+                    </div>
+                  </div>
+                )}
                 {previewError && <p role="alert">{previewError}</p>}
                 {previewBusy && <p role="status">Loading recording signals…</p>}
                 {preview && <>
@@ -2432,7 +2458,7 @@ function EDFReview({
                     </label>)}
                   </div>
                   <div className={styles.ephysWaveformStack}>
-                    {(preview.signals ?? []).map(channel => {
+                    {previewMode === "stacked" && (preview.signals ?? []).map(channel => {
                       const values = channel.values ?? [];
                       const low = Math.min(...values), high = Math.max(...values);
                       const spread = Math.max(1e-9, high-low);
@@ -2453,6 +2479,29 @@ function EDFReview({
                         </svg>
                       </div>;
                     })}
+                    {previewMode === "overlay" && (
+                      <div className={styles.ephysWaveformOverlay}>
+                        <strong>Overlay (all selected channels)</strong>
+                        <svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="button" aria-label="Add annotation on overlaid waveforms"
+                          onClick={event => {
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            insertAnnotationAt(Number(preview.start_seconds) + Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width))*Number(preview.window_seconds));
+                          }}>
+                          {(preview.signals ?? []).map((channel,index) => {
+                            const values=channel.values ?? [];
+                            if (!values.length) return null;
+                            const low=Math.min(...values), high=Math.max(...values), spread=Math.max(1e-9,high-low);
+                            const pts=values.map((value,i) => `${i/Math.max(1,values.length-1)*1000},${95-(value-low)/spread*135+67.5}`).join(" ");
+                            const colors=["#287aa9","#b46b35","#7d5ca8","#3c9276","#ba5976"];
+                            return <polyline key={channel.label} points={pts} stroke={colors[index%colors.length]} strokeOpacity=".75" strokeWidth="1.2" vectorEffect="non-scaling-stroke" fill="none"/>;
+                          })}
+                          {(review.scrubbed.annotations ?? []).filter(a => Number(a.onset)>=preview.start_seconds && Number(a.onset)<=preview.start_seconds+preview.window_seconds).map((a,i)=>{
+                            const x=(Number(a.onset)-preview.start_seconds)/preview.window_seconds*1000;
+                            return <line key={i} x1={x} x2={x} y1="0" y2="190" stroke="#cb8a21" strokeWidth="2" vectorEffect="non-scaling-stroke"/>;
+                          })}
+                        </svg>
+                      </div>
+                    )}
                   </div>
                 </>}
               </section>
