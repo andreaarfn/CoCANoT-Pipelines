@@ -2192,7 +2192,7 @@ class CoCANoTAPI:
             # A legacy PatientDataLinkStore path in another folder is useful
             # for recovery, but cannot mark this output directory complete.
             if existing_export is not None:
-                exported_path = Path(str(existing_export.get("nifti_path", ""))).expanduser()
+                exported_path = Path(str(existing_export.get("edf_path", ""))).expanduser()
                 try:
                     in_current_output = exported_path.resolve().is_relative_to(output_dir.resolve())
                 except (OSError, ValueError):
@@ -2200,7 +2200,7 @@ class CoCANoTAPI:
                 if (
                     not in_current_output
                     or not exported_path.is_file()
-                    or _matching_json(exported_path) is None
+                    or not Path(str(existing_export.get("json_path", ""))).is_file()
                 ):
                     existing_export = None
 
