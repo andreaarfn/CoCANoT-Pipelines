@@ -2538,6 +2538,11 @@ function EphysBids({
 }) {
 
   const [records, setRecords] = useState([]);
+  const [showExported, setShowExported] = useState(true);
+  const exportedCount = records.filter(r => r.record_state === "completed_recorded").length;
+  const displayedRecords = records
+    .filter(r => showExported || r.record_state !== "completed_recorded")
+    .sort((a,b) => Number(a.record_state === "completed_recorded") - Number(b.record_state === "completed_recorded"));
 
   const [rules, setRules] = useState([]);
 
@@ -2575,10 +2580,8 @@ function EphysBids({
 
       resumeAppliedRef.current = true;
       setRecords(resumedRecords);
-      setSelectedIds(resumeState.selectedIds ?? []);
-      setActiveId(
-        resumeState.activeId ?? resumedRecords[0]?.id ?? ""
-      );
+      setSelectedIds((resumeState.selectedIds ?? []).filter(id => resumedRecords.some(r => r.id === id && r.record_state !== "completed_recorded")));
+      setActiveId(resumedRecords.find(r => r.record_state !== "completed_recorded")?.id ?? resumedRecords[0]?.id ?? "");
       setDraft({ ...(resumeState.draft ?? {}) });
       setProject(resumeState.project ?? "");
       setProjectDescription(
@@ -2593,7 +2596,14 @@ function EphysBids({
     setRecords(nextRecords);
 
     if (nextRecords.length > 0) {
-      selectRecord(nextRecords[0]);
+      const firstReady = nextRecords.find(r => r.record_state !== "completed_recorded");
+      const first = firstReady ?? nextRecords[0];
+      setSelectedIds(firstReady ? [firstReady.id] : []);
+      setActiveId(first.id);
+      setDraft({ ...(first.cocanot_metadata ?? {}) });
+      setProject(first.project ?? "");
+      setProjectDescription(first.project_description ?? "");
+      setSessionId(first.session_id ?? "");
     } else {
       setActiveId("");
       setSelectedIds([]);
@@ -2981,6 +2991,12 @@ function EphysBids({
 
         </div>
 
+        {exportedCount > 0 && (
+          <label className={styles.ephysExportToggle}>
+            <input type="checkbox" checked={showExported} onChange={e => setShowExported(e.target.checked)} />
+            Show already exported recordings ({exportedCount})
+          </label>
+        )}
         <div className={styles.bidsTableWrap}>
 
           <table className={styles.table}>
@@ -3013,7 +3029,7 @@ function EphysBids({
 
             <tbody>
 
-              {records.length === 0 ? (
+              {displayedRecords.length === 0 ? (
 
                 <tr>
 
@@ -3027,7 +3043,7 @@ function EphysBids({
 
               ) : (
 
-                records.map(record => (
+                displayedRecords.map(record => (
 
                   <tr
 
