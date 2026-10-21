@@ -1324,8 +1324,23 @@ class CoCANoTAPI:
             config.electrophysiology.bids_output_dir
         )
 
+        # The staging directory is persistent to preserve processing history.
+        # Review only currently included recordings from the latest selection.
+        selection_path = input_dir / "selection.json"
+        active_keys: set[str] | None = None
+        if selection_path.is_file():
+            try:
+                selection_data = json.loads(selection_path.read_text(encoding="utf-8"))
+                values = selection_data.get("staged_files")
+                if isinstance(values, list):
+                    active_keys = {str(value) for value in values}
+            except (OSError, json.JSONDecodeError):
+                pass
+
         for raw_path in helpers.find_edf_files(input_dir):
             relative = raw_path.relative_to(input_dir)
+            if active_keys is not None and str(relative) not in active_keys:
+                continue
             scrubbed_path = (
                 scrubbed_dir
                 / relative.parent
