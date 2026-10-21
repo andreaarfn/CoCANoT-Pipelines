@@ -722,24 +722,21 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-  async function saveReview() {
-
+  async function saveReview(linkedMetadata) {
     if (!review) return;
-
-    setReview(
-
-      await api()?.ephys_review_save_pair?.(
-
+    try {
+      const updated = await api()?.ephys_review_save_pair?.(
         review.id,
-
         review.scrubbed.header,
-
-        review.scrubbed.annotations
-
-      )
-
-    );
-
+        review.scrubbed.annotations,
+        linkedMetadata
+      );
+      if (updated) setReview(updated);
+      const updatedPairs = await api()?.ephys_review_get_pairs?.();
+      if (updatedPairs) setReviewPairs(updatedPairs);
+    } catch (error) {
+      alert(`Could not save EDF review edits: ${error}`);
+    }
   }
 
   async function setReviewStatus(status) {
@@ -1976,6 +1973,24 @@ function EDFReview({
 }) {
 
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [metadataText, setMetadataText] = useState("{}");
+  const [metadataError, setMetadataError] = useState("");
+  useEffect(() => {
+    setMetadataText(JSON.stringify(review?.linked_metadata ?? {}, null, 2));
+    setMetadataError("");
+  }, [review?.id, review?.scrubbed?.path]); 
+  function saveLinkedRecording() {
+    try {
+      const metadata = JSON.parse(metadataText);
+      if (!metadata || Array.isArray(metadata) || typeof metadata !== "object") {
+        throw new Error("The metadata must be a JSON object.");
+      }
+      setMetadataError("");
+      onSave(metadata);
+    } catch (error) {
+      setMetadataError(String(error.message || error));
+    }
+  }
 
   const acceptedCount = pairs.filter(
 
@@ -2230,7 +2245,7 @@ function EDFReview({
 
                   </div>
 
-                  <button className={styles.secondary} onClick={onSave}>
+                  <button className={styles.secondary} onClick={saveLinkedRecording}>
 
                     <Save size={16} />
 
@@ -2410,6 +2425,17 @@ function EDFReview({
 
                 </div>
 
+              </section>
+
+              <section className={styles.card}>
+                <h2>Linked recording metadata</h2>
+                <p>Review or edit the JSON metadata associated with this EDF. Acquisition metadata comes first; CoCANoT dictionary metadata follows when available. Save changes to the scrubbed sidecar before exporting. If this recording was already exported, changes here do not silently overwrite its existing final export.</p>
+                <textarea className={styles.ephysLinkedMetadataEditor}
+                  value={metadataText} rows={12}
+                  onChange={event => setMetadataText(event.target.value)}
+                  spellCheck={false} aria-label="Linked recording JSON metadata" />
+                {metadataError && <p role="alert">{metadataError}</p>}
+                <button type="button" className={styles.secondary} onClick={saveLinkedRecording}>Save EDF and linked metadata</button>
               </section>
 
               <div className={styles.reviewDecisionFooter}>
