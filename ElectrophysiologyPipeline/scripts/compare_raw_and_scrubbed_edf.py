@@ -151,10 +151,14 @@ def parse_birthdate(value: Any) -> date | str:
     if isinstance(value, date):
         return value
     text = str(value).strip()
-    try:
-        return date.fromisoformat(text[:10])
-    except ValueError as exc:
-        raise ValueError("birthdate must use YYYY-MM-DD or be empty.") from exc
+    # pyedflib may return EDF birthdates as "02 jan 2000", even when the
+    # original entered value was ISO. Accept both reader and editor formats.
+    for fmt in ("%Y-%m-%d", "%d %b %Y", "%d %B %Y"):
+        try:
+            return datetime.strptime(text[:10] if fmt == "%Y-%m-%d" else text, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError("birthdate must use YYYY-MM-DD or EDF DD Mon YYYY format, or be empty.")
 
 
 def clean_header_for_writer(original_header: dict[str, Any], edited: dict[str, Any]) -> dict[str, Any]:
