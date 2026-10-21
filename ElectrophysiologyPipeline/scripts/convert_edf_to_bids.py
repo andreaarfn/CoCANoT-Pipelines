@@ -1463,51 +1463,22 @@ def validate_record(
 
 
 def build_bids_base(
-
     record: Dict[str, Any],
-
     run_override: Optional[int] = None,
-
 ) -> str:
-
-    parts = [
-
-        f"sub-{record['participant']}",
-
-        f"ses-{record['session']}",
-
-        f"task-{TASK_NAME}",
-
-    ]
-
-
-
+    """Use patient, recording ID, optional session and modality in filenames."""
+    import re
+    recording_id = str(record["cocanot_metadata"].get("Recording ID") or "").strip()
+    safe_recording_id = re.sub(r"[^A-Za-z0-9]+", "", recording_id)
+    if not safe_recording_id:
+        raise ValueError("Recording ID is required for electrophysiology export.")
+    parts = [f"sub-{record['participant']}", safe_recording_id]
+    if record.get("session"):
+        parts.append(f"ses-{record['session']}")
     if run_override is not None:
-
-        parts.append(
-
-            f"run-{run_override:02d}"
-
-        )
-
-
-
-    parts.append(
-
-        record["datatype"]
-
-    )
-
-
-
-    return "_".join(
-
-        parts
-
-    )
-
-
-
+        parts.append(f"run-{run_override:02d}")
+    parts.append(record["datatype"])
+    return "_".join(parts)
 
 
 def choose_output_base(
@@ -1748,13 +1719,8 @@ def copy_record(
 
     )
 
-    output_metadata = (
-
-        data_dir
-
-        / f"{base}_cocanot.json"
-
-    )
+    # A single sidecar contains recording metadata then CoCANoT metadata.
+    output_metadata = output_json
 
 
 
@@ -1773,12 +1739,6 @@ def copy_record(
         )
 
         output_channels.unlink(
-
-            missing_ok=True
-
-        )
-
-        output_metadata.unlink(
 
             missing_ok=True
 
@@ -1804,59 +1764,16 @@ def copy_record(
 
 
 
-    write_json(
-
-        output_json,
-
-        make_recording_sidecar(
-
-            metadata,
-
-            record,
-
-        ),
-
-    )
-
-
-
-    write_json(
-
-        output_metadata,
-
-        {
-
-            "CoCANoTMetadata": record[
-
-                "cocanot_metadata"
-
-            ],
-
-            "ScrubbedHeader": {
-
-                "file_header": metadata.get(
-
-                    "file_header",
-
-                    {},
-
-                ),
-
-                "signal_headers": metadata.get(
-
-                    "signal_headers",
-
-                    [],
-
-                ),
-
-            },
-
-        },
-
-    )
-
-
+    sidecar = make_recording_sidecar(metadata, record)
+    # The EDF header and annotations are retained in the linked recording's
+    # consolidated sidecar. CoCANoT dictionary fields follow recording fields.
+    sidecar.pop("CoCANoTMetadata", None)
+    sidecar["ScrubbedHeader"] = {
+        "file_header": metadata.get("file_header", {}),
+        "signal_headers": metadata.get("signal_headers", []),
+    }
+    sidecar["CoCANoTMetadata"] = dict(record["cocanot_metadata"])
+    write_json(output_json, sidecar)
 
     write_tsv(
 
@@ -2452,7 +2369,6 @@ def main() -> None:
 
                 str(output_channels.resolve()),
 
-                str(output_metadata.resolve()),
 
                 *[
 
