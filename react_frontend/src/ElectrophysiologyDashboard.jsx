@@ -2145,28 +2145,27 @@ function EDFReview({
 
           <div className={styles.pairListStack}>
 
-            {pairs.map(pair => (
-
-              <button
-
-                key={pair.id}
-
-                onClick={() => onSelect(pair.id)}
-
-                className={review?.id === pair.id ? styles.activePair : ""}
-
-              >
-
+            {[...pairs].sort((a,b) => {
+              const rank = p => p.status === "Pending" ? 0 :
+                String(p.status).startsWith("On Hold") ? 1 :
+                p.exported && p.status === "Accepted" ? 3 :
+                p.status === "Accepted" ? 2 :
+                String(p.status).startsWith("Rejected") ? 4 : 0;
+              return rank(a)-rank(b);
+            }).map(pair => (
+              <button key={pair.id} onClick={() => onSelect(pair.id)}
+                className={`${review?.id === pair.id ? styles.activePair : ""} ${
+                  pair.exported && pair.status === "Accepted" ? styles.ephysReviewExported :
+                  pair.status === "Accepted" ? styles.ephysReviewAccepted :
+                  String(pair.status).startsWith("On Hold") ? styles.ephysReviewHold :
+                  String(pair.status).startsWith("Rejected") ? styles.ephysReviewRejected :
+                  styles.ephysReviewPending
+                }`}>
                 <span className={styles.pairStatus}>
-
-                  [{pair.status ?? "Pending"}]
-
+                  [{pair.exported && pair.status === "Accepted" ? "Already Exported" : pair.status ?? "Pending"}]
                 </span>
-
                 <span>{pair.label}</span>
-
               </button>
-
             ))}
 
           </div>
