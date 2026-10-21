@@ -2011,6 +2011,7 @@ function EphysPatientReview({
 
 
   const [error, setError] = useState("");
+  const [showLinkedJson, setShowLinkedJson] = useState(false);
 
 
 
@@ -3082,6 +3083,39 @@ function EphysPatientReview({
 
 
 
+
+          <section className={styles.linkedJsonCard}>
+            <div className={styles.linkedJsonHeader}>
+              <div className={styles.linkedJsonHeading}>
+                <strong>EDF header</strong>
+                <span>Header values read directly from the linked recording</span>
+              </div>
+            </div>
+            <div className={styles.linkedJsonContent}>
+              <pre className={styles.linkedJsonPreview}>{JSON.stringify(signal.header ?? {}, null, 2)}</pre>
+            </div>
+          </section>
+          <section className={styles.linkedJsonCard}>
+            <div className={styles.linkedJsonHeader}>
+              <div className={styles.linkedJsonHeading}>
+                <strong>Linked JSON file</strong>
+                <span>Recording metadata followed by CoCANoT metadata</span>
+              </div>
+              <button type="button" className={styles.refreshButton} onClick={() => setShowLinkedJson(open => !open)} aria-expanded={showLinkedJson}>
+                {showLinkedJson ? "Hide JSON" : "View JSON"}
+              </button>
+            </div>
+            {!signal.linked_metadata?.CoCANoTMetadata && (
+              <p className={styles.linkedJsonEmpty}>
+                This recording's JSON does not contain embedded CoCANoT metadata. Complete Step 5 to create the combined final sidecar.
+              </p>
+            )}
+            {showLinkedJson && (
+              <div className={styles.linkedJsonContent}>
+                <pre className={styles.linkedJsonPreview}>{JSON.stringify(signal.linked_metadata ?? {}, null, 2)}</pre>
+              </div>
+            )}
+          </section>
         </>
 
 
