@@ -2778,3 +2778,11 @@
 
 .ephysLogActions { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
 .log { user-select:text; -webkit-user-select:text; white-space:pre-wrap; overflow-wrap:anywhere; }
+
+.ephysExportToggle { display:inline-flex; align-items:center; gap:9px; margin:12px 0; color:#405a71; font-size:12px; font-weight:650; cursor:pointer; }
+.ephysExportToggle input { width:16px; height:16px; accent-color:#367eae; cursor:pointer; }
+.ephysReviewPending { background:#eef6fb; color:#2c5f7e; border-color:#c5dfee; }
+.ephysReviewHold { background:#fff8e6; color:#846012; border-color:#ecd69b; }
+.ephysReviewAccepted { background:#eaf7ef; color:#276842; border-color:#b7dec3; }
+.ephysReviewExported { background:#f0f2f5; color:#526174; border-color:#d6dce3; }
+.ephysReviewRejected { background:#fff0f1; color:#a63a45; border-color:#efc2c7; }
