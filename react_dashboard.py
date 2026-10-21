@@ -11887,6 +11887,95 @@ class CoCANoTAPI:
         link_store.save_link(self.get_site_id(), patient, "Imaging", image_id, updated)
         return updated
 
+    def _sync_edited_ephys_export(
+        self, metadata: dict[str, Any], existing: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Rename the existing final EDF and sidecars in place after metadata edits."""
+        if not existing:
+            return None
+        patient = str(metadata.get("CoCANoT Patient ID") or "").strip()
+        recording_id = str(metadata.get("Recording ID") or "").strip()
+        if not patient or not recording_id:
+            return None
+        store = PatientDataLinkStore()
+        link = store.get_link(self.get_site_id(), patient, "Electrophysiology", recording_id) or {}
+        old_context = dict(existing.get("context") or {})
+        candidate = link.get("bids_data_path") or old_context.get("bids_data_path")
+        if not candidate:
+            return None
+        old_edf = Path(str(candidate)).expanduser()
+        old_json = old_edf.with_suffix(".json")
+        if not old_edf.is_file() or not old_json.is_file():
+            return None
+        payload = json.loads(old_json.read_text(encoding="utf-8"))
+        embedded = payload.get("CoCANoTMetadata") if isinstance(payload, dict) else None
+        if not isinstance(embedded, dict) or (
+            str(embedded.get("CoCANoT Patient ID") or "").strip() != patient
+            or str(embedded.get("Recording ID") or "").strip() != recording_id
+        ):
+            raise ValueError("Final EDF JSON identity does not match this patient and recording; no files were renamed.")
+
+        from ElectrophysiologyPipeline.scripts.convert_edf_to_bids import (
+            RECORDING_MODALITY_TO_DATATYPE,
+        )
+        modality = str(metadata.get("Recording Modality") or "").strip()
+        datatype = RECORDING_MODALITY_TO_DATATYPE.get(modality)
+        if not datatype or datatype == "meg":
+            raise ValueError(f"Unsupported EDF recording modality: {modality!r}")
+        normalized_id = re.sub(r"[^A-Za-z0-9]+", "", recording_id)
+        if normalized_id.upper().startswith("EPHYS"):
+            normalized_id = "EPHYS-" + normalized_id[5:]
+        filename_parts = [f"sub-{self._derive_bids_subject(patient)}", normalized_id]
+        session = re.search(r"(?:^|_)ses-([A-Za-z0-9]+)(?:_|$)", old_edf.stem)
+        run = re.search(r"(?:^|_)run-([A-Za-z0-9]+)(?:_|$)", old_edf.stem)
+        if session:
+            filename_parts.append("ses-" + session.group(1))
+        if run:
+            filename_parts.append("run-" + run.group(1))
+        filename_parts.append(datatype)
+        new_base = "_".join(filename_parts)
+        new_dir = old_edf.parent if old_edf.parent.name == datatype else old_edf.parent.parent / datatype
+        old_base = old_edf.stem
+        moves = [
+            (old_edf, new_dir / f"{new_base}.edf"),
+            (old_json, new_dir / f"{new_base}.json"),
+        ]
+        for suffix in ("_channels.tsv", "_events.tsv", "_electrodes.tsv", "_coordsystem.json", "_cocanot.json"):
+            old_file = old_edf.with_name(old_base + suffix)
+            if old_file.is_file():
+                moves.append((old_file, new_dir / (new_base + suffix)))
+        for source, target in moves:
+            if source != target and target.exists():
+                raise ValueError(f"Cannot rename EDF export: destination exists: {target}")
+        payload = {
+            **{key: value for key, value in payload.items() if key != "CoCANoTMetadata"},
+            "CoCANoTMetadata": dict(metadata),
+        }
+        new_dir.mkdir(parents=True, exist_ok=True)
+        moved = []
+        try:
+            for source, target in moves:
+                if source != target:
+                    source.rename(target)
+                    moved.append((source, target))
+            moves[1][1].write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        except Exception:
+            for source, target in reversed(moved):
+                if target.exists():
+                    target.rename(source)
+            raise
+        updated = {
+            **old_context, **link,
+            "bids_data_path": str(moves[0][1].resolve()),
+            "bids_sidecar_path": str(moves[1][1].resolve()),
+            "cocanot_metadata_path": str(moves[1][1].resolve()),
+            "final_paths": [str(target.resolve()) for _, target in moves],
+        }
+        if "final_output_root" not in updated:
+            updated["final_output_root"] = str(new_dir.parent.parent.resolve())
+        store.save_link(self.get_site_id(), patient, "Electrophysiology", recording_id, updated)
+        return updated
+
     def metadata_save_record(
         self,
         table_name: str,
@@ -12081,6 +12170,16 @@ class CoCANoTAPI:
                 patient_id=clean.get("CoCANoT Patient ID", "")
             )
             synced = self._sync_edited_imaging_export(clean, existing_record)
+            if synced is not None:
+                saved_context.update(synced)
+            elif existing_record:
+                saved_context = {**dict(existing_record.get("context") or {}), **saved_context}
+        if table_name == "Electrophysiology":
+            existing_record = self.repository.get_record(
+                self.get_site_id(), "Electrophysiology", canonical_record_id,
+                patient_id=clean.get("CoCANoT Patient ID", "")
+            )
+            synced = self._sync_edited_ephys_export(clean, existing_record)
             if synced is not None:
                 saved_context.update(synced)
             elif existing_record:
