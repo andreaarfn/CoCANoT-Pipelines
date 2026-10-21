@@ -163,7 +163,23 @@ export default function ElectrophysiologyDashboard({
 
     if (view === "review") loadReview();
 
-    if (view === "bids") loadBids();
+    if (view === "bids") {
+      loadBids();
+      const interval = window.setInterval(async () => {
+        if (cancelled) return;
+        const fresh = await api()?.ephys_get_state?.();
+        if (!fresh || cancelled) return;
+        setProcessRunning(Boolean(fresh.process_running));
+        if (!fresh.process_running) {
+          const pairs = await refreshReviewPairs();
+          await refreshBidsAwareness(fresh, pairs);
+        }
+      }, 2000);
+      return () => {
+        cancelled = true;
+        window.clearInterval(interval);
+      };
+    }
 
     return () => {
       cancelled = true;
