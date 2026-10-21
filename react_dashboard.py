@@ -6623,28 +6623,10 @@ class CoCANoTAPI:
                         patient_id=patient_id,
                     )
 
-                # Legacy cleanup: older deletions removed the metadata/BIDS
-                # record but left the Step 4 Accepted state behind. That made
-                # deleted images reappear forever as "Ready for Step 5".
-                #
-                # Restrict this recovery to an already-failed metadata stage,
-                # a populated patient/image identity, no local record, and no
-                # existing export. A normal new Step 5 draft is shown as
-                # "In progress" instead and is not removed.
-                if (
-                    local_record is None
-                    and patient_id
-                    and image_id
-                    and existing_export is None
-                    and self.imaging_stage_state.get(
-                        "metadata_bids"
-                    ) == "failed"
-                ):
-                    self._purge_stale_deleted_imaging_step5_item(
-                        source_key
-                    )
-                    continue
-
+                # Preserve Step 4 review decisions regardless of Step 5
+                # recovery status. Missing exports or a failed Step 5 stage
+                # must not erase an Accepted decision and turn it Pending.
+                # Explicit record deletion handles its own cleanup.
                 if local_record is not None:
                     record_state = "recorded_export_missing"
 
