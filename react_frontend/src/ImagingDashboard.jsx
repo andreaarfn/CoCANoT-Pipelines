@@ -58,6 +58,7 @@ export default function ImagingDashboard({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("Ready");
   const [logs, setLogs] = useState([]);
+  const [globalLogOpen, setGlobalLogOpen] = useState(false);
   const [acceptedImages, setAcceptedImages] = useState([]);
   const [heldImageCount, setHeldImageCount] = useState(0);
   const [bidsState, setBidsState] = useState(null);
@@ -923,23 +924,13 @@ export default function ImagingDashboard({
 
         <div className={styles.statusPanel}>
           <div className={styles.statusHeader}>
-            <div>
-              <strong>Pipeline status</strong>
-              <span>{status}</span>
-            </div>
-            <button
-              className={styles.logToggle}
-              type="button"
-              onClick={() => {
-                const element = document.getElementById("imaging-pipeline-log");
-                element?.scrollIntoView({ behavior: "smooth", block: "center" });
-              }}
-            >
-              View Log
+            <div><strong>Pipeline status</strong><span>{status}</span></div>
+            <button className={styles.logToggle} type="button"
+              onClick={() => navigator.clipboard?.writeText(logs.length ? logs.join("\n") : "Dashboard ready.")}>
+              Copy All
             </button>
           </div>
-
-          <pre id="imaging-pipeline-log" className={styles.log}>
+          <pre className={styles.log} style={{ userSelect: "text", WebkitUserSelect: "text" }}>
             {logs.length ? logs.join("\n") : "Dashboard ready."}
           </pre>
         </div>
@@ -1019,6 +1010,30 @@ export default function ImagingDashboard({
           </button>
         </div>
       </WorkflowSection>
+
+      <section className={styles.statusPanel}>
+        <div className={styles.statusHeader}>
+          <div><strong>Pipeline Log</strong><span>Workflow processing and troubleshooting</span></div>
+          <div className={styles.globalLogActions}>
+            {globalLogOpen && (
+              <button type="button" className={styles.logToggle}
+                onClick={() => navigator.clipboard?.writeText(logs.length ? logs.join("\n") : "Dashboard ready.")}>
+                Copy All
+              </button>
+            )}
+            <button type="button" className={styles.logToggle}
+              aria-expanded={globalLogOpen}
+              onClick={() => setGlobalLogOpen(value => !value)}>
+              {globalLogOpen ? "Hide Log" : "Show Log"}
+            </button>
+          </div>
+        </div>
+        {globalLogOpen && (
+          <pre className={styles.log} style={{ userSelect: "text", WebkitUserSelect: "text" }}>
+            {logs.length ? logs.join("\n") : "Dashboard ready."}
+          </pre>
+        )}
+      </section>
 
       <div className={styles.supportBar}>
         <div className={styles.supportMessage}>
