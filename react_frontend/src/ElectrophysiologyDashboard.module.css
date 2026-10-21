@@ -2786,3 +2786,21 @@
 .ephysReviewAccepted { background:#eaf7ef; color:#276842; border-color:#b7dec3; }
 .ephysReviewExported { background:#f0f2f5; color:#526174; border-color:#d6dce3; }
 .ephysReviewRejected { background:#fff0f1; color:#a63a45; border-color:#efc2c7; }
+
+.ephysLinkedMetadataEditor {
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  min-height:230px;
+  margin:12px 0;
+  padding:14px;
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  background:#f8fafc;
+  color:#263649;
+  font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;
+  resize:vertical;
+  tab-size:2;
+  user-select:text;
+  -webkit-user-select:text;
+}
