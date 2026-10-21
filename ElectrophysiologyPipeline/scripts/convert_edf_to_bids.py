@@ -1525,6 +1525,21 @@ def choose_output_base(
 
 
 
+    # An existing export for the same patient and Recording ID is a
+    # replacement, not a second run. Never duplicate it automatically.
+    existing_json = data_dir / f"{base}.json"
+    if existing_json.is_file():
+        try:
+            existing_metadata = json.loads(existing_json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing_metadata = {}
+        identity = existing_metadata.get("CoCANoTMetadata", {}) if isinstance(existing_metadata, dict) else {}
+        new_identity = record["cocanot_metadata"]
+        if (isinstance(identity, dict)
+            and str(identity.get("CoCANoT Patient ID") or "").strip() == str(new_identity.get("CoCANoT Patient ID") or "").strip()
+            and str(identity.get("Recording ID") or "").strip() == str(new_identity.get("Recording ID") or "").strip()):
+            return base
+
     for run in range(
 
         2,
