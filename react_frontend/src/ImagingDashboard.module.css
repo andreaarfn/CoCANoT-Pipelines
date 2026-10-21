@@ -3540,3 +3540,22 @@
   }
 }
 
+
+/* Step 5 exported-image visibility control */
+.bidsExportToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 12px 0;
+  color: #405a71;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.bidsExportToggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #367eae;
+  cursor: pointer;
+}
