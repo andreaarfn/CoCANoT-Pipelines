@@ -1565,6 +1565,7 @@ class CoCANoTAPI:
         scrubbed_header: dict[str, Any],
         scrubbed_annotations: list[dict[str, Any]],
         linked_metadata: dict[str, Any] | None = None,
+        save_mode: str = "all",
     ) -> dict[str, Any]:
         pairs = self.ephys_review_get_pairs()
 
@@ -1579,13 +1580,17 @@ class CoCANoTAPI:
         pair = pairs[index]
         helpers = _load_ephys_comparison_module()
 
-        helpers.rewrite_scrubbed_edf(
-            Path(pair["scrubbed_path"]),
-            scrubbed_header,
-            scrubbed_annotations,
-        )
+        if save_mode not in {"all", "header", "annotations", "metadata"}:
+            raise ValueError("Unsupported EDF save section.")
+        if save_mode in {"all", "header", "annotations"}:
+            existing = helpers.read_review_data(Path(pair["scrubbed_path"]))
+            header_to_write = scrubbed_header if save_mode in {"all", "header"} else existing["header"]
+            annotations_to_write = scrubbed_annotations if save_mode in {"all", "annotations"} else existing["annotations"]
+            helpers.rewrite_scrubbed_edf(
+                Path(pair["scrubbed_path"]), header_to_write, annotations_to_write
+            )
 
-        if linked_metadata is not None:
+        if save_mode in {"all", "metadata"} and linked_metadata is not None:
             if not isinstance(linked_metadata, dict):
                 raise ValueError("Linked EDF metadata must be a JSON object.")
             # Do not silently change the already-exported final file.
