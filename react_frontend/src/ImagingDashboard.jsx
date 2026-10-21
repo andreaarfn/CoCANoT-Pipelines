@@ -1347,6 +1347,14 @@ function ImagingBidsStep({
   attentionRecordId,
 }) {
   const [records, setRecords] = useState([]);
+  const [showExported, setShowExported] = useState(true);
+  const exportedCount = records.filter(record => record.record_state === "completed_recorded").length;
+  const displayedRecords = records
+    .filter(record => showExported || record.record_state !== "completed_recorded")
+    .sort((a, b) =>
+      Number(a.record_state === "completed_recorded") -
+      Number(b.record_state === "completed_recorded")
+    );
   const [rules, setRules] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [activeId, setActiveId] = useState("");
@@ -1896,6 +1904,16 @@ function ImagingBidsStep({
             Only include the images you intend to export.
           </div>
         )}
+        {exportedCount > 0 && (
+          <label className={styles.bidsExportToggle}>
+            <input
+              type="checkbox"
+              checked={showExported}
+              onChange={event => setShowExported(event.target.checked)}
+            />
+            Show already exported images ({exportedCount})
+          </label>
+        )}
         <div className={styles.bidsTableWrap}>
           <table className={styles.table}>
             <thead>
@@ -1912,14 +1930,14 @@ function ImagingBidsStep({
               </tr>
             </thead>
             <tbody>
-              {records.length === 0 ? (
+              {displayedRecords.length === 0 ? (
                 <tr>
                   <td colSpan="9" className={styles.empty}>
-                    No accepted images were found.
+                    {records.length === 0 ? "No accepted images were found." : "Already exported images are hidden. Use the toggle above to show them."}
                   </td>
                 </tr>
               ) : (
-                records.map(record => (
+                displayedRecords.map(record => (
                   <tr
                     key={record.id}
                     className={activeId === record.id ? styles.activeBidsRow : ""}
