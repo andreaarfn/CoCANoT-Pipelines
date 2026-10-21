@@ -1381,8 +1381,12 @@ function ImagingBidsStep({
 
       resumeAppliedRef.current = true;
       setRecords(resumedRecords);
-      setSelectedIds(resumeState.selectedIds ?? []);
-      setActiveId(resumeState.activeId ?? resumedRecords[0]?.id ?? "");
+      const firstReady = resumedRecords.find(r => r.record_state !== "completed_recorded");
+      const resumeActive = resumedRecords.find(r => r.id === resumeState.activeId);
+      setSelectedIds((resumeState.selectedIds ?? []).filter(id =>
+        resumedRecords.some(r => r.id === id && r.record_state !== "completed_recorded")
+      ));
+      setActiveId((resumeActive?.record_state !== "completed_recorded" && resumeActive?.id) || firstReady?.id || "");
       setDraftMetadata({ ...(resumeState.draftMetadata ?? {}) });
       setSidecarText(JSON.stringify(resumeState.records?.find(r => r.id === resumeState.activeId)?.sidecar_metadata ?? {}, null, 2));
       setProject(resumeState.project ?? "");
@@ -1395,9 +1399,10 @@ function ImagingBidsStep({
     setRecords(nextRecords);
 
     if (nextRecords.length > 0) {
-      const first = nextRecords[0];
+      const firstReady = nextRecords.find(record => record.record_state !== "completed_recorded");
+      const first = firstReady || nextRecords[0];
       setActiveId(first.id);
-      setSelectedIds([first.id]);
+      setSelectedIds(firstReady ? [firstReady.id] : []);
       loadRecordIntoDraft(first);
     } else {
       setActiveId("");
