@@ -2006,7 +2006,7 @@ function EDFReview({
 
   const pendingCount = pairs.filter(
 
-    pair => !["Accepted", "Rejected - Not Included"].includes(pair.status)
+    pair => !["Accepted", "Rejected - Not Included", "On Hold"].includes(pair.status)
 
   ).length;
 
@@ -2110,6 +2110,10 @@ function EDFReview({
 
     await onSetStatus("Accepted");
 
+  }
+
+  async function holdCurrent() {
+    await onSetStatus("On Hold");
   }
 
   async function rejectCurrent() {
@@ -2450,6 +2454,10 @@ function EDFReview({
 
                 <div className={styles.reviewDecisionActions}>
 
+                  <button className={styles.secondary} onClick={holdCurrent}>
+                    On Hold
+                  </button>
+
                   <button className={styles.secondary} onClick={() => setRejectOpen(true)}>
 
                     Reject
@@ -2478,7 +2486,7 @@ function EDFReview({
 
                 <div className={styles.reviewHint}>
 
-                  Review all recordings before continuing. Accepted recordings continue to Step 5; rejected recordings remain local and are excluded from export.
+                  Review all recordings before continuing. Accepted recordings continue to Step 5; on-hold and rejected recordings are excluded from export.
 
                 </div>
 
