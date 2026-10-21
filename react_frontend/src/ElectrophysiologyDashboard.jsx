@@ -2411,50 +2411,35 @@ function EDFReview({
 
                     </div>
 
+                    <p className={styles.helpText}>Mark events in the EDF recording. Onset is seconds from recording start; duration is seconds (0 for an instant). A description is required. Save EDF and linked metadata below to write these into the scrubbed EDF.</p>
                     {(review.scrubbed.annotations ?? []).length === 0 ? (
-
-                      <div className={styles.annotationEmpty}>No annotations.</div>
-
+                      <div className={styles.annotationEmpty}>No annotations. Select Add to describe an event.</div>
                     ) : (
-
                       (review.scrubbed.annotations ?? []).map((row, index) => (
-
-                        <div className={styles.annotationEdit} key={index}>
-
-                          <input
-
-                            type="number"
-
-                            value={row.onset}
-
-                            onChange={event => updateAnnotation(index, "onset", Number(event.target.value))}
-
-                          />
-
-                          <input
-
-                            type="number"
-
-                            value={row.duration}
-
-                            onChange={event => updateAnnotation(index, "duration", Number(event.target.value))}
-
-                          />
-
-                          <input
-
-                            value={row.description}
-
-                            onChange={event => updateAnnotation(index, "description", event.target.value)}
-
-                          />
-
-                          <button onClick={() => removeAnnotation(index)}>Remove</button>
-
+                        <div className={styles.ephysAnnotationCard} key={index}>
+                          <div className={styles.ephysAnnotationCardHeading}>
+                            <strong>Annotation {index + 1}</strong>
+                            <button type="button" onClick={() => removeAnnotation(index)}>Remove</button>
+                          </div>
+                          <div className={styles.ephysAnnotationInputs}>
+                            <label><span>Onset (seconds)</span>
+                              <input aria-label={`Annotation ${index + 1} onset in seconds`}
+                                type="number" min="0" step="any" value={row.onset}
+                                onChange={event => updateAnnotation(index, "onset", Number(event.target.value))} />
+                            </label>
+                            <label><span>Duration (seconds)</span>
+                              <input aria-label={`Annotation ${index + 1} duration in seconds`}
+                                type="number" min="0" step="any" value={row.duration}
+                                onChange={event => updateAnnotation(index, "duration", Number(event.target.value))} />
+                            </label>
+                          </div>
+                          <label className={styles.ephysAnnotationDescription}><span>Event description</span>
+                            <input aria-label={`Annotation ${index + 1} description`}
+                              placeholder="e.g., Eyes closed or seizure onset" value={row.description}
+                              onChange={event => updateAnnotation(index, "description", event.target.value)} />
+                          </label>
                         </div>
-
                       ))
-
                     )}
 
                   </div>
