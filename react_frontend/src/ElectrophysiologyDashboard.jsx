@@ -2500,6 +2500,12 @@ function EDFReview({
                     {previewMode === "overlay" && (
                       <div className={styles.ephysWaveformOverlay}>
                         <strong>Overlay (all selected channels)</strong>
+                        <div className={styles.ephysOverlayLegend} aria-label="Overlay channel legend">
+                          {(preview.signals ?? []).map((channel,index) => {
+                            const colors = ["#287aa9","#b46b35","#7d5ca8","#3c9276","#ba5976"];
+                            return <span key={channel.label}><i style={{background:colors[index % colors.length]}} aria-hidden="true" />{channel.label}</span>;
+                          })}
+                        </div>
                         <svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="button" aria-label="Add annotation on overlaid waveforms"
                           onClick={event => {
                             const rect = event.currentTarget.getBoundingClientRect();
@@ -2595,6 +2601,12 @@ function EDFReview({
                               placeholder="e.g., Eyes closed or seizure onset" value={row.description}
                               onChange={event => updateAnnotation(index, "description", event.target.value)} />
                           </label>
+                          <div className={styles.ephysReviewSectionSave}>
+                            <button type="button" className={styles.secondary} onClick={() => saveAnnotationOnly(index)}>
+                              <Save size={16} /> Save annotation {index + 1}
+                            </button>
+                            <p role="status" aria-live="polite">{annotationSaveStatus[index] ?? ""}</p>
+                          </div>
                         </div>
                       ))
                     )}
@@ -2620,7 +2632,7 @@ function EDFReview({
                   }}>{saveStatus.message}</p>
                 )}
                 <button type="button" className={styles.secondary} disabled={savingReview} onClick={saveLinkedRecording}>
-                  {savingReview ? "Saving EDF and linked metadata…" : "Save EDF and linked metadata"}
+                  {savingReview ? "Saving linked metadata…" : "Save linked metadata"}
                 </button>
               </section>
 
