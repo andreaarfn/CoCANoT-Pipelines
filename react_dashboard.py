@@ -1360,7 +1360,7 @@ class CoCANoTAPI:
                 self.ephys_stage_state["review"] = "not_started"
             return
 
-        terminal = {"Accepted", "Rejected - Not Included"}
+        terminal = {"Accepted", "Rejected - Not Included", "On Hold"}
         self.ephys_stage_state["review"] = (
             "complete"
             if all(str(pair.get("status", "Pending")) in terminal for pair in pairs)
@@ -1535,7 +1535,7 @@ class CoCANoTAPI:
             raise ValueError("EDF review pair not found.")
 
         normalized = str(status or "").strip()
-        allowed = {"Accepted", "Rejected - Not Included"}
+        allowed = {"Accepted", "Rejected - Not Included", "On Hold", "Pending"}
 
         if normalized not in allowed:
             raise ValueError("Invalid EDF review status.")
