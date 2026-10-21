@@ -11570,8 +11570,11 @@ class CoCANoTAPI:
                    "bids_sidecar_path": str(new_json.resolve()),
                    "final_output_root": str(Path(link.get("final_output_root") or old_context.get("bids_output_dir") or new_path.parent.parent).resolve()),
                    "final_paths": [str(dest.resolve()) for _, dest in movements]}
-        if new_extra.is_file():
-            updated["cocanot_metadata_path"] = str(new_extra.resolve())
+        # New exports use the consolidated JSON; older dual-file exports
+        # retain their own metadata path until explicitly migrated.
+        updated["cocanot_metadata_path"] = str(
+            (new_extra if new_extra.is_file() else new_json).resolve()
+        )
         link_store.save_link(self.get_site_id(), patient, "Imaging", image_id, updated)
         return updated
 
