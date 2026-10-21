@@ -11166,6 +11166,28 @@ class CoCANoTAPI:
             "record could not be found on this computer."
         )
 
+    def ephys_review_signal_preview(
+        self, pair_id: str | int, source: str = "scrubbed",
+        start_seconds: float = 0.0, window_seconds: float = 10.0,
+        channels: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Read waveform windows from the selected Step 4 EDF, without modifying it."""
+        pairs = self.ephys_review_get_pairs()
+        try:
+            index = int(pair_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid EDF review selection.") from exc
+        if index < 0 or index >= len(pairs):
+            raise ValueError("EDF review pair not found.")
+        if source not in {"raw", "scrubbed"}:
+            raise ValueError("Select raw or scrubbed EDF.")
+        path = Path(pairs[index][f"{source}_path"])
+        # The preview method resolves explicitly linked EDF paths.
+        return self.metadata_get_ephys_signal_preview(
+            {"context": {"edf_path": str(path)}, "metadata": {}},
+            start_seconds, window_seconds, channels,
+        )
+
     def metadata_get_ephys_signal_preview(
         self,
         record: dict[str, Any],
