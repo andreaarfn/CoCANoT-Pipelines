@@ -1764,7 +1764,17 @@ def copy_record(
 
 
 
-    sidecar = make_recording_sidecar(metadata, record)
+    source_sidecar = record.get("sidecar_metadata") or {}
+    if not isinstance(source_sidecar, dict):
+        raise ValueError("EDF sidecar metadata must be a JSON object.")
+    # Preserve scrubbed/edited acquisition metadata, then standard EDF
+    # recording descriptors; CoCANoT fields are deliberately appended last.
+    sidecar = {
+        **{k: v for k, v in source_sidecar.items()
+           if k not in {"CoCANoTMetadata", "SourceFile", "patientname",
+                        "patientcode", "patient_additional", "birthdate"}},
+        **make_recording_sidecar(metadata, record),
+    }
     # The EDF header and annotations are retained in the linked recording's
     # consolidated sidecar. CoCANoT dictionary fields follow recording fields.
     sidecar.pop("CoCANoTMetadata", None)
