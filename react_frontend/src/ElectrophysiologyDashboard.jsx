@@ -1990,6 +1990,41 @@ function EDFReview({
 }) {
 
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [previewSource, setPreviewSource] = useState("scrubbed");
+  const [previewStart, setPreviewStart] = useState(0);
+  const [previewWindow, setPreviewWindow] = useState(10);
+  const [previewChannels, setPreviewChannels] = useState([]);
+  const [previewError, setPreviewError] = useState("");
+  const [previewBusy, setPreviewBusy] = useState(false);
+  useEffect(() => {
+    setPreview(null);
+    setPreviewStart(0);
+    setPreviewChannels([]);
+  }, [review?.id]);
+  useEffect(() => {
+    if (!review?.id) return;
+    let active = true;
+    setPreviewBusy(true);
+    setPreviewError("");
+    api()?.ephys_review_signal_preview?.(review.id, previewSource, previewStart, previewWindow, previewChannels)
+      .then(value => { if (active) setPreview(value); })
+      .catch(error => { if (active) setPreviewError(String(error)); })
+      .finally(() => { if (active) setPreviewBusy(false); });
+    return () => { active = false; };
+  }, [review?.id, previewSource, previewStart, previewWindow, previewChannels.join("|")]);
+  function insertAnnotationAt(seconds) {
+    if (!review) return;
+    onChange({
+      ...review, scrubbed: {
+        ...review.scrubbed,
+        annotations: [...(review.scrubbed.annotations ?? []), {
+          onset: Math.max(0, Number(seconds.toFixed(3))),
+          duration: 0, description: "",
+        }],
+      },
+    });
+  }
   const [metadataText, setMetadataText] = useState("{}");
   const [metadataError, setMetadataError] = useState("");
   const [saveStatus, setSaveStatus] = useState({ type: "", message: "" });
@@ -2267,6 +2302,61 @@ function EDFReview({
 
                 </div>
 
+              </section>
+
+              <section className={styles.card}>
+                <h2>EDF signal preview</h2>
+                <p className={styles.helpText}>Inspect real recording signals and click the waveform to add an annotation at that time. Edit the event description below, then save the EDF.</p>
+                <div className={styles.ephysPreviewControls}>
+                  <label>Recording
+                    <select value={previewSource} onChange={e => setPreviewSource(e.target.value)}>
+                      <option value="scrubbed">Scrubbed EDF</option>
+                      <option value="raw">Raw EDF (read only)</option>
+                    </select>
+                  </label>
+                  <label>Time window
+                    <select value={previewWindow} onChange={e => setPreviewWindow(Number(e.target.value))}>
+                      {[5,10,30,60].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}
+                    </select>
+                  </label>
+                  <button type="button" className={styles.secondary} disabled={previewStart <= 0} onClick={() => setPreviewStart(Math.max(0, previewStart-previewWindow))}>Previous</button>
+                  <button type="button" className={styles.secondary} disabled={previewStart + previewWindow >= Number(preview?.duration_seconds ?? Infinity)} onClick={() => setPreviewStart(previewStart+previewWindow)}>Next</button>
+                </div>
+                {previewError && <p role="alert">{previewError}</p>}
+                {previewBusy && <p role="status">Loading recording signals…</p>}
+                {preview && <>
+                  <p className={styles.helpText}>Showing {preview.start_seconds.toFixed(1)}–{(preview.start_seconds+preview.window_seconds).toFixed(1)} s of {Math.round(preview.duration_seconds)} s. Click any trace to add a time-stamped event.</p>
+                  <div className={styles.ephysPreviewChannelList}>
+                    {(preview.channel_labels ?? []).map(label => <label key={label}>
+                      <input type="checkbox" checked={(previewChannels.length ? previewChannels : preview.selected_channels ?? []).includes(label)}
+                        onChange={() => { const current = previewChannels.length ? previewChannels : preview.selected_channels ?? [];
+                          setPreviewChannels(current.includes(label) ? current.filter(v => v !== label) : [...current,label]); }} /> {label}
+                    </label>)}
+                  </div>
+                  <div className={styles.ephysWaveformStack}>
+                    {(preview.signals ?? []).map(channel => {
+                      const values = channel.values ?? [];
+                      const low = Math.min(...values), high = Math.max(...values);
+                      const spread = Math.max(1e-9, high-low);
+                      const points = values.map((value,i) => `${(i/Math.max(1,values.length-1))*1000},${55-(value-low)/spread*48}`).join(" ");
+                      return <div className={styles.ephysWaveformRow} key={channel.label}>
+                        <strong>{channel.label}</strong>
+                        <svg viewBox="0 0 1000 64" preserveAspectRatio="none"
+                          role="button" aria-label={`Add annotation on ${channel.label}`}
+                          onClick={event => {
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            insertAnnotationAt(Number(preview.start_seconds) + Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width))*Number(preview.window_seconds));
+                          }}>
+                          <polyline points={points} fill="none" stroke="#287aa9" strokeWidth="1.3" vectorEffect="non-scaling-stroke"/>
+                          {(review.scrubbed.annotations ?? []).filter(a => Number(a.onset) >= preview.start_seconds && Number(a.onset) <= preview.start_seconds+preview.window_seconds).map((a,i) => {
+                            const x=(Number(a.onset)-preview.start_seconds)/preview.window_seconds*1000;
+                            return <line key={i} x1={x} x2={x} y1="0" y2="64" stroke="#cb8a21" strokeWidth="2" vectorEffect="non-scaling-stroke"/>;
+                          })}
+                        </svg>
+                      </div>;
+                    })}
+                  </div>
+                </>}
               </section>
 
               <section className={styles.card}>
