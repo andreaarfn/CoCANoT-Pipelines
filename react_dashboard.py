@@ -5089,6 +5089,11 @@ class CoCANoTAPI:
                             nested
                         )
 
+            # Consolidated exports store CoCANoT metadata in the ordinary
+            # imaging JSON. Older exports may still have a separate sidecar.
+            if not cocanot_metadata and isinstance(metadata.get("CoCANoTMetadata"), dict):
+                cocanot_metadata = dict(metadata["CoCANoTMetadata"])
+
             return {
                 "nifti_path": str(
                     resolved
@@ -5107,7 +5112,7 @@ class CoCANoTAPI:
                         metadata_path.resolve()
                     )
                     if metadata_path.is_file()
-                    else ""
+                    else str(json_path.resolve()) if json_path is not None else ""
                 ),
                 "sha256": "",
             }
