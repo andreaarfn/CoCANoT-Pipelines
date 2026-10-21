@@ -6,6 +6,8 @@ export default function HelpSupport({ siteId }) {
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
   const [steps, setSteps] = useState("");
+  const [pipelineLog, setPipelineLog] = useState("");
+  const submittedSteps = [steps.trim(), pipelineLog.trim() ? `Pipeline log (optional):\n${pipelineLog.trim()}` : ""].filter(Boolean).join("\n\n");
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -20,6 +22,7 @@ export default function HelpSupport({ siteId }) {
     "",
     "Steps to reproduce:",
     steps || "(not provided)",
+    ...(pipelineLog.trim() ? ["", "Pipeline log (optional):", pipelineLog.trim()] : []),
   ].join("\n");
 
   async function copyReport() {
@@ -36,6 +39,11 @@ export default function HelpSupport({ siteId }) {
   async function submitReport(event) {
     event.preventDefault();
     if (submitting) return;
+    if (submittedSteps.length > 3000) {
+      setIsError(true);
+      setMessage("The steps and pipeline log are too long together. Please paste just the relevant log lines (3,000 characters total).");
+      return;
+    }
     setMessage("");
     setIsError(false);
     setSubmitting(true);
@@ -44,12 +52,12 @@ export default function HelpSupport({ siteId }) {
       if (!bridge?.submit_bug_report) {
         throw new Error("Bug reporting is unavailable. Restart the updated desktop application.");
       }
-      const fingerprint = JSON.stringify([siteId, summary.trim(), description.trim(), steps.trim()]);
+      const fingerprint = JSON.stringify([siteId, summary.trim(), description.trim(), submittedSteps]);
       if (!pendingReport.current || pendingReport.current.fingerprint !== fingerprint) {
         pendingReport.current = { fingerprint, requestId: crypto.randomUUID() };
       }
       const result = await bridge.submit_bug_report({
-        summary, description, steps, requestId: pendingReport.current.requestId,
+        summary, description, steps: submittedSteps, requestId: pendingReport.current.requestId,
       });
       if (!result?.ok) throw new Error(result?.message || "The report could not be submitted.");
       pendingReport.current = null;
@@ -57,6 +65,7 @@ export default function HelpSupport({ siteId }) {
       setSummary("");
       setDescription("");
       setSteps("");
+      setPipelineLog("");
     } catch (error) {
       setIsError(true);
       setMessage(error?.message || "The report could not be submitted.");
@@ -82,6 +91,16 @@ export default function HelpSupport({ siteId }) {
           <label><span>Short summary</span><input value={summary} maxLength={160} required onChange={event => setSummary(event.target.value)} placeholder="Example: Surgical record will not save" /></label>
           <label><span>What happened?</span><textarea value={description} maxLength={4000} required onChange={event => setDescription(event.target.value)} rows={5} placeholder="Describe the problem and any error message you saw." /></label>
           <label><span>Steps to reproduce</span><textarea value={steps} maxLength={3000} onChange={event => setSteps(event.target.value)} rows={5} placeholder={"1. Open Metadata\n2. Load a patient\n3. ..."} /></label>
+          <label>
+            <span>Pipeline log (optional)</span>
+            <span className={styles.fieldHint}>If the problem happened during imaging or electrophysiology processing, click <strong>Copy All</strong> in that pipeline's log and paste it here. Include only the relevant lines, and remove any patient information before submitting.</span>
+            <textarea
+              value={pipelineLog}
+              onChange={event => setPipelineLog(event.target.value)}
+              rows={5}
+              placeholder="Paste the pipeline log here, if applicable."
+            />
+          </label>
           <div className={styles.actions}>
             <button type="button" className={styles.secondary} onClick={copyReport}><Clipboard size={16} />Copy bug report</button>
             <button type="submit" className={styles.primary} disabled={submitting || !summary.trim() || !description.trim()}><Send size={16} />{submitting ? "Submitting…" : "Submit Bug Report"}</button>
