@@ -11004,6 +11004,57 @@ class CoCANoTAPI:
         self,
         record: dict[str, Any],
     ) -> Path:
+        # Match Imaging: prefer an authoritative final export for this
+        # patient and Recording ID, not an older scrubbed derivative.
+        metadata = dict(record.get("metadata", {}) or {})
+        patient_id = str(metadata.get("CoCANoT Patient ID") or "").strip()
+        recording_id = str(metadata.get("Recording ID") or "").strip()
+        context = dict(record.get("context", {}) or {})
+        try:
+            link = PatientDataLinkStore().get_link(
+                self.get_site_id(), patient_id, "Electrophysiology", recording_id
+            ) or {}
+        except (OSError, ValueError):
+            link = {}
+
+        def is_linked_final(path: Path) -> bool:
+            if not path.is_file() or path.suffix.lower() != ".edf":
+                return False
+            sidecar = path.with_suffix(".json")
+            if not sidecar.is_file():
+                return False
+            try:
+                payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return False
+            if not isinstance(payload, dict):
+                return False
+            cocanot = payload.get("CoCANoTMetadata")
+            return (
+                isinstance(cocanot, dict)
+                and str(cocanot.get("CoCANoT Patient ID") or "").strip() == patient_id
+                and str(cocanot.get("Recording ID") or "").strip() == recording_id
+            )
+
+        for candidate_text in [
+            link.get("bids_data_path"), context.get("bids_data_path"),
+            *(link.get("final_paths") or []),
+        ]:
+            if candidate_text:
+                candidate = Path(str(candidate_text)).expanduser()
+                if is_linked_final(candidate):
+                    return candidate.resolve()
+
+        for root_text in [
+            link.get("final_output_root"), context.get("bids_output_dir"),
+        ]:
+            if root_text:
+                root = Path(str(root_text)).expanduser()
+                if root.is_dir():
+                    for candidate in root.rglob("*.edf"):
+                        if is_linked_final(candidate):
+                            return candidate.resolve()
+
         for candidate in (
             self._metadata_record_file_candidates(
                 record,
