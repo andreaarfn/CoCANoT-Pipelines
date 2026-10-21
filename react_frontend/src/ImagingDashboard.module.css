@@ -3559,3 +3559,19 @@
   accent-color: #367eae;
   cursor: pointer;
 }
+
+/* Shared log controls below the five-step workflow */
+.globalLogActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.log {
+  user-select: text;
+  -webkit-user-select: text;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
