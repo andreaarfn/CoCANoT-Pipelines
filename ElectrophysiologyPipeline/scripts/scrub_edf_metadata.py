@@ -664,13 +664,26 @@ def main() -> None:
         output_exists = output_path.exists()
         sidecar_exists = json_path.exists()
 
-        if (output_exists or sidecar_exists) and not args.overwrite:
-            print(
-                "Skipping: output already exists. "
-                "Use --overwrite to replace it.",
-                flush=True,
-            )
-            skipped += 1
+        if not args.overwrite and output_exists and sidecar_exists:
+            try:
+                import json
+                sidecar = json.loads(json_path.read_text(encoding="utf-8"))
+                if not isinstance(sidecar, dict) or output_path.stat().st_size == 0:
+                    raise ValueError("Missing or incomplete scrubbed EDF/JSON.")
+                # Ensure a complete readable EDF, not just a path on disk.
+                import pyedflib
+                with pyedflib.EdfReader(str(output_path)) as reader:
+                    if reader.signals_in_file < 1:
+                        raise ValueError("Scrubbed EDF contains no signals.")
+                print("Skipping: verified scrubbed EDF and JSON already exist.", flush=True)
+                skipped += 1
+                continue
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                print(f"Existing output is incomplete: {exc}", flush=True)
+
+        if not args.overwrite and (output_exists or sidecar_exists):
+            print("Refusing to overwrite incomplete output; use --overwrite after reviewing the files.", flush=True)
+            failed += 1
             continue
 
         if args.overwrite:
