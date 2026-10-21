@@ -63,6 +63,7 @@ export default function ElectrophysiologyDashboard({
   );
 
   const [openSection, setOpenSection] = useState(1);
+  const [globalLogOpen, setGlobalLogOpen] = useState(false);
 
   const [state, setState] = useState({
 
@@ -1389,6 +1390,9 @@ export default function ElectrophysiologyDashboard({
               <strong>Pipeline status</strong>
 
               <span>{state.status}</span>
+              <button type="button" className={styles.secondary} onClick={() =>
+                navigator.clipboard?.writeText((state.logs ?? []).join("\n") || "Dashboard ready.")
+              }>Copy All</button>
 
             </div>
 
@@ -1498,32 +1502,6 @@ export default function ElectrophysiologyDashboard({
 
         />
 
-        {(processStages.metadata_bids === "running" || processStages.metadata_bids === "failed" || workflowCompletion[5]) && (
-
-          <div className={styles.statusPanel}>
-
-            <div className={styles.statusHeader}>
-
-              <div>
-
-                <strong>Pipeline status</strong>
-
-                <span>{state.status}</span>
-
-              </div>
-
-            </div>
-
-            <pre className={styles.log}>
-
-              {(state.logs ?? []).join("\n") || "Dashboard ready."}
-
-            </pre>
-
-          </div>
-
-        )}
-
         <div className={styles.sectionFooter}>
 
           <button className={styles.secondary} onClick={() => setOpenSection(4)}>
@@ -1551,6 +1529,22 @@ export default function ElectrophysiologyDashboard({
         </div>
 
       </WorkflowSection>
+
+      <section className={styles.statusPanel}>
+        <div className={styles.statusHeader}>
+          <div><strong>Pipeline Log</strong><span>Processing and troubleshooting</span></div>
+          <div className={styles.ephysLogActions}>
+            {globalLogOpen && <button type="button" className={styles.secondary}
+              onClick={() => navigator.clipboard?.writeText((state.logs ?? []).join("\n") || "Dashboard ready.")}>Copy All</button>}
+            <button type="button" className={styles.secondary}
+              aria-expanded={globalLogOpen}
+              onClick={() => setGlobalLogOpen(open => !open)}>{globalLogOpen ? "Hide Log" : "Show Log"}</button>
+          </div>
+        </div>
+        {globalLogOpen && <pre className={styles.log} style={{userSelect:"text",WebkitUserSelect:"text"}}>
+          {(state.logs ?? []).join("\n") || "Dashboard ready."}
+        </pre>}
+      </section>
 
       <div className={styles.helpBar}>
 
