@@ -741,20 +741,20 @@ export default function ElectrophysiologyDashboard({
   }
 
   async function saveReview(linkedMetadata) {
-    if (!review) return;
-    try {
-      const updated = await api()?.ephys_review_save_pair?.(
-        review.id,
-        review.scrubbed.header,
-        review.scrubbed.annotations,
-        linkedMetadata
-      );
-      if (updated) setReview(updated);
-      const updatedPairs = await api()?.ephys_review_get_pairs?.();
-      if (updatedPairs) setReviewPairs(updatedPairs);
-    } catch (error) {
-      alert(`Could not save EDF review edits: ${error}`);
+    if (!review) throw new Error("No EDF review is selected.");
+    const updated = await api()?.ephys_review_save_pair?.(
+      review.id,
+      review.scrubbed.header,
+      review.scrubbed.annotations,
+      linkedMetadata
+    );
+    if (!updated?.scrubbed) {
+      throw new Error("The EDF save did not return a verified updated recording.");
     }
+    setReview(updated);
+    const updatedPairs = await api()?.ephys_review_get_pairs?.();
+    if (updatedPairs) setReviewPairs(updatedPairs);
+    return updated;
   }
 
   async function setReviewStatus(status) {
@@ -1992,20 +1992,35 @@ function EDFReview({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [metadataText, setMetadataText] = useState("{}");
   const [metadataError, setMetadataError] = useState("");
+  const [saveStatus, setSaveStatus] = useState({ type: "", message: "" });
+  const [savingReview, setSavingReview] = useState(false);
   useEffect(() => {
     setMetadataText(JSON.stringify(review?.linked_metadata ?? {}, null, 2));
     setMetadataError("");
+    setSaveStatus({ type: "", message: "" });
   }, [review?.id, review?.scrubbed?.path]); 
-  function saveLinkedRecording() {
+  async function saveLinkedRecording() {
+    if (savingReview) return;
+    setSavingReview(true);
+    setSaveStatus({ type: "", message: "" });
     try {
       const metadata = JSON.parse(metadataText);
       if (!metadata || Array.isArray(metadata) || typeof metadata !== "object") {
         throw new Error("The metadata must be a JSON object.");
       }
       setMetadataError("");
-      onSave(metadata);
+      const saved = await onSave(metadata);
+      setMetadataText(JSON.stringify(saved.linked_metadata ?? metadata, null, 2));
+      setSaveStatus({
+        type: "success",
+        message: "Saved successfully: EDF header, annotations, and linked JSON metadata.",
+      });
     } catch (error) {
-      setMetadataError(String(error.message || error));
+      const message = String(error?.message ?? error);
+      setMetadataError(message);
+      setSaveStatus({ type: "error", message: `Save failed: ${message}` });
+    } finally {
+      setSavingReview(false);
     }
   }
 
@@ -2453,10 +2468,18 @@ function EDFReview({
                 <p>Review or edit the JSON metadata associated with this EDF. Acquisition metadata comes first; CoCANoT dictionary metadata follows when available. Save changes to the scrubbed sidecar before exporting. If this recording was already exported, changes here do not silently overwrite its existing final export.</p>
                 <textarea className={styles.ephysLinkedMetadataEditor}
                   value={metadataText} rows={12}
-                  onChange={event => setMetadataText(event.target.value)}
+                  onChange={event => { setMetadataText(event.target.value); setSaveStatus({ type: "", message: "" }); }}
                   spellCheck={false} aria-label="Linked recording JSON metadata" />
-                {metadataError && <p role="alert">{metadataError}</p>}
-                <button type="button" className={styles.secondary} onClick={saveLinkedRecording}>Save EDF and linked metadata</button>
+                {saveStatus.message && (
+                  <p role="status" aria-live="polite" style={{
+                    color: saveStatus.type === "success" ? "#276842" : "#a63a45",
+                    fontWeight: 650,
+                    marginTop: 10,
+                  }}>{saveStatus.message}</p>
+                )}
+                <button type="button" className={styles.secondary} disabled={savingReview} onClick={saveLinkedRecording}>
+                  {savingReview ? "Saving EDF and linked metadata…" : "Save EDF and linked metadata"}
+                </button>
               </section>
 
               <div className={styles.reviewDecisionFooter}>
