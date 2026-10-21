@@ -106,6 +106,7 @@ export default function ElectrophysiologyDashboard({
   });
   const outputSettingsDirtyRef = useRef(false);
   const bidsRecordsRef = useRef([]);
+  const exportRefreshPendingRef = useRef(false);
 
   function showEphysHome() {
 
@@ -165,15 +166,13 @@ export default function ElectrophysiologyDashboard({
 
     if (view === "bids") {
       loadBids();
-      let wasRunning = false;
       const interval = window.setInterval(async () => {
         if (cancelled) return;
         const fresh = await api()?.ephys_get_state?.();
         if (!fresh || cancelled) return;
         setProcessRunning(Boolean(fresh.process_running));
-        if (fresh.process_running) wasRunning = true;
-        else if (wasRunning) {
-          wasRunning = false;
+        if (!fresh.process_running && exportRefreshPendingRef.current) {
+          exportRefreshPendingRef.current = false;
           const pairs = await refreshReviewPairs();
           await refreshBidsAwareness(fresh, pairs);
         }
@@ -1014,6 +1013,7 @@ export default function ElectrophysiologyDashboard({
           }));
 
           setProcessRunning(true);
+          exportRefreshPendingRef.current = true;
 
           // Export runs while Step 5 remains visible.
 
