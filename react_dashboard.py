@@ -1289,6 +1289,9 @@ class CoCANoTAPI:
         review_state = self._load_ephys_review_state(state_path)
         helpers = _load_ephys_comparison_module()
         result: list[dict[str, Any]] = []
+        export_index = self._index_existing_ephys_bids(
+            config.electrophysiology.bids_output_dir
+        )
 
         for raw_path in helpers.find_edf_files(input_dir):
             relative = raw_path.relative_to(input_dir)
@@ -1303,12 +1306,23 @@ class CoCANoTAPI:
 
             key = str(relative)
             saved = review_state.get(key, {})
+            exported = False
+            if str(saved.get("status", "Pending")) == "Accepted":
+                matched = self._existing_ephys_bids_export(scrubbed_path, export_index)
+                if matched and matched.get("json_path"):
+                    identity = matched.get("metadata", {})
+                    exported = bool(
+                        isinstance(identity, dict)
+                        and str(identity.get("CoCANoT Patient ID") or "").strip()
+                        and str(identity.get("Recording ID") or "").strip()
+                    )
             result.append(
                 {
                     "id": str(len(result)),
                     "key": key,
                     "label": key,
                     "status": str(saved.get("status", "Pending")),
+                    "exported": exported,
                     "raw_path": str(raw_path.resolve()),
                     "scrubbed_path": str(scrubbed_path.resolve()),
                 }
