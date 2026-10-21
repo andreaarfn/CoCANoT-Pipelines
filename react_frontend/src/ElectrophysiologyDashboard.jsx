@@ -2731,7 +2731,7 @@ function EphysBids({
 
             session_id: sessionId,
 
-            cocanot_metadata: structuredClone(draft),
+            cocanot_metadata: pruneInapplicableMetadata(structuredClone(draft)),
 
           }
 
@@ -2819,13 +2819,45 @@ function EphysBids({
 
   }
 
+  // Conditional applicability is defined by the active MR Electrophysiology
+  // dictionary, never by a list of field names. Clear descendants repeatedly
+  // so changing an upstream answer also clears nested hidden questions.
+  function pruneInapplicableMetadata(values) {
+    const next = { ...values };
+    const matches = rule => {
+      if (!rule.required_if_field) return true;
+      const current = next[rule.required_if_field];
+      const expected = rule.required_if_value;
+      const actualValues = (Array.isArray(current) ? current : [current])
+        .map(value => String(value ?? "").trim()).filter(Boolean);
+      const wantedValues = (Array.isArray(expected) ? expected : [expected])
+        .map(value => String(value ?? "").trim()).filter(Boolean);
+      const intersects = wantedValues.some(value => actualValues.includes(value));
+      const op = String(rule.required_if_operator ?? "").toLowerCase();
+      return op.includes("not") || op === "!=" || op === "not_equals"
+        ? !intersects : intersects;
+    };
+    for (let pass = 0; pass < rules.length; pass += 1) {
+      let changed = false;
+      for (const rule of rules) {
+        if (!rule.required_if_field || matches(rule)) continue;
+        if (Object.prototype.hasOwnProperty.call(next, rule.field_name)) {
+          delete next[rule.field_name];
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+    return next;
+  }
+
   function buildResumeState(nextRecords = records) {
 
     return {
       records: nextRecords,
       selectedIds,
       activeId,
-      draft: structuredClone(draft),
+      draft: pruneInapplicableMetadata(structuredClone(draft)),
       project,
       projectDescription,
       sessionId,
@@ -3240,7 +3272,7 @@ function EphysBids({
 
                   onChange={value =>
 
-                    setDraft(current => ({
+                    setDraft(current => pruneInapplicableMetadata({
 
                       ...current,
 
