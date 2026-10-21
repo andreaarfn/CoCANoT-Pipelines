@@ -2829,3 +2829,14 @@
 .ephysAnnotationInputs label,.ephysAnnotationDescription {display:grid;gap:6px;min-width:0;font-size:12px;font-weight:650;color:#30465c}
 .ephysAnnotationInputs input,.ephysAnnotationDescription input {box-sizing:border-box;width:100%;min-width:0;max-width:100%;padding:10px;border:1px solid #cbd9e5;border-radius:7px;background:white;font:inherit}
 @media(max-width:680px){.ephysAnnotationInputs{grid-template-columns:1fr}}
+
+
+.ephysPreviewControls {display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:14px 0}
+.ephysPreviewControls label {display:grid;gap:5px;font-size:12px;font-weight:650;color:#30465c}
+.ephysPreviewControls select {padding:8px;border:1px solid #cbd9e5;border-radius:7px;min-width:130px;background:white}
+.ephysPreviewChannelList {display:flex;flex-wrap:wrap;gap:8px 14px;max-height:104px;overflow:auto;margin:12px 0;padding:12px;border:1px solid #e0e7ef;border-radius:8px}
+.ephysPreviewChannelList label {display:flex;gap:5px;align-items:center;font-size:12px}
+.ephysWaveformStack {border:1px solid #d9e4ee;border-radius:9px;max-height:430px;overflow:auto;background:#fafcfe;padding:8px}
+.ephysWaveformRow {display:grid;grid-template-columns:90px minmax(0,1fr);align-items:center;border-bottom:1px solid #e7edf3;gap:12px;padding:5px 4px}
+.ephysWaveformRow strong {font-size:11px;overflow-wrap:anywhere}
+.ephysWaveformRow svg {display:block;width:100%;height:64px;cursor:crosshair;background:#f2f7fa;border-radius:4px}
