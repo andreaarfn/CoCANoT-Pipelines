@@ -740,20 +740,23 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-  async function saveReview(linkedMetadata) {
+  async function saveReview(linkedMetadata, saveMode = "all", annotationIndex = null) {
     if (!review) throw new Error("No EDF review is selected.");
+    const annotations = annotationIndex == null
+      ? review.scrubbed.annotations
+      : review.scrubbed.annotations.slice(0, annotationIndex + 1);
     const updated = await api()?.ephys_review_save_pair?.(
-      review.id,
-      review.scrubbed.header,
-      review.scrubbed.annotations,
-      linkedMetadata
+      review.id, review.scrubbed.header, annotations, linkedMetadata, saveMode
     );
-    if (!updated?.scrubbed) {
-      throw new Error("The EDF save did not return a verified updated recording.");
-    }
-    setReview(updated);
-    const updatedPairs = await api()?.ephys_review_get_pairs?.();
-    if (updatedPairs) setReviewPairs(updatedPairs);
+    if (!updated?.scrubbed) throw new Error("Save did not return the updated EDF review.");
+    setReview(previous => ({
+      ...updated,
+      scrubbed: {
+        ...updated.scrubbed,
+        header: saveMode === "annotations" || saveMode === "metadata" ? previous.scrubbed.header : updated.scrubbed.header,
+        annotations: saveMode === "header" || saveMode === "metadata" ? previous.scrubbed.annotations : updated.scrubbed.annotations,
+      },
+    }));
     return updated;
   }
 
@@ -2032,11 +2035,31 @@ function EDFReview({
   const [metadataError, setMetadataError] = useState("");
   const [saveStatus, setSaveStatus] = useState({ type: "", message: "" });
   const [savingReview, setSavingReview] = useState(false);
+  const [headerSaveStatus, setHeaderSaveStatus] = useState("");
+  const [annotationSaveStatus, setAnnotationSaveStatus] = useState({});
   useEffect(() => {
     setMetadataText(JSON.stringify(review?.linked_metadata ?? {}, null, 2));
     setMetadataError("");
     setSaveStatus({ type: "", message: "" });
   }, [review?.id, review?.scrubbed?.path]); 
+  async function saveHeaderOnly() {
+    setHeaderSaveStatus("Saving header…");
+    try {
+      await onSave(null, "header");
+      setHeaderSaveStatus("EDF header saved successfully.");
+    } catch (error) {
+      setHeaderSaveStatus(`Header save failed: ${String(error)}`);
+    }
+  }
+  async function saveAnnotationOnly(index) {
+    setAnnotationSaveStatus(current => ({...current, [index]: "Saving annotation…"}));
+    try {
+      await onSave(null, "annotations");
+      setAnnotationSaveStatus(current => ({...current, [index]: "EDF annotations saved successfully."}));
+    } catch (error) {
+      setAnnotationSaveStatus(current => ({...current, [index]: `Annotation save failed: ${String(error)}`}));
+    }
+  }
   async function saveLinkedRecording() {
     if (savingReview) return;
     setSavingReview(true);
@@ -2047,11 +2070,11 @@ function EDFReview({
         throw new Error("The metadata must be a JSON object.");
       }
       setMetadataError("");
-      const saved = await onSave(metadata);
+      const saved = await onSave(metadata, "metadata");
       setMetadataText(JSON.stringify(saved.linked_metadata ?? metadata, null, 2));
       setSaveStatus({
         type: "success",
-        message: "Saved successfully: EDF header, annotations, and linked JSON metadata.",
+        message: "Linked JSON metadata saved successfully.",
       });
     } catch (error) {
       const message = String(error?.message ?? error);
@@ -2315,17 +2338,11 @@ function EDFReview({
 
                     <h2>Raw versus scrubbed header</h2>
 
-                    <p>Raw values are read-only. Supported scrubbed values can be edited before the recording is accepted or rejected.</p>
+                    <p>Raw values are read-only. Edit the scrubbed header and save below.</p>
 
                   </div>
 
-                  <button className={styles.secondary} onClick={saveLinkedRecording}>
 
-                    <Save size={16} />
-
-                    Save Scrubbed EDF
-
-                  </button>
 
                 </div>
 
@@ -2363,7 +2380,7 @@ function EDFReview({
 
                       .map(field => {
 
-                        const editable = review.editable_header_fields?.includes(field);
+                        const editable = field !== "annotations";
 
                         return (
 
@@ -2402,6 +2419,7 @@ function EDFReview({
                   </tbody>
 
                 </table>
+                <div className={styles.ephysReviewSectionSave}><button type="button" className={styles.secondary} onClick={saveHeaderOnly}><Save size={16}/> Save EDF header</button><p role="status" aria-live="polite">{headerSaveStatus}</p></div>
 
               </section>
 
@@ -2550,7 +2568,7 @@ function EDFReview({
 
                     </div>
 
-                    <p className={styles.helpText}>Mark events in the EDF recording. Onset is seconds from recording start; duration is seconds (0 for an instant). A description is required. Save EDF and linked metadata below to write these into the scrubbed EDF.</p>
+                    <p className={styles.helpText}>Mark events in the EDF recording. Onset is seconds from recording start; duration is seconds (0 for an instant). A description is required. Save each annotation to write the events into the scrubbed EDF.</p>
                     {(review.scrubbed.annotations ?? []).length === 0 ? (
                       <div className={styles.annotationEmpty}>No annotations. Select Add to describe an event.</div>
                     ) : (
