@@ -9,6 +9,7 @@ pipeline_config.py. There are no machine-specific fallback directories.
 from __future__ import annotations
 
 import argparse
+import hashlib
 from datetime import datetime
 import json
 import shutil
@@ -111,11 +112,30 @@ def load_configured_paths(
     return input_dir, output_dir, log_dir
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verified_existing_output(source: Path, output: Path) -> bool:
+    if not output.is_file() or output.stat().st_size == 0:
+        return False
+    try:
+        validate_output(source, output)
+        return True
+    except (OSError, ValueError, RuntimeError):
+        return False
+
+
 def copy_and_update_json(
     input_json: Path,
     output_json: Path,
     source_nifti: Path,
     input_dir: Path,
+    source_hash: str = "",
 ) -> str:
     if not input_json.exists():
         return "No matching JSON sidecar found."
@@ -132,6 +152,7 @@ def copy_and_update_json(
     metadata["DefacingSoftware"] = "pydeface"
     metadata["Defaced"] = True
     metadata["SourceFile"] = str(source_nifti.relative_to(input_dir))
+    metadata["SourceSHA256"] = source_hash
 
     output_json.parent.mkdir(parents=True, exist_ok=True)
     with output_json.open("w", encoding="utf-8") as file:
@@ -396,6 +417,31 @@ def main() -> None:
 
     results: list[dict[str, Any]] = []
 
+    # Identify repeated scrubbed inputs regardless of which staging folder
+    # contains them. Include outputs made by earlier runs when their original
+    # source remains available, and use hashes stored by newer runs.
+    completed_hashes: dict[str, Path] = {}
+    if not args.overwrite:
+        for prior_json in output_dir.rglob("*_defaced.json"):
+            try:
+                prior_metadata = json.loads(prior_json.read_text(encoding="utf-8"))
+                if not isinstance(prior_metadata, dict):
+                    continue
+                prior_output = prior_json.with_name(prior_json.name[:-5] + ".nii.gz")
+                if not prior_output.is_file() or prior_output.stat().st_size == 0:
+                    continue
+                prior_hash = str(prior_metadata.get("SourceSHA256") or "")
+                source_name = prior_metadata.get("SourceFile")
+                if not prior_hash and isinstance(source_name, str):
+                    source_candidate = (input_dir / source_name).resolve()
+                    if source_candidate.is_relative_to(input_dir) and source_candidate.is_file():
+                        if verified_existing_output(source_candidate, prior_output):
+                            prior_hash = sha256_file(source_candidate)
+                if prior_hash and len(prior_hash) == 64:
+                    completed_hashes[prior_hash] = prior_output
+            except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+                continue
+
     for nifti_path in nifti_files:
         relative_path = nifti_path.relative_to(input_dir)
         relative_folder = relative_path.parent
@@ -419,8 +465,10 @@ def main() -> None:
         print("Output:", output_nifti.relative_to(output_dir))
         print("Log:", log_path.relative_to(log_dir))
 
-        if output_nifti.exists() and not args.overwrite:
-            print("Skipping: output already exists. Use --overwrite to replace it.")
+        source_hash = sha256_file(nifti_path) if not args.overwrite else ""
+        if not args.overwrite and verified_existing_output(nifti_path, output_nifti):
+            completed_hashes[source_hash] = output_nifti
+            print("Skipping: matching defaced output already exists and passed validation.")
             results.append(
                 {
                     "input": str(relative_path),
@@ -429,6 +477,29 @@ def main() -> None:
                     "elapsed": None,
                 }
             )
+            continue
+
+        if not args.overwrite and source_hash in completed_hashes:
+            print(
+                "Skipping duplicate scrubbed input: identical source already defaced at "
+                f"{completed_hashes[source_hash]}"
+            )
+            results.append({
+                "input": str(relative_path),
+                "size": input_size_text,
+                "status": "skipped",
+                "elapsed": None,
+            })
+            continue
+
+        if output_nifti.exists() and not args.overwrite:
+            print("Existing defaced output failed validation; refusing to overwrite it automatically.")
+            results.append({
+                "input": str(relative_path),
+                "size": input_size_text,
+                "status": "failed",
+                "elapsed": None,
+            })
             continue
 
         if args.overwrite:
@@ -487,7 +558,10 @@ def main() -> None:
                 output_json=output_json,
                 source_nifti=nifti_path,
                 input_dir=input_dir,
+                source_hash=source_hash or sha256_file(nifti_path),
             )
+            if not args.overwrite:
+                completed_hashes[source_hash] = output_nifti
             append_json_log(log_path, json_message)
             print(f"Done. Processing time: {format_seconds(elapsed)}")
             results.append(
