@@ -619,6 +619,12 @@ def main() -> None:
         help="Overwrite existing scrubbed EDF and JSON files.",
     )
 
+    parser.add_argument(
+        "--selection-manifest",
+        type=Path,
+        help="JSON manifest listing only the staged EDF files selected for this run.",
+    )
+
     args = parser.parse_args()
 
     input_dir = args.input_dir.expanduser().resolve()
@@ -630,7 +636,23 @@ def main() -> None:
     require_directory(input_dir, "Input folder")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    edf_files = find_edf_files(input_dir)
+    if args.selection_manifest:
+        import json
+        selection = json.loads(args.selection_manifest.read_text(encoding="utf-8"))
+        relative_files = selection.get("staged_files", [])
+        if not isinstance(relative_files, list):
+            raise ValueError("Invalid staged EDF selection manifest.")
+        edf_files = []
+        for relative in relative_files:
+            candidate = (input_dir / str(relative)).resolve()
+            if not candidate.is_relative_to(input_dir) or candidate.suffix.lower() != ".edf":
+                raise ValueError("Selected EDF path escapes the staging directory.")
+            if not candidate.is_file():
+                raise FileNotFoundError(f"Selected EDF was not staged: {relative}")
+            if candidate not in edf_files:
+                edf_files.append(candidate)
+    else:
+        edf_files = find_edf_files(input_dir)
 
     print(f"Found {len(edf_files)} EDF file(s).", flush=True)
 
