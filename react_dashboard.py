@@ -875,62 +875,83 @@ class CoCANoTAPI:
         return str(result[0]) if result else ""
 
     def _sync_ephys_scrub_from_disk(self) -> None:
-        """Verify included sources against persistent staged/scrubbed outputs.
+        """Recognize completed EDFs across file, parent, and subfolder selections.
 
-        Absolute EDF identity stays constant whether selected as an individual
-        file, inside a subfolder, or through a parent folder.
+        The most recent manifest is only a hint: earlier staged files remain
+        authoritative when their content matches a currently selected source.
+        Do not report completion unless both derivative and JSON exist.
         """
         try:
             config = load_pipeline_config()
             staging = config.electrophysiology.derivatives_dir / "_selected_raw"
             scrubbed = config.electrophysiology.scrubbed_dir
-            manifest = staging / "selection.json"
-            if not manifest.is_file():
-                return
-            payload = json.loads(manifest.read_text(encoding="utf-8"))
-            sources = payload.get("selected_files") or []
-            staged_files = payload.get("staged_files") or []
-            if not isinstance(sources, list) or not isinstance(staged_files, list):
-                return
-            if len(sources) != len(staged_files) or not sources:
-                return
-
-            by_source = {
-                str(Path(src).expanduser().resolve()): str(relative)
-                for src, relative in zip(sources, staged_files)
-            }
-            current = {
-                str(Path(record["edf_path"]).expanduser().resolve())
+            selected = [
+                Path(record["edf_path"]).expanduser().resolve()
                 for record in _scan_edf_sources(self.ephys_sources)
-            }
-            if not current:
+                if record.get("edf_path") and record.get("include", True)
+            ]
+            if not selected:
+                self.ephys_stage_state["scrub"] = "not_started"
+                return
+            if not staging.is_dir() or not scrubbed.is_dir():
                 self.ephys_stage_state["scrub"] = "not_started"
                 return
 
-            def complete(source_text: str) -> bool:
-                rel = by_source.get(source_text)
-                if not rel:
+            manifest = staging / "selection.json"
+            known: dict[str, list[Path]] = {}
+            if manifest.is_file():
+                payload = json.loads(manifest.read_text(encoding="utf-8"))
+                for source, relative in zip(
+                    payload.get("selected_files") or [],
+                    payload.get("staged_files") or [],
+                ):
+                    staged = (staging / str(relative)).resolve()
+                    if staged.is_relative_to(staging.resolve()):
+                        known.setdefault(str(Path(source).expanduser().resolve()), []).append(staged)
+
+            staged_by_size: dict[int, list[Path]] = {}
+            for candidate in staging.rglob("*.edf"):
+                if candidate.is_file():
+                    staged_by_size.setdefault(candidate.stat().st_size, []).append(candidate)
+            hash_cache: dict[Path, str] = {}
+
+            def file_hash(path: Path) -> str:
+                if path not in hash_cache:
+                    hash_cache[path] = self._file_hash(path)
+                return hash_cache[path]
+
+            def derivative_complete(staged: Path) -> bool:
+                relative = staged.relative_to(staging)
+                output = scrubbed / relative.parent / f"{staged.stem}_scrubbed.edf"
+                sidecar = output.with_suffix(".json")
+                if not (output.is_file() and output.stat().st_size > 0 and sidecar.is_file()):
                     return False
-                raw = staging / rel
-                if not raw.is_file():
+                try:
+                    return isinstance(json.loads(sidecar.read_text(encoding="utf-8")), dict)
+                except (OSError, ValueError, json.JSONDecodeError):
                     return False
-                source = Path(source_text)
+
+            def complete(source: Path) -> bool:
                 if not source.is_file():
                     return False
-                if (source.stat().st_size != raw.stat().st_size
-                        or source.stat().st_mtime_ns != raw.stat().st_mtime_ns):
-                    return False
-                out = scrubbed / Path(rel).parent / f"{Path(rel).stem}_scrubbed.edf"
-                sidecar = out.with_suffix(".json")
-                if not (out.is_file() and out.stat().st_size > 0 and sidecar.is_file()):
-                    return False
-                stored = json.loads(sidecar.read_text(encoding="utf-8"))
-                return isinstance(stored, dict)
+                candidates = known.get(str(source), []) + staged_by_size.get(source.stat().st_size, [])
+                seen: set[Path] = set()
+                for staged in candidates:
+                    if staged in seen or not staged.is_file():
+                        continue
+                    seen.add(staged)
+                    if staged.stat().st_size != source.stat().st_size:
+                        continue
+                    if derivative_complete(staged) and file_hash(source) == file_hash(staged):
+                        return True
+                return False
 
-            all_complete = all(complete(src) for src in current)
-            self.ephys_stage_state["scrub"] = "complete" if all_complete else "not_started"
+            self.ephys_stage_state["scrub"] = (
+                "complete" if all(complete(source) for source in selected)
+                else "not_started"
+            )
         except (OSError, ValueError, TypeError, json.JSONDecodeError, PipelineConfigError):
-            pass
+            self.ephys_stage_state["scrub"] = "not_started"
 
     def ephys_get_state(self) -> dict[str, Any]:
         try:
@@ -1273,6 +1294,8 @@ class CoCANoTAPI:
             str(staging),
             "--output-dir",
             str(scrubbed_dir),
+            "--selection-manifest",
+            str(staging / "selection.json"),
         ]
 
         if overwrite:
