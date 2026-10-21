@@ -11380,11 +11380,37 @@ class CoCANoTAPI:
                     }
                 )
 
+            sidecar_metadata = {}
+            sidecar_path = path.with_suffix(".json")
+            if sidecar_path.is_file():
+                try:
+                    sidecar_value = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                    if isinstance(sidecar_value, dict):
+                        sidecar_metadata = {
+                            **{key: value for key, value in sidecar_value.items()
+                               if key != "CoCANoTMetadata"},
+                            **({"CoCANoTMetadata": sidecar_value["CoCANoTMetadata"]}
+                               if isinstance(sidecar_value.get("CoCANoTMetadata"), dict)
+                               else {}),
+                        }
+                except (OSError, json.JSONDecodeError):
+                    pass
+            try:
+                header = reader.getHeader()
+                header = {
+                    str(key): (value.isoformat() if hasattr(value, "isoformat") else str(value))
+                    for key, value in header.items()
+                }
+            except Exception:
+                header = {}
+
             return {
                 "path": str(
                     path
                 ),
                 "file_name": path.name,
+                "header": header,
+                "linked_metadata": sidecar_metadata,
                 "duration_seconds": duration,
                 "channel_labels": labels,
                 "selected_channels": requested,
