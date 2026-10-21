@@ -2820,3 +2820,12 @@
   user-select:text;
   -webkit-user-select:text;
 }
+
+
+.ephysAnnotationCard {border:1px solid #d8e3ed;border-radius:10px;padding:14px;margin:10px 0;background:#f8fbfe;display:grid;gap:12px;min-width:0}
+.ephysAnnotationCardHeading {display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ephysAnnotationCardHeading button {width:auto;flex:none;padding:7px 12px;color:#9b3040;border:1px solid #efc2c7;border-radius:7px;background:#fff}
+.ephysAnnotationInputs {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ephysAnnotationInputs label,.ephysAnnotationDescription {display:grid;gap:6px;min-width:0;font-size:12px;font-weight:650;color:#30465c}
+.ephysAnnotationInputs input,.ephysAnnotationDescription input {box-sizing:border-box;width:100%;min-width:0;max-width:100%;padding:10px;border:1px solid #cbd9e5;border-radius:7px;background:white;font:inherit}
+@media(max-width:680px){.ephysAnnotationInputs{grid-template-columns:1fr}}
