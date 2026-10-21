@@ -2840,3 +2840,15 @@
 .ephysWaveformRow {display:grid;grid-template-columns:90px minmax(0,1fr);align-items:center;border-bottom:1px solid #e7edf3;gap:12px;padding:5px 4px}
 .ephysWaveformRow strong {font-size:11px;overflow-wrap:anywhere}
 .ephysWaveformRow svg {display:block;width:100%;height:64px;cursor:crosshair;background:#f2f7fa;border-radius:4px}
+
+
+.ephysPreviewModeControls {display:flex;gap:6px;margin:12px 0}
+.ephysPreviewModeControls button {border:1px solid #bfcddc;background:#f2f6fa;color:#35556f;border-radius:7px;padding:9px 16px;cursor:pointer;font-weight:650}
+.ephysPreviewModeControls button.ephysPreviewModeActive {background:#d7e9f6;border-color:#73a8c9;color:#1f577e}
+.ephysPreviewWindowSlider {display:grid;gap:8px;padding:14px;border:1px solid #d8e4ee;border-radius:9px;margin:12px 0;background:#f8fbfd}
+.ephysPreviewWindowSlider label {font-size:13px;font-weight:650;color:#30465c}
+.ephysPreviewWindowSlider input[type="range"] {width:100%;cursor:pointer;accent-color:#2777a5}
+.ephysPreviewSliderLabels {display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;color:#526b83}
+.ephysWaveformOverlay {padding:8px;display:grid;gap:8px}
+.ephysWaveformOverlay strong {font-size:12px}
+.ephysWaveformOverlay svg {width:100%;height:240px;cursor:crosshair;background:#f3f8fb;border-radius:6px}
