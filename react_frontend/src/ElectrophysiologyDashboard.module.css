@@ -2781,11 +2781,27 @@
 
 .ephysExportToggle { display:inline-flex; align-items:center; gap:9px; margin:12px 0; color:#405a71; font-size:12px; font-weight:650; cursor:pointer; }
 .ephysExportToggle input { width:16px; height:16px; accent-color:#367eae; cursor:pointer; }
-.ephysReviewPending { background:#eef6fb; color:#2c5f7e; border-color:#c5dfee; }
-.ephysReviewHold { background:#fff8e6; color:#846012; border-color:#ecd69b; }
-.ephysReviewAccepted { background:#eaf7ef; color:#276842; border-color:#b7dec3; }
-.ephysReviewExported { background:#f0f2f5; color:#526174; border-color:#d6dce3; }
-.ephysReviewRejected { background:#fff0f1; color:#a63a45; border-color:#efc2c7; }
+/* Match the Imaging Step 4 review statuses, including selected rows. */
+.pairList button.ephysReviewPending { background:#eef6fb; border-color:#c5dfee; color:#2c5f7e; }
+.pairList button.ephysReviewHold { background:#fff8e6; border-color:#ecd69b; color:#846012; }
+.pairList button.ephysReviewAccepted { background:#eaf7ef; border-color:#b7dec3; color:#276842; }
+.pairList button.ephysReviewExported { background:#f0f2f5; border-color:#d6dce3; color:#526174; }
+.pairList button.ephysReviewRejected { background:#fff0f1; border-color:#efc2c7; color:#a63a45; }
+.pairList button.ephysReviewPending:hover,
+.pairList button.ephysReviewHold:hover,
+.pairList button.ephysReviewAccepted:hover,
+.pairList button.ephysReviewExported:hover,
+.pairList button.ephysReviewRejected:hover { filter:brightness(0.97); }
+.pairList button.activePair {
+  outline:2px solid #79aaca;
+  outline-offset:1px;
+}
+.pairList button.ephysReviewPending.activePair { background:#eef6fb !important; border-color:#c5dfee !important; color:#2c5f7e !important; }
+.pairList button.ephysReviewHold.activePair { background:#fff8e6 !important; border-color:#ecd69b !important; color:#846012 !important; }
+.pairList button.ephysReviewAccepted.activePair { background:#eaf7ef !important; border-color:#b7dec3 !important; color:#276842 !important; }
+.pairList button.ephysReviewExported.activePair { background:#f0f2f5 !important; border-color:#d6dce3 !important; color:#526174 !important; }
+.pairList button.ephysReviewRejected.activePair { background:#fff0f1 !important; border-color:#efc2c7 !important; color:#a63a45 !important; }
+.pairList button .pairStatus { color:inherit; font-weight:800; }
 
 .ephysLinkedMetadataEditor {
   display:block;
