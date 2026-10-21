@@ -567,3 +567,9 @@
 .ephysEventTable {width:100%;border-collapse:collapse;font-size:12px}
 .ephysEventTable th,.ephysEventTable td {padding:10px;border-bottom:1px solid #dce6ee;text-align:left}
 .ephysEventTable th {color:#526b83;background:#f4f8fb}
+
+
+.ephysEventMarker.ephysEventMarkerSelected {background:#d13b45;border-color:#a72432;box-shadow:0 0 0 2px rgba(209,59,69,.2);z-index:3}
+.ephysEventMarker.ephysEventMarkerSelected:hover,.ephysEventMarker.ephysEventMarkerSelected:focus-visible {background:#b92432;outline:2px solid #efb4b7}
+.ephysEventTableSelected {background:#fff0f1}
+.ephysEventTableSelected td {border-bottom-color:#e9a7af}
