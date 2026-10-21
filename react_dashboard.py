@@ -1344,8 +1344,40 @@ class CoCANoTAPI:
         pair = pairs[index]
         helpers = _load_ephys_comparison_module()
 
+        sidecar_path = Path(pair["scrubbed_path"]).with_suffix(".json")
+        linked_metadata: dict[str, Any] = {}
+        if sidecar_path.is_file():
+            try:
+                loaded = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    linked_metadata = loaded
+            except (OSError, json.JSONDecodeError):
+                pass
+        if pair.get("exported"):
+            config = load_pipeline_config()
+            index = self._index_existing_ephys_bids(
+                config.electrophysiology.bids_output_dir
+            )
+            export = self._existing_ephys_bids_export(
+                Path(pair["scrubbed_path"]), index
+            )
+            if export and export.get("json_path"):
+                try:
+                    exported_json = json.loads(Path(export["json_path"]).read_text(encoding="utf-8"))
+                    if isinstance(exported_json, dict):
+                        # Include the full linked recording sidecar; put
+                        # CoCANoT dictionary fields after acquisition fields.
+                        linked_metadata = {
+                            **{k: v for k, v in exported_json.items() if k != "CoCANoTMetadata"},
+                            **({"CoCANoTMetadata": exported_json["CoCANoTMetadata"]}
+                               if isinstance(exported_json.get("CoCANoTMetadata"), dict) else {}),
+                        }
+                except (OSError, json.JSONDecodeError):
+                    pass
+
         return {
             **pair,
+            "linked_metadata": linked_metadata,
             "raw": helpers.read_review_data(
                 Path(pair["raw_path"])
             ),
@@ -1403,6 +1435,7 @@ class CoCANoTAPI:
         pair_id: str | int,
         scrubbed_header: dict[str, Any],
         scrubbed_annotations: list[dict[str, Any]],
+        linked_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         pairs = self.ephys_review_get_pairs()
 
@@ -1422,6 +1455,19 @@ class CoCANoTAPI:
             scrubbed_header,
             scrubbed_annotations,
         )
+
+        if linked_metadata is not None:
+            if not isinstance(linked_metadata, dict):
+                raise ValueError("Linked EDF metadata must be a JSON object.")
+            # Do not silently change the already-exported final file.
+            # Step 5 must explicitly re-export after EDF or metadata edits.
+            sidecar_path = Path(pair["scrubbed_path"]).with_suffix(".json")
+            temporary_sidecar = sidecar_path.with_suffix(".json.tmp")
+            temporary_sidecar.write_text(
+                json.dumps(linked_metadata, indent=2, allow_nan=False) + "\n",
+                encoding="utf-8",
+            )
+            temporary_sidecar.replace(sidecar_path)
 
         self._ephys_log(
             f"Saved scrubbed EDF review edits: {pair['label']}"
