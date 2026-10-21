@@ -1470,6 +1470,10 @@ def build_bids_base(
     import re
     recording_id = str(record["cocanot_metadata"].get("Recording ID") or "").strip()
     safe_recording_id = re.sub(r"[^A-Za-z0-9]+", "", recording_id)
+    # Preserve the EPHYS-number identity while using the requested hyphen.
+    if safe_recording_id.upper().startswith("EPHYS"):
+        suffix = safe_recording_id[5:]
+        safe_recording_id = f"EPHYS-{suffix}" if suffix else "EPHYS"
     if not safe_recording_id:
         raise ValueError("Recording ID is required for electrophysiology export.")
     parts = [f"sub-{record['participant']}", safe_recording_id]
