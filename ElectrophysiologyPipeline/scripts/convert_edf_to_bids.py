@@ -1776,7 +1776,7 @@ def copy_record(
     if record.get("sidecar_path"):
         source_path = Path(record["sidecar_path"])
         if source_path.is_file():
-            loaded_sidecar = read_json(source_path)
+            loaded_sidecar = json.loads(source_path.read_text(encoding="utf-8"))
             if not isinstance(loaded_sidecar, dict):
                 raise ValueError(f"Invalid EDF acquisition JSON: {source_path}")
             source_sidecar = {**loaded_sidecar, **source_sidecar}
