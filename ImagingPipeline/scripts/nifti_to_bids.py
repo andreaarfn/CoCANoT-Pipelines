@@ -1263,7 +1263,8 @@ def copy_record(
 
     output_json = data_dir / f"{base}.json"
 
-    output_metadata = data_dir / f"{base}_cocanot.json"
+    # The final JSON sidecar contains both BIDS and CoCANoT metadata.
+    output_metadata = output_json
 
 
 
@@ -1273,7 +1274,6 @@ def copy_record(
 
         output_json.unlink(missing_ok=True)
 
-        output_metadata.unlink(missing_ok=True)
 
         for ext in (".bval", ".bvec"):
 
@@ -1338,24 +1338,6 @@ def copy_record(
 
 
     header_annotations = record.get("header_annotations", {})
-
-    write_json(
-
-        output_metadata,
-
-        {
-
-            "CoCANoTMetadata": metadata,
-
-            "ScrubbedHeader": scrubbed_header,
-
-            "HeaderAnnotations": header_annotations,
-
-        },
-
-    )
-
-
 
     sidecar = dict(scrubbed_header)
     # Keep the full validated CoCANoT dictionary together with this image sidecar.
@@ -1844,8 +1826,6 @@ def main() -> None:
             str(output.resolve()),
 
             str(output_json.resolve()),
-
-            str(output_metadata.resolve()),
 
             *[
 
