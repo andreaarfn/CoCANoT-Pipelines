@@ -874,6 +874,64 @@ class CoCANoTAPI:
 
         return str(result[0]) if result else ""
 
+    def _sync_ephys_scrub_from_disk(self) -> None:
+        """Verify included sources against persistent staged/scrubbed outputs.
+
+        Absolute EDF identity stays constant whether selected as an individual
+        file, inside a subfolder, or through a parent folder.
+        """
+        try:
+            config = load_pipeline_config()
+            staging = config.electrophysiology.derivatives_dir / "_selected_raw"
+            scrubbed = config.electrophysiology.scrubbed_dir
+            manifest = staging / "selection.json"
+            if not manifest.is_file():
+                return
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            sources = payload.get("selected_files") or []
+            staged_files = payload.get("staged_files") or []
+            if not isinstance(sources, list) or not isinstance(staged_files, list):
+                return
+            if len(sources) != len(staged_files) or not sources:
+                return
+
+            by_source = {
+                str(Path(src).expanduser().resolve()): str(relative)
+                for src, relative in zip(sources, staged_files)
+            }
+            current = {
+                str(Path(record["edf_path"]).expanduser().resolve())
+                for record in _scan_edf_sources(self.ephys_sources)
+            }
+            if not current:
+                self.ephys_stage_state["scrub"] = "not_started"
+                return
+
+            def complete(source_text: str) -> bool:
+                rel = by_source.get(source_text)
+                if not rel:
+                    return False
+                raw = staging / rel
+                if not raw.is_file():
+                    return False
+                source = Path(source_text)
+                if not source.is_file():
+                    return False
+                if (source.stat().st_size != raw.stat().st_size
+                        or source.stat().st_mtime_ns != raw.stat().st_mtime_ns):
+                    return False
+                out = scrubbed / Path(rel).parent / f"{Path(rel).stem}_scrubbed.edf"
+                sidecar = out.with_suffix(".json")
+                if not (out.is_file() and out.stat().st_size > 0 and sidecar.is_file()):
+                    return False
+                stored = json.loads(sidecar.read_text(encoding="utf-8"))
+                return isinstance(stored, dict)
+
+            all_complete = all(complete(src) for src in current)
+            self.ephys_stage_state["scrub"] = "complete" if all_complete else "not_started"
+        except (OSError, ValueError, TypeError, json.JSONDecodeError, PipelineConfigError):
+            pass
+
     def ephys_get_state(self) -> dict[str, Any]:
         try:
             settings = load_settings_dict()
@@ -883,6 +941,8 @@ class CoCANoTAPI:
         ephys = settings.get("electrophysiology", {})
 
         process_running = self._process_running(self.ephys_process)
+        if not process_running:
+            self._sync_ephys_scrub_from_disk()
         self._sync_ephys_review_stage()
 
         return {
