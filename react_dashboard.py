@@ -1121,54 +1121,85 @@ class CoCANoTAPI:
             raise ValueError("Include at least one EDF file.")
 
         staging = Path(derivatives_dir) / "_selected_raw"
-
-        if staging.exists():
-            shutil.rmtree(staging)
-
         staging.mkdir(parents=True, exist_ok=True)
 
+        # Reuse earlier staging paths when the SAME EDF is selected via
+        # a parent directory, subfolder, or individual file. This preserves
+        # the review-state key and its already-scrubbed derivative.
+        existing_by_size: dict[int, list[Path]] = {}
+        for prior in staging.rglob("*.edf"):
+            if prior.is_file():
+                try:
+                    existing_by_size.setdefault(prior.stat().st_size, []).append(prior)
+                except OSError:
+                    pass
+        hash_cache: dict[str, str] = {}
+        review_state = self._load_ephys_review_state(
+            Path(derivatives_dir) / EPHYS_REVIEW_STATE_FILENAME
+        )
         selected_files: list[str] = []
+        staged_files: list[str] = []
+        used_stage_paths: set[str] = set()
 
-        for index, record in enumerate(included, start=1):
-            source = Path(
-                str(record.get("edf_path", ""))
-            ).expanduser()
-
+        for record in included:
+            source = Path(str(record.get("edf_path", ""))).expanduser()
             if not source.is_file():
                 continue
-
-            relative = Path(
-                str(record.get("relative_path", source.name))
-            )
-
-            source_index = int(
-                record.get("source_index", index)
-            )
-
-            destination = (
-                staging
-                / f"source-{source_index:03d}"
-                / relative
-            )
-
-            destination.parent.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-
-            shutil.copy2(source, destination)
-            selected_files.append(_resolve_text(source))
+            source = source.resolve()
+            try:
+                candidate_paths = existing_by_size.get(source.stat().st_size, [])
+                source_hash = self._file_hash(source)
+            except OSError:
+                continue
+            matches: list[Path] = []
+            for candidate in candidate_paths:
+                key = str(candidate.resolve())
+                if key not in hash_cache:
+                    try:
+                        hash_cache[key] = self._file_hash(candidate)
+                    except OSError:
+                        continue
+                if hash_cache[key] == source_hash:
+                    matches.append(candidate)
+            def preferred(candidate: Path) -> tuple[int, int, str]:
+                relative = candidate.relative_to(staging)
+                old_review = review_state.get(str(relative), {})
+                scrubbed_candidate = (
+                    scrubbed_dir / relative.parent / f"{candidate.stem}_scrubbed.edf"
+                )
+                return (
+                    0 if old_review.get("status") in {"Accepted", "Rejected - Not Included"} else 1,
+                    0 if scrubbed_candidate.is_file() and scrubbed_candidate.with_suffix(".json").is_file() else 1,
+                    str(candidate),
+                )
+            destination = sorted(matches, key=preferred)[0] if matches else None
+            if destination is None:
+                # Stable across file/folder selection depth and source order.
+                source_id = hashlib.sha256(str(source).encode("utf-8")).hexdigest()[:16]
+                destination = staging / f"edf-{source_id}" / source.name
+                # Never overwrite a previously staged, different source.
+                if destination.exists() and self._file_hash(destination) != source_hash:
+                    destination = staging / f"edf-{source_id}-{source_hash[:12]}" / source.name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if not destination.exists():
+                    shutil.copy2(source, destination)
+                hash_cache[str(destination.resolve())] = source_hash
+                existing_by_size.setdefault(source.stat().st_size, []).append(destination)
+            relative_staged = str(destination.relative_to(staging))
+            if relative_staged in used_stage_paths:
+                continue
+            used_stage_paths.add(relative_staged)
+            selected_files.append(str(source))
+            staged_files.append(relative_staged)
 
         if not selected_files:
-            raise ValueError(
-                "None of the included EDF source files could be found."
-            )
+            raise ValueError("None of the included EDF source files could be found.")
 
         selection_log = {
             "source_folders": list(self.ephys_sources),
             "selected_files": selected_files,
+            "staged_files": staged_files,
         }
-
         (staging / "selection.json").write_text(
             json.dumps(selection_log, indent=2) + "\n",
             encoding="utf-8",
