@@ -11404,12 +11404,28 @@ class CoCANoTAPI:
             except Exception:
                 header = {}
 
+            try:
+                annotation_onsets, annotation_durations, annotation_descriptions = reader.readAnnotations()
+                annotations = [
+                    {
+                        "onset": float(onset),
+                        "duration": float(duration),
+                        "description": str(description),
+                    }
+                    for onset, duration, description in zip(
+                        annotation_onsets, annotation_durations, annotation_descriptions
+                    )
+                ]
+            except Exception:
+                annotations = []
+
             return {
                 "path": str(
                     path
                 ),
                 "file_name": path.name,
                 "header": header,
+                "annotations": annotations,
                 "linked_metadata": sidecar_metadata,
                 "duration_seconds": duration,
                 "channel_labels": labels,
