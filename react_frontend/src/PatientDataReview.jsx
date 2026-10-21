@@ -2012,6 +2012,7 @@ function EphysPatientReview({
 
   const [error, setError] = useState("");
   const [showLinkedJson, setShowLinkedJson] = useState(false);
+  const [selectedAnnotationIndex, setSelectedAnnotationIndex] = useState(null);
 
 
 
@@ -2020,6 +2021,7 @@ function EphysPatientReview({
 
 
   useEffect(() => {
+    setSelectedAnnotationIndex(null);
 
 
 
@@ -3104,9 +3106,10 @@ function EphysPatientReview({
                     <button type="button" key={index}
                       title={`${event.description || "Event"} at ${onset.toFixed(1)} s (${duration.toFixed(1)} s)`}
                       aria-label={`Go to annotation ${index + 1}: ${event.description || "Event"}`}
-                      className={styles.ephysEventMarker}
+                      className={`${styles.ephysEventMarker} ${selectedAnnotationIndex === index ? styles.ephysEventMarkerSelected : ""}`}
                       style={{left: `${left}%`, width: `${Math.max(.5,width)}%`}}
                       onClick={() => {
+                        setSelectedAnnotationIndex(index);
                         const target = Math.min(Math.max(0, Number(signal.duration_seconds ?? 0) - windowSeconds), onset);
                         setStartSeconds(target);
                         loadSignal({start:target});
@@ -3122,12 +3125,13 @@ function EphysPatientReview({
                 <div className={styles.ephysEventTableWrap}>
                   <table className={styles.ephysEventTable}>
                     <thead><tr><th>Onset</th><th>Duration</th><th>Description</th><th>Go to</th></tr></thead>
-                    <tbody>{[...(signal.annotations ?? [])].sort((x,y)=>Number(x.onset)-Number(y.onset)).map((event,index)=>(
-                      <tr key={index}>
+                    <tbody>{(signal.annotations ?? []).map((event,index)=>({event,index})).sort((a,b)=>Number(a.event.onset)-Number(b.event.onset)).map(({event,index})=>(
+                      <tr key={index} className={selectedAnnotationIndex === index ? styles.ephysEventTableSelected : ""}>
                         <td>{formatDuration(Number(event.onset ?? 0))}</td>
                         <td>{Number(event.duration ?? 0).toFixed(2)} s</td>
                         <td>{event.description || "Unnamed event"}</td>
                         <td><button type="button" className={styles.refreshButton} onClick={() => {
+                          setSelectedAnnotationIndex(index);
                           const target = Math.min(Math.max(0, Number(signal.duration_seconds ?? 0) - windowSeconds), Math.max(0, Number(event.onset ?? 0)));
                           setStartSeconds(target);
                           loadSignal({start:target});
