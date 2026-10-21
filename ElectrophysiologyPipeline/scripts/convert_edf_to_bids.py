@@ -1401,6 +1401,10 @@ def validate_record(
             metadata
 
         ),
+        # Retain the original scrubbed JSON through normalization; without
+        # this the exporter silently loses acquisition metadata.
+        "sidecar_metadata": dict(raw.get("sidecar_metadata") or {}),
+        "sidecar_path": str(raw.get("sidecar_path") or ""),
 
         "derivatives_root": str(
 
@@ -1769,6 +1773,13 @@ def copy_record(
 
 
     source_sidecar = record.get("sidecar_metadata") or {}
+    if record.get("sidecar_path"):
+        source_path = Path(record["sidecar_path"])
+        if source_path.is_file():
+            loaded_sidecar = read_json(source_path)
+            if not isinstance(loaded_sidecar, dict):
+                raise ValueError(f"Invalid EDF acquisition JSON: {source_path}")
+            source_sidecar = {**loaded_sidecar, **source_sidecar}
     if not isinstance(source_sidecar, dict):
         raise ValueError("EDF sidecar metadata must be a JSON object.")
     # Preserve scrubbed/edited acquisition metadata, then standard EDF
