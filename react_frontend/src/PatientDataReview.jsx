@@ -3087,6 +3087,61 @@ function EphysPatientReview({
           <section className={styles.linkedJsonCard}>
             <div className={styles.linkedJsonHeader}>
               <div className={styles.linkedJsonHeading}>
+                <strong>Recording annotations</strong>
+                <span>{(signal.annotations ?? []).length} event(s) embedded in this EDF</span>
+              </div>
+            </div>
+            <div className={styles.linkedJsonContent}>
+              <p>Event markers show their positions in the full recording. Select an annotation to view its onset in the EEG signal viewer.</p>
+              <div className={styles.ephysEventTimeline} role="img" aria-label="EDF annotation event timeline">
+                {(signal.annotations ?? []).map((event, index) => {
+                  const total = Math.max(1, Number(signal.duration_seconds ?? 0));
+                  const onset = Math.max(0, Number(event.onset ?? 0));
+                  const duration = Math.max(0, Number(event.duration ?? 0));
+                  const left = Math.min(100, onset / total * 100);
+                  const width = Math.min(100 - left, duration / total * 100);
+                  return (
+                    <button type="button" key={index}
+                      title={`${event.description || "Event"} at ${onset.toFixed(1)} s (${duration.toFixed(1)} s)`}
+                      aria-label={`Go to annotation ${index + 1}: ${event.description || "Event"}`}
+                      className={styles.ephysEventMarker}
+                      style={{left: `${left}%`, width: `${Math.max(.5,width)}%`}}
+                      onClick={() => {
+                        const target = Math.min(Math.max(0, Number(signal.duration_seconds ?? 0) - windowSeconds), onset);
+                        setStartSeconds(target);
+                        loadSignal({start:target});
+                      }}
+                    />
+                  );
+                })}
+              </div>
+              <div className={styles.ephysEventTimelineLabels}><span>00:00</span><span>{formatDuration(signal.duration_seconds)}</span></div>
+              {(signal.annotations ?? []).length === 0 ? (
+                <p className={styles.linkedJsonEmpty}>No annotations are embedded in this EDF.</p>
+              ) : (
+                <div className={styles.ephysEventTableWrap}>
+                  <table className={styles.ephysEventTable}>
+                    <thead><tr><th>Onset</th><th>Duration</th><th>Description</th><th>Go to</th></tr></thead>
+                    <tbody>{[...(signal.annotations ?? [])].sort((x,y)=>Number(x.onset)-Number(y.onset)).map((event,index)=>(
+                      <tr key={index}>
+                        <td>{formatDuration(Number(event.onset ?? 0))}</td>
+                        <td>{Number(event.duration ?? 0).toFixed(2)} s</td>
+                        <td>{event.description || "Unnamed event"}</td>
+                        <td><button type="button" className={styles.refreshButton} onClick={() => {
+                          const target = Math.min(Math.max(0, Number(signal.duration_seconds ?? 0) - windowSeconds), Math.max(0, Number(event.onset ?? 0)));
+                          setStartSeconds(target);
+                          loadSignal({start:target});
+                        }}>View event</button></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+          <section className={styles.linkedJsonCard}>
+            <div className={styles.linkedJsonHeader}>
+              <div className={styles.linkedJsonHeading}>
                 <strong>EDF header</strong>
                 <span>Header values read directly from the linked recording</span>
               </div>
