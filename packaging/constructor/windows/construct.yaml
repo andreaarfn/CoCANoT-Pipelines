@@ -1,0 +1,17 @@
+name: CoCANoT-Pipelines
+version: "0.2.0"
+installer_type: exe
+installer_filename: CoCANoT-Windows-x64.exe
+environment_file: ../../environment/environment-windows.yaml
+company: CoCANoT
+reverse_domain_identifier: org.cocanot.pipelines
+initialize_conda: false
+register_envs: false
+keep_pkgs: false
+default_prefix: ${USERPROFILE}\\AppData\\Local\\CoCANoT\\runtime
+extra_files:
+  - ../../stage-windows/app_payload.zip: payload/app_payload.zip
+  - ../../stage-windows/pip_packages.zip: payload/pip_packages.zip
+  - ../../scripts/post_install_windows.bat: payload/post_install_windows.bat
+post_install: ../../scripts/post_install_windows.bat
+welcome_text: CoCANoT desktop setup for Windows x64. MRI PyDeface requires a separately configured WSL2 Linux FSL environment.
