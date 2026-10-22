@@ -11822,12 +11822,44 @@ class CoCANoTAPI:
         new_json = target_dir / f"{new_base}.json"
         old_extra = old_path.with_name(f"{old_base}_cocanot.json")
         new_extra = target_dir / f"{new_base}_cocanot.json"
+        # DWI requires genuine gradients: a metadata edit cannot derive them
+        # from an anatomical scan. Fail before touching the existing export.
+        old_bval = old_path.with_name(f"{old_base}.bval")
+        old_bvec = old_path.with_name(f"{old_base}.bvec")
+        if datatype == "dwi":
+            if not old_bval.is_file() or not old_bvec.is_file():
+                raise ValueError(
+                    "Cannot reclassify this anatomical export as DWI: matching "
+                    ".bval and .bvec gradient files are missing. Reprocess the "
+                    "original diffusion acquisition in Imaging Step 3/5 to "
+                    "recover genuine gradient information."
+                )
+            try:
+                import nibabel as nib
+                import numpy as np
+                count = len(old_bval.read_text(encoding="utf-8").split())
+                gradient_rows = [
+                    row.split() for row in old_bvec.read_text(encoding="utf-8").splitlines()
+                    if row.strip()
+                ]
+                volumes = int(nib.load(str(old_path)).shape[3]) if len(nib.load(str(old_path)).shape) > 3 else 1
+                if count != volumes or len(gradient_rows) != 3 or any(len(row) != volumes for row in gradient_rows):
+                    raise ValueError(
+                        f"gradient counts do not match NIfTI volumes ({volumes})"
+                    )
+                bvals = np.asarray([float(v) for v in old_bval.read_text().split()])
+                bvecs = np.asarray([[float(v) for v in row] for row in gradient_rows])
+                if not np.isfinite(bvals).all() or not np.isfinite(bvecs).all():
+                    raise ValueError("gradient data contain non-finite values")
+            except (OSError, ValueError, IndexError) as exc:
+                raise ValueError(f"Cannot reclassify as DWI: invalid gradient files: {exc}") from exc
         movements = [(old_path, new_path), (old_json, new_json)]
         if old_extra.is_file():
             movements.append((old_extra, new_extra))
+        # Diffusion sidecars belong exclusively to DWI exports.
         for suffix_ext in (".bval", ".bvec"):
             old_associated = old_path.with_name(f"{old_base}{suffix_ext}")
-            if old_associated.is_file():
+            if datatype == "dwi" and old_associated.is_file():
                 movements.append((old_associated, target_dir / f"{new_base}{suffix_ext}"))
         for source, destination in movements:
             if source != destination and destination.exists():
@@ -11875,6 +11907,11 @@ class CoCANoTAPI:
                 if destination.exists():
                     destination.rename(source)
             raise
+        # Only after the new image and JSON have been written successfully,
+        # remove obsolete gradients when converting DWI to anatomical/CT.
+        if datatype != "dwi":
+            for obsolete in (old_bval, old_bvec):
+                obsolete.unlink(missing_ok=True)
         updated = {**old_context, **link, "bids_data_path": str(new_path.resolve()),
                    "bids_sidecar_path": str(new_json.resolve()),
                    "final_output_root": str(Path(link.get("final_output_root") or old_context.get("bids_output_dir") or new_path.parent.parent).resolve()),
