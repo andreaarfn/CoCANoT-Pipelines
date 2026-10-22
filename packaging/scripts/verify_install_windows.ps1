@@ -1,5 +1,5 @@
-$ErrorActionPreference = "Stop"
 param()
+$ErrorActionPreference = "Stop"
 $Prefix = Join-Path $env:LOCALAPPDATA "CoCANoT/runtime"
 $Py = Join-Path $Prefix "python.exe"
 foreach ($File in @($Py,(Join-Path $Prefix "CoCANoT.bat"),(Join-Path $Prefix "app/react_frontend/dist/index.html"),(Join-Path $Prefix "app/MetadataPipeline/dictionaries/CoCANoT_Metadata_Phase1.0.xlsx"))) {
