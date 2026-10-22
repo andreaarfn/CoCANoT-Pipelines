@@ -1,0 +1,24 @@
+acres
+bottle
+certifi
+charset-normalizer
+ci-info
+etelemetry
+filelock
+idna
+looseversion
+lxml
+networkx
+nipype
+prov
+proxy-tools==0.1.0
+puremagic
+pydot
+pywebview==6.2.1
+pythonnet
+rdflib
+requests
+simplejson
+traits
+urllib3
+# FSL + PyDeface are installed inside WSL2, not native Windows Python.
