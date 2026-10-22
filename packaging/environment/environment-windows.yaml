@@ -1,0 +1,17 @@
+name: cocanot-pipelines
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy
+  - nibabel
+  - matplotlib-base
+  - pillow
+  - pymupdf
+  - openpyxl
+  - pyedflib
+  - pyyaml
+  - dcm2niix
+  - flask
+  - pip
+# PyDeface + FSL/flirt intentionally run in Linux under WSL2, NOT here.
