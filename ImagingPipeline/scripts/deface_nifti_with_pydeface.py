@@ -162,6 +162,57 @@ def copy_and_update_json(
     return "JSON sidecar copied and updated."
 
 
+def windows_wsl_pydeface(command: list[str]) -> list[str]:
+    """Run PyDeface in WSL2; never imply native Windows FSL compatibility.
+
+    Paths are translated with WSL's wslpath. The same Windows-mounted output
+    paths remain visible to the native CoCANoT Python verification routines.
+    """
+    if sys.platform != "win32" or not command or command[0] != "pydeface":
+        return command
+    if shutil.which("wsl.exe") is None:
+        raise RuntimeError(
+            "MRI defacing requires WSL2 with Linux FSL and PyDeface. "
+            "Install and verify WSL2 before using Step 3 defacing."
+        )
+    probe = subprocess.run(
+        ["wsl.exe", "--exec", "bash", "-lc",
+         'export FSLDIR="${FSLDIR:-$HOME/fsl}"; '
+         'export PATH="$HOME/.local/bin:$FSLDIR/bin:$PATH"; '
+         'command -v pydeface >/dev/null && command -v flirt >/dev/null'],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30,
+    )
+    if probe.returncode:
+        raise RuntimeError(
+            "WSL2 is available but Linux PyDeface or FSL flirt is missing. "
+            "Install FSL inside WSL and install pydeface in that same WSL distribution. "
+            "Defacing was not attempted. " + probe.stderr.strip()[:300]
+        )
+    translated = []
+    for value in command[1:]:
+        if value.startswith("-"):
+            translated.append(value)
+            continue
+        candidate = Path(value)
+        if not candidate.is_absolute():
+            translated.append(value)
+            continue
+        result = subprocess.run(
+            ["wsl.exe", "--exec", "wslpath", "-a", "-u", str(candidate)],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode:
+            raise RuntimeError(
+                f"Cannot translate defacing path into WSL: {candidate}: "
+                + result.stderr.strip()
+            )
+        translated.append(result.stdout.strip())
+    script = ('export FSLDIR="${FSLDIR:-$HOME/fsl}"; '
+              'export PATH="$HOME/.local/bin:$FSLDIR/bin:$PATH"; '
+              'exec pydeface "$@"')
+    return ["wsl.exe", "--exec", "bash", "-lc", script, "cocanot-pydeface", *translated]
+
+
 def run_and_log(
     command: list[str],
     log_path: Path,
@@ -180,6 +231,7 @@ def run_and_log(
         log.write(f"Start time: {start_datetime.isoformat(timespec='seconds')}\n\n")
         log.write("=" * 80 + "\nPyDeface output\n" + "=" * 80 + "\n")
 
+        command = windows_wsl_pydeface(command)
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
