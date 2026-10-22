@@ -11,6 +11,26 @@ CONSTRUCT_DIR="${PACKAGING_DIR}/constructor/macos"
 
 echo "Project root: ${PROJECT_ROOT}"
 
+# Conda Constructor packages compiled dependencies for one target CPU family.
+# Detect the build architecture; do not distribute one package as universal.
+HOST_ARCH="$(uname -m)"
+case "${HOST_ARCH}" in
+  arm64) COCANOT_ARCH="arm64"; EXPECTED_SUBDIR="osx-arm64" ;;
+  x86_64) COCANOT_ARCH="x86_64"; EXPECTED_SUBDIR="osx-64" ;;
+  *) echo "ERROR: Unsupported macOS architecture: ${HOST_ARCH}" >&2; exit 1 ;;
+esac
+if [ -z "${CONDA_PREFIX:-}" ] || [ ! -x "${CONDA_PREFIX}/bin/python" ]; then
+  echo "ERROR: Activate the architecture-specific Conda build environment first." >&2
+  exit 1
+fi
+PYTHON_ARCH="$("${CONDA_PREFIX}/bin/python" -c 'import platform; print(platform.machine())')"
+if [ "${PYTHON_ARCH}" != "${HOST_ARCH}" ]; then
+  echo "ERROR: Build Python (${PYTHON_ARCH}) does not match process architecture (${HOST_ARCH})." >&2
+  exit 1
+fi
+echo "Building CoCANoT for ${EXPECTED_SUBDIR} using ${CONDA_PREFIX}"
+
+
 # ------------------------------------------------------------
 # 1. Build React on the developer/build machine only.
 # ------------------------------------------------------------
@@ -143,6 +163,17 @@ mkdir -p "${CONSTRUCTOR_CACHE}" "${CONDA_PKGS_CACHE}"
 export CONDA_PKGS_DIRS="${CONDA_PKGS_CACHE}"
 
 constructor   --cache-dir "${CONSTRUCTOR_CACHE}"   .
+
+# Keep architecture names unambiguous even when the constructor YAML uses
+# a generic installer_filename. Never call either output "universal".
+RAW_PKG="${CONSTRUCT_DIR}/CoCANoT-Mac-0.1-Test.pkg"
+ARCH_PKG="${CONSTRUCT_DIR}/CoCANoT-Mac-${COCANOT_ARCH}.pkg"
+if [ ! -f "${RAW_PKG}" ]; then
+  echo "ERROR: Constructor did not create the expected PKG: ${RAW_PKG}" >&2
+  exit 1
+fi
+mv -f "${RAW_PKG}" "${ARCH_PKG}"
+echo "Architecture-specific installer: ${ARCH_PKG}"
 
 echo ""
 echo "Build complete."
