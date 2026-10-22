@@ -39,7 +39,7 @@ Get-Content (Join-Path $ProjectRoot "packaging/environment/requirements-pip-wind
   Where-Object { $_ -notmatch '^proxy-tools==' } | Set-Content $BinaryRequirements
 & $Py -m pip wheel --wheel-dir $Wheels --no-deps "proxy-tools==0.1.0"
 if ($LASTEXITCODE -ne 0) { throw "proxy-tools wheel build failed" }
-& $Py -m pip download --dest $Wheels --only-binary=:all: -r $BinaryRequirements
+& $Py -m pip download --dest $Wheels --only-binary=:all: --no-deps -r $BinaryRequirements
 if ($LASTEXITCODE -ne 0) { throw "Windows wheel download failed" }
 Compress-Archive -Path (Join-Path $Payload "*") -DestinationPath (Join-Path $Stage "app_payload.zip") -Force
 Compress-Archive -Path (Join-Path $Wheels "*") -DestinationPath (Join-Path $Stage "pip_packages.zip") -Force
