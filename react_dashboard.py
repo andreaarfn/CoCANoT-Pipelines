@@ -11952,6 +11952,9 @@ class CoCANoTAPI:
         payload = {
             **{key: value for key, value in payload.items() if key != "CoCANoTMetadata"},
             "CoCANoTMetadata": dict(metadata),
+            "CoCANoTPatientID": patient,
+            "RecordingID": recording_id,
+            "RecordingModality": modality,
         }
         new_dir.mkdir(parents=True, exist_ok=True)
         moved = []
