@@ -135,7 +135,7 @@ MRI_SEQUENCE_MAP = {
     "T2": ("anat", "T2w"),
     "FLAIR": ("anat", "FLAIR"),
     "DWI": ("dwi", "dwi"),
-    "SWI": ("anat", "T2starw"),
+    "SWI": ("anat", "SWI"),
 }
 
 EPHYS_SCRUBBER = EPHYS_SCRIPTS / "scrub_edf_metadata.py"
@@ -11790,7 +11790,7 @@ class CoCANoTAPI:
             sequence = self._imaging_sequence_value(metadata)
             mapping = {"T1": ("anat", "T1w"), "T2": ("anat", "T2w"),
                        "FLAIR": ("anat", "FLAIR"), "DWI": ("dwi", "dwi"),
-                       "SWI": ("anat", "T2starw")}
+                       "SWI": ("anat", "SWI")}
             if sequence not in mapping:
                 raise ValueError("Cannot rename MRI export: unsupported sequence.")
             datatype, suffix = mapping[sequence]
@@ -11816,8 +11816,8 @@ class CoCANoTAPI:
         # SWI retains its acquisition identity in the BIDS basename while
         # using the established anatomical T2starw representation.
         # Do not append a duplicate acq label if one already exists.
-        if modality == "MRI" and sequence == "SWI" and not acq_match:
-            parts.insert(-1, "acq-SWI")
+        if modality == "MRI" and sequence == "SWI":
+            parts = [part for part in parts if part != "acq-SWI"]
         new_base = "_".join(parts)
         # Keep the same project and optional session directories; move only
         # the final datatype directory if the sequence/modality changes.
@@ -11859,8 +11859,7 @@ class CoCANoTAPI:
             except (OSError, ValueError, IndexError) as exc:
                 raise ValueError(f"Cannot reclassify as DWI: invalid gradient files: {exc}") from exc
         movements = [(old_path, new_path), (old_json, new_json)]
-        if old_extra.is_file():
-            movements.append((old_extra, new_extra))
+        # CoCANoT metadata is embedded in the canonical JSON sidecar.
         # Diffusion sidecars belong exclusively to DWI exports.
         for suffix_ext in (".bval", ".bvec"):
             old_associated = old_path.with_name(f"{old_base}{suffix_ext}")
@@ -11913,12 +11912,6 @@ class CoCANoTAPI:
                     source.rename(destination)
                     moved.append((source, destination))
             new_json.write_text(json.dumps(sidecar, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-            if new_extra.is_file():
-                extra = json.loads(new_extra.read_text(encoding="utf-8"))
-                if not isinstance(extra, dict):
-                    extra = {}
-                extra["CoCANoTMetadata"] = dict(metadata)
-                new_extra.write_text(json.dumps(extra, indent=2, allow_nan=False) + "\n", encoding="utf-8")
         except Exception:
             for source, destination in reversed(moved):
                 if destination.exists():
@@ -11943,9 +11936,10 @@ class CoCANoTAPI:
                    "final_paths": [str(dest.resolve()) for _, dest in movements]}
         # New exports use the consolidated JSON; older dual-file exports
         # retain their own metadata path until explicitly migrated.
-        updated["cocanot_metadata_path"] = str(
-            (new_extra if new_extra.is_file() else new_json).resolve()
-        )
+        updated["cocanot_metadata_path"] = str(new_json.resolve())
+        # The unified JSON has been written successfully; retire obsolete legacy metadata.
+        if old_extra.is_file() and old_extra != new_json:
+            old_extra.unlink()
         link_store.save_link(self.get_site_id(), patient, "Imaging", image_id, updated)
         if original_id and original_id != image_id:
             link_store.delete_link(self.get_site_id(), patient, "Imaging", original_id)
