@@ -1467,7 +1467,9 @@ export default function MetadataDashboard({
 
 
 
-            : {}
+            : {
+                original_record_id: String(editor.record?.record_id ?? "").trim(),
+              }
 
 
 
