@@ -12051,6 +12051,12 @@ class CoCANoTAPI:
             ),
             rules,
         )
+        if table_name == "Imaging" and str(clean.get("Imaging Modality") or "").strip() != "MRI":
+            # MRI-only dictionary fields may remain from an earlier editor
+            # selection; they must not block a valid CT record.
+            for key in list(clean):
+                if key.startswith("MRI Sequence(s)"):
+                    clean.pop(key, None)
         # Preserve links to pre-normalization patient keys until a database migration.
         if clean.get("CoCANoT Patient ID"):
             clean["CoCANoT Patient ID"] = self._resolve_existing_patient_id(clean["CoCANoT Patient ID"])
