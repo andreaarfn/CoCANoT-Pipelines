@@ -1,0 +1,144 @@
+name: Build CoCANoT installers (experimental)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Installer target
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - mac-intel
+          - linux-x64
+          - windows-x64
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cocanot-installers-${{ github.ref }}-${{ github.event.inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  mac-intel:
+    if: ${{ inputs.target == 'all' || inputs.target == 'mac-intel' }}
+    runs-on: macos-15-intel
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          activate-environment: packaging-build
+          python-version: '3.12'
+          channels: conda-forge
+          channel-priority: strict
+      - name: Install builder
+        run: conda install -y -n packaging-build -c conda-forge constructor pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: react_frontend/package-lock.json
+      - name: Build Intel macOS PKG
+        run: bash packaging/scripts/build_macos.sh
+      - name: Check PKG
+        run: |
+          test -s packaging/constructor/macos/CoCANoT-Mac-x86_64.pkg
+          shasum -a 256 packaging/constructor/macos/CoCANoT-Mac-x86_64.pkg > packaging/constructor/macos/CoCANoT-Mac-x86_64.pkg.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CoCANoT-Mac-x86_64
+          path: |
+            packaging/constructor/macos/CoCANoT-Mac-x86_64.pkg
+            packaging/constructor/macos/CoCANoT-Mac-x86_64.pkg.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  linux-x64:
+    if: ${{ inputs.target == 'all' || inputs.target == 'linux-x64' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          activate-environment: packaging-build
+          python-version: '3.12'
+          channels: conda-forge
+          channel-priority: strict
+      - name: Install builder
+        run: conda install -y -n packaging-build -c conda-forge constructor pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: react_frontend/package-lock.json
+      - name: Build Linux shell installer
+        run: bash packaging/scripts/build_linux.sh
+      - name: Check installer
+        run: |
+          test -s packaging/constructor/linux/CoCANoT-Linux-x86_64.sh
+          sha256sum packaging/constructor/linux/CoCANoT-Linux-x86_64.sh > packaging/constructor/linux/CoCANoT-Linux-x86_64.sh.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CoCANoT-Linux-x86_64
+          path: |
+            packaging/constructor/linux/CoCANoT-Linux-x86_64.sh
+            packaging/constructor/linux/CoCANoT-Linux-x86_64.sh.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-x64:
+    if: ${{ inputs.target == 'all' || inputs.target == 'windows-x64' }}
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          activate-environment: packaging-build
+          python-version: '3.12'
+          channels: conda-forge
+          channel-priority: strict
+      - name: Install Windows builder and NSIS
+        shell: pwsh
+        run: |
+          conda install -y -n packaging-build -c conda-forge constructor pip nsis
+          if ($LASTEXITCODE -ne 0) { throw "Constructor or NSIS installation failed" }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: react_frontend/package-lock.json
+      - name: Build Windows EXE
+        shell: pwsh
+        run: ./packaging/scripts/build_windows.ps1
+      - name: Check installer
+        shell: pwsh
+        run: |
+          $f = "packaging/constructor/windows/CoCANoT-Windows-x64.exe"
+          if (!(Test-Path $f) -or (Get-Item $f).Length -eq 0) { throw "Windows installer missing/empty" }
+          (Get-FileHash $f -Algorithm SHA256).Hash + "  CoCANoT-Windows-x64.exe" |
+            Out-File -Encoding ascii "$f.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CoCANoT-Windows-x64
+          path: |
+            packaging/constructor/windows/CoCANoT-Windows-x64.exe
+            packaging/constructor/windows/CoCANoT-Windows-x64.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
