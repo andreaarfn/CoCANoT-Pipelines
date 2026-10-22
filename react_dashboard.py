@@ -12167,31 +12167,39 @@ class CoCANoTAPI:
                     "before importing this record to avoid losing associations."
                 )
 
+        original_id = str((local_context or {}).get("original_record_id") or "").strip()
+        patient_key = clean.get("CoCANoT Patient ID", "")
+        if original_id and original_id != canonical_record_id:
+            if self.repository.get_record(self.get_site_id(), table_name, canonical_record_id, patient_id=patient_key):
+                raise ValueError("Destination record ID already exists; cannot rename.")
         saved_context = dict(context or {})
         if table_name == "Imaging":
             existing_record = self.repository.get_record(
-                self.get_site_id(), "Imaging", canonical_record_id,
+                self.get_site_id(), "Imaging", original_id or canonical_record_id,
                 patient_id=clean.get("CoCANoT Patient ID", "")
             )
-            synced = self._sync_edited_imaging_export(clean, existing_record)
+            synced = self._sync_edited_imaging_export(clean, existing_record, original_id)
             if synced is not None:
                 saved_context.update(synced)
             elif existing_record:
                 saved_context = {**dict(existing_record.get("context") or {}), **saved_context}
         if table_name == "Electrophysiology":
             existing_record = self.repository.get_record(
-                self.get_site_id(), "Electrophysiology", canonical_record_id,
+                self.get_site_id(), "Electrophysiology", original_id or canonical_record_id,
                 patient_id=clean.get("CoCANoT Patient ID", "")
             )
-            synced = self._sync_edited_ephys_export(clean, existing_record)
+            synced = self._sync_edited_ephys_export(clean, existing_record, original_id)
             if synced is not None:
                 saved_context.update(synced)
             elif existing_record:
                 saved_context = {**dict(existing_record.get("context") or {}), **saved_context}
-        return self.repository.save_record(
+        saved = self.repository.save_record(
             self.get_site_id(), table_name, clean,
             source="metadata_dashboard", context=saved_context,
         )
+        if original_id and original_id != canonical_record_id and table_name in {"Imaging", "Electrophysiology"}:
+            RecordDeletionService().delete_metadata_record(self.get_site_id(), patient_key, table_name, original_id)
+        return saved
 
     def metadata_validate_record(
         self,
