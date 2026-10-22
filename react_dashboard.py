@@ -11755,7 +11755,7 @@ class CoCANoTAPI:
         )
 
     def _sync_edited_imaging_export(
-        self, metadata: dict[str, Any], existing: dict[str, Any] | None
+        self, metadata: dict[str, Any], existing: dict[str, Any] | None, original_id: str = ""
     ) -> dict[str, Any] | None:
         """Update an already exported image and matching JSON after metadata edits.
 
@@ -11767,7 +11767,7 @@ class CoCANoTAPI:
         patient = str(metadata.get("CoCANoT Patient ID") or "").strip()
         image_id = str(metadata.get("Image ID") or "").strip()
         link_store = PatientDataLinkStore()
-        link = link_store.get_link(self.get_site_id(), patient, "Imaging", image_id) or {}
+        link = link_store.get_link(self.get_site_id(), patient, "Imaging", original_id or image_id) or {}
         old_context = dict(existing.get("context") or {})
         candidate_text = str(link.get("bids_data_path") or old_context.get("bids_data_path") or "")
         if not candidate_text:
@@ -11780,7 +11780,7 @@ class CoCANoTAPI:
         embedded = sidecar.get("CoCANoTMetadata")
         if not isinstance(embedded, dict) or (
             str(embedded.get("CoCANoT Patient ID") or "") != patient
-            or str(embedded.get("Image ID") or "") != image_id
+            or str(embedded.get("Image ID") or "") != (original_id or image_id)
         ):
             raise ValueError("Saved imaging sidecar identity does not match the patient record; export was not renamed.")
         modality = str(metadata.get("Imaging Modality") or "").strip()
@@ -11885,10 +11885,12 @@ class CoCANoTAPI:
             (new_extra if new_extra.is_file() else new_json).resolve()
         )
         link_store.save_link(self.get_site_id(), patient, "Imaging", image_id, updated)
+        if original_id and original_id != image_id:
+            link_store.delete_link(self.get_site_id(), patient, "Imaging", original_id)
         return updated
 
     def _sync_edited_ephys_export(
-        self, metadata: dict[str, Any], existing: dict[str, Any] | None
+        self, metadata: dict[str, Any], existing: dict[str, Any] | None, original_id: str = ""
     ) -> dict[str, Any] | None:
         """Rename the existing final EDF and sidecars in place after metadata edits."""
         if not existing:
@@ -11898,7 +11900,7 @@ class CoCANoTAPI:
         if not patient or not recording_id:
             return None
         store = PatientDataLinkStore()
-        link = store.get_link(self.get_site_id(), patient, "Electrophysiology", recording_id) or {}
+        link = store.get_link(self.get_site_id(), patient, "Electrophysiology", original_id or recording_id) or {}
         old_context = dict(existing.get("context") or {})
         candidate = link.get("bids_data_path") or old_context.get("bids_data_path")
         if not candidate:
@@ -11911,7 +11913,7 @@ class CoCANoTAPI:
         embedded = payload.get("CoCANoTMetadata") if isinstance(payload, dict) else None
         if not isinstance(embedded, dict) or (
             str(embedded.get("CoCANoT Patient ID") or "").strip() != patient
-            or str(embedded.get("Recording ID") or "").strip() != recording_id
+            or str(embedded.get("Recording ID") or "").strip() != (original_id or recording_id)
         ):
             raise ValueError("Final EDF JSON identity does not match this patient and recording; no files were renamed.")
 
@@ -11974,6 +11976,8 @@ class CoCANoTAPI:
         if "final_output_root" not in updated:
             updated["final_output_root"] = str(new_dir.parent.parent.resolve())
         store.save_link(self.get_site_id(), patient, "Electrophysiology", recording_id, updated)
+        if original_id and original_id != recording_id:
+            store.delete_link(self.get_site_id(), patient, "Electrophysiology", original_id)
         return updated
 
     def metadata_save_record(
