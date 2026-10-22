@@ -11813,6 +11813,11 @@ class CoCANoTAPI:
         if run_match:
             parts.append(f"run-{run_match.group(1)}")
         parts.append(suffix)
+        # SWI retains its acquisition identity in the BIDS basename while
+        # using the established anatomical T2starw representation.
+        # Do not append a duplicate acq label if one already exists.
+        if modality == "MRI" and sequence == "SWI" and not acq_match:
+            parts.insert(-1, "acq-SWI")
         new_base = "_".join(parts)
         # Keep the same project and optional session directories; move only
         # the final datatype directory if the sequence/modality changes.
@@ -11861,6 +11866,18 @@ class CoCANoTAPI:
             old_associated = old_path.with_name(f"{old_base}{suffix_ext}")
             if datatype == "dwi" and old_associated.is_file():
                 movements.append((old_associated, target_dir / f"{new_base}{suffix_ext}"))
+        # Never turn a mislabeled or incomplete export into a new SWI link.
+        # Check source image integrity before making any filesystem changes.
+        if modality == "MRI" and sequence == "SWI":
+            try:
+                import nibabel as nib
+                image = nib.load(str(old_path))
+                if len(image.shape) < 3 or any(dim < 1 for dim in image.shape[:3]):
+                    raise ValueError("Invalid SWI image dimensions.")
+            except Exception as exc:
+                raise ValueError(
+                    f"Cannot export SWI: the existing NIfTI cannot be read: {exc}"
+                ) from exc
         for source, destination in movements:
             if source != destination and destination.exists():
                 raise ValueError(f"Edited imaging filename already exists: {destination}")
@@ -11912,6 +11929,14 @@ class CoCANoTAPI:
         if datatype != "dwi":
             for obsolete in (old_bval, old_bvec):
                 obsolete.unlink(missing_ok=True)
+        if modality == "MRI" and sequence == "SWI":
+            # Confirm the new export resolves before changing patient links.
+            if not new_path.is_file() or not new_json.is_file():
+                raise RuntimeError("SWI export verification failed: NIfTI or JSON missing.")
+            verified_sidecar = json.loads(new_json.read_text(encoding="utf-8"))
+            if (verified_sidecar.get("MRISequence") != "SWI"
+                or verified_sidecar.get("ImageID") != image_id):
+                raise RuntimeError("SWI export verification failed: metadata mismatch.")
         updated = {**old_context, **link, "bids_data_path": str(new_path.resolve()),
                    "bids_sidecar_path": str(new_json.resolve()),
                    "final_output_root": str(Path(link.get("final_output_root") or old_context.get("bids_output_dir") or new_path.parent.parent).resolve()),
