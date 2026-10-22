@@ -12178,6 +12178,8 @@ class CoCANoTAPI:
                 self.get_site_id(), "Imaging", original_id or canonical_record_id,
                 patient_id=clean.get("CoCANoT Patient ID", "")
             )
+            if original_id and original_id != canonical_record_id and not existing_record:
+                raise ValueError("Original patient record could not be found; rename was cancelled to avoid duplicates.")
             synced = self._sync_edited_imaging_export(clean, existing_record, original_id)
             if synced is not None:
                 saved_context.update(synced)
@@ -12188,6 +12190,8 @@ class CoCANoTAPI:
                 self.get_site_id(), "Electrophysiology", original_id or canonical_record_id,
                 patient_id=clean.get("CoCANoT Patient ID", "")
             )
+            if original_id and original_id != canonical_record_id and not existing_record:
+                raise ValueError("Original patient record could not be found; rename was cancelled to avoid duplicates.")
             synced = self._sync_edited_ephys_export(clean, existing_record, original_id)
             if synced is not None:
                 saved_context.update(synced)
