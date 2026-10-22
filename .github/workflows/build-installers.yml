@@ -11,6 +11,7 @@ on:
         options:
           - all
           - mac-intel
+          - mac-silicon
           - linux-x64
           - windows-x64
 
@@ -22,6 +23,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  mac-silicon:
+    if: ${{ inputs.target == 'all' || inputs.target == 'mac-silicon' }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          activate-environment: packaging-build
+          python-version: '3.12'
+          channels: conda-forge
+          channel-priority: strict
+      - name: Install builder
+        run: conda install -y -n packaging-build -c conda-forge constructor pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: react_frontend/package-lock.json
+      - name: Build Apple Silicon PKG
+        run: bash packaging/scripts/build_macos.sh
+      - name: Check PKG
+        run: |
+          test -s packaging/constructor/macos/CoCANoT-Mac-arm64.pkg
+          shasum -a 256 packaging/constructor/macos/CoCANoT-Mac-arm64.pkg > packaging/constructor/macos/CoCANoT-Mac-arm64.pkg.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CoCANoT-Mac-arm64
+          path: |
+            packaging/constructor/macos/CoCANoT-Mac-arm64.pkg
+            packaging/constructor/macos/CoCANoT-Mac-arm64.pkg.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   mac-intel:
     if: ${{ inputs.target == 'all' || inputs.target == 'mac-intel' }}
     runs-on: macos-15-intel
