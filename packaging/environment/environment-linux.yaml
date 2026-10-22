@@ -1,0 +1,19 @@
+name: cocanot-pipelines
+channels:
+  - https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/public/
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy
+  - nibabel
+  - matplotlib-base
+  - pillow
+  - pymupdf
+  - openpyxl
+  - pyedflib
+  - pyyaml
+  - dcm2niix
+  - fsl-flirt
+  - fslpy
+  - flask
+  - pip
