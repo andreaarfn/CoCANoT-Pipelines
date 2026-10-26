@@ -556,3 +556,20 @@
 @media (max-width: 680px) {
   .linkedJsonHeader { align-items: flex-start; flex-direction: column; }
 }
+
+
+.ephysEventTimeline {position:relative;height:36px;background:#edf4fb;border:1px solid #cbd9e6;border-radius:8px;margin-top:12px;overflow:visible}
+.ephysEventTimeline::after {content:"";position:absolute;left:0;right:0;top:50%;border-top:1px solid #9cb5c9;pointer-events:none}
+.ephysEventMarker {position:absolute;top:4px;height:26px;min-width:5px;border:1px solid #276f9e;border-radius:3px;background:rgba(46,127,179,.65);cursor:pointer;z-index:1;padding:0}
+.ephysEventMarker:hover,.ephysEventMarker:focus-visible {background:#1b638f;outline:2px solid #94c5e2;outline-offset:2px}
+.ephysEventTimelineLabels {display:flex;justify-content:space-between;font-size:11px;color:#60778d;margin:5px 0 14px}
+.ephysEventTableWrap {overflow-x:auto}
+.ephysEventTable {width:100%;border-collapse:collapse;font-size:12px}
+.ephysEventTable th,.ephysEventTable td {padding:10px;border-bottom:1px solid #dce6ee;text-align:left}
+.ephysEventTable th {color:#526b83;background:#f4f8fb}
+
+
+.ephysEventMarker.ephysEventMarkerSelected {background:#d13b45;border-color:#a72432;box-shadow:0 0 0 2px rgba(209,59,69,.2);z-index:3}
+.ephysEventMarker.ephysEventMarkerSelected:hover,.ephysEventMarker.ephysEventMarkerSelected:focus-visible {background:#b92432;outline:2px solid #efb4b7}
+.ephysEventTableSelected {background:#fff0f1}
+.ephysEventTableSelected td {border-bottom-color:#e9a7af}
