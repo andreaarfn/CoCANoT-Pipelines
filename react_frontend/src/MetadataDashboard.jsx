@@ -1467,7 +1467,9 @@ export default function MetadataDashboard({
 
 
 
-            : {}
+            : {
+                original_record_id: String(editor.record?.record_id ?? "").trim(),
+              }
 
 
 
@@ -3928,25 +3930,16 @@ export default function MetadataDashboard({
 
 
               onChange={(field, value) =>
-
-
-
-                setDraft(current => ({
-
-
-
-                  ...current,
-
-
-
-                  [field]: value,
-
-
-
-                }))
-
-
-
+                setDraft(current => {
+                  const next = {...current, [field]: value};
+                  if (editor?.tableName === "Imaging" &&
+                      field === "Imaging Modality" && value !== "MRI") {
+                    for (const key of Object.keys(next)) {
+                      if (key.startsWith("MRI Sequence(s)")) delete next[key];
+                    }
+                  }
+                  return next;
+                })
               }
 
 
