@@ -52,7 +52,7 @@ export default function AppShell({
   }, [collapsed]);
 
   const dataPages = ["imaging", "ephys", "metadata", "patient-review"];
-  const activeMain = dataPages.some(item => page === item || page.startsWith(item + "-"))
+  const activeMain = page === "training-demo" || dataPages.some(item => page === item || page.startsWith(item + "-"))
     ? "data-capture"
     : page;
 
