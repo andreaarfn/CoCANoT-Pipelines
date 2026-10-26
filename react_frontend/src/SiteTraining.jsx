@@ -20,21 +20,21 @@ const TUTORIALS = [
   ["patient", "Patient data review tutorial", "Explore linked synthetic clinical, surgical, imaging, and recording data.", Users, PatientDemo],
 ];
 
-export default function SiteTraining() {
+export default function SiteTraining({ initialTutorial = null, onExit = null }) {
   const [done, setDone] = useState({});
-  const [active, setActive] = useState(null);
+  const [active, setActive] = useState(initialTutorial);
   const [guided, setGuided] = useState(true);
   useEffect(() => {
-    const listener = () => setActive(null);
+    const listener = () => { if (onExit) onExit(); else setActive(null); };
     window.addEventListener("atlas-training-back", listener);
     return () => window.removeEventListener("atlas-training-back", listener);
-  }, []);
+  }, [onExit]);
 
   if (active) {
     const item = TUTORIALS.find(row => row[0] === active);
     const Demo = item[4];
     return <div style={{minWidth:0}}>
-      <button type="button" onClick={() => setActive(null)} className={styles.historyButton} style={{marginBottom:16}}>
+      <button type="button" onClick={() => onExit ? onExit() : setActive(null)} className={styles.historyButton} style={{marginBottom:16}}>
         <ArrowLeft size={17}/> Back to Site Initiation & Training
       </button>
       <MemoryRouter initialEntries={[{pathname:"/data/demo/"+active,state:{tutorialChoice:guided?"yes":"no"}}]}>
