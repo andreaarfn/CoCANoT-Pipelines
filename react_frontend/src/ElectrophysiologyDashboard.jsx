@@ -106,6 +106,7 @@ export default function ElectrophysiologyDashboard({
   });
   const outputSettingsDirtyRef = useRef(false);
   const bidsRecordsRef = useRef([]);
+  const exportRefreshPendingRef = useRef(false);
 
   function showEphysHome() {
 
@@ -163,7 +164,24 @@ export default function ElectrophysiologyDashboard({
 
     if (view === "review") loadReview();
 
-    if (view === "bids") loadBids();
+    if (view === "bids") {
+      loadBids();
+      const interval = window.setInterval(async () => {
+        if (cancelled) return;
+        const fresh = await api()?.ephys_get_state?.();
+        if (!fresh || cancelled) return;
+        setProcessRunning(Boolean(fresh.process_running));
+        if (!fresh.process_running && exportRefreshPendingRef.current) {
+          exportRefreshPendingRef.current = false;
+          const pairs = await refreshReviewPairs();
+          await refreshBidsAwareness(fresh, pairs);
+        }
+      }, 2000);
+      return () => {
+        cancelled = true;
+        window.clearInterval(interval);
+      };
+    }
 
     return () => {
       cancelled = true;
@@ -722,21 +740,24 @@ export default function ElectrophysiologyDashboard({
 
   }
 
-  async function saveReview(linkedMetadata) {
-    if (!review) return;
-    try {
-      const updated = await api()?.ephys_review_save_pair?.(
-        review.id,
-        review.scrubbed.header,
-        review.scrubbed.annotations,
-        linkedMetadata
-      );
-      if (updated) setReview(updated);
-      const updatedPairs = await api()?.ephys_review_get_pairs?.();
-      if (updatedPairs) setReviewPairs(updatedPairs);
-    } catch (error) {
-      alert(`Could not save EDF review edits: ${error}`);
-    }
+  async function saveReview(linkedMetadata, saveMode = "all", annotationIndex = null) {
+    if (!review) throw new Error("No EDF review is selected.");
+    const annotations = annotationIndex == null
+      ? review.scrubbed.annotations
+      : review.scrubbed.annotations.slice(0, annotationIndex + 1);
+    const updated = await api()?.ephys_review_save_pair?.(
+      review.id, review.scrubbed.header, annotations, linkedMetadata, saveMode
+    );
+    if (!updated?.scrubbed) throw new Error("Save did not return the updated EDF review.");
+    setReview(previous => ({
+      ...updated,
+      scrubbed: {
+        ...updated.scrubbed,
+        header: saveMode === "annotations" || saveMode === "metadata" ? previous.scrubbed.header : updated.scrubbed.header,
+        annotations: saveMode === "header" || saveMode === "metadata" ? previous.scrubbed.annotations : updated.scrubbed.annotations,
+      },
+    }));
+    return updated;
   }
 
   async function setReviewStatus(status) {
@@ -995,10 +1016,9 @@ export default function ElectrophysiologyDashboard({
           }));
 
           setProcessRunning(true);
+          exportRefreshPendingRef.current = true;
 
-          setView("processing");
-
-          onRouteChange?.("ephys-processing");
+          // Export runs while Step 5 remains visible.
 
         }}
 
@@ -1973,22 +1993,95 @@ function EDFReview({
 }) {
 
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [previewSource, setPreviewSource] = useState("scrubbed");
+  const [previewStart, setPreviewStart] = useState(0);
+  const [previewWindow, setPreviewWindow] = useState(10);
+  const [previewMode, setPreviewMode] = useState("stacked");
+  const [previewSliderStart, setPreviewSliderStart] = useState(0);
+  const [previewChannels, setPreviewChannels] = useState([]);
+  const [previewError, setPreviewError] = useState("");
+  const [previewBusy, setPreviewBusy] = useState(false);
+  useEffect(() => {
+    setPreview(null);
+    setPreviewStart(0);
+    setPreviewSliderStart(0);
+    setPreviewChannels([]);
+  }, [review?.id]);
+  useEffect(() => {
+    if (!review?.id) return;
+    let active = true;
+    setPreviewBusy(true);
+    setPreviewError("");
+    api()?.ephys_review_signal_preview?.(review.id, previewSource, previewStart, previewWindow, previewChannels)
+      .then(value => { if (active) setPreview(value); })
+      .catch(error => { if (active) setPreviewError(String(error)); })
+      .finally(() => { if (active) setPreviewBusy(false); });
+    return () => { active = false; };
+  }, [review?.id, previewSource, previewStart, previewWindow, previewChannels.join("|")]);
+  function insertAnnotationAt(seconds) {
+    if (!review) return;
+    onChange({
+      ...review, scrubbed: {
+        ...review.scrubbed,
+        annotations: [...(review.scrubbed.annotations ?? []), {
+          onset: Math.max(0, Number(seconds.toFixed(3))),
+          duration: 0, description: "",
+        }],
+      },
+    });
+  }
   const [metadataText, setMetadataText] = useState("{}");
   const [metadataError, setMetadataError] = useState("");
+  const [saveStatus, setSaveStatus] = useState({ type: "", message: "" });
+  const [savingReview, setSavingReview] = useState(false);
+  const [headerSaveStatus, setHeaderSaveStatus] = useState("");
+  const [annotationSaveStatus, setAnnotationSaveStatus] = useState({});
   useEffect(() => {
     setMetadataText(JSON.stringify(review?.linked_metadata ?? {}, null, 2));
     setMetadataError("");
+    setSaveStatus({ type: "", message: "" });
   }, [review?.id, review?.scrubbed?.path]); 
-  function saveLinkedRecording() {
+  async function saveHeaderOnly() {
+    setHeaderSaveStatus("Saving header…");
+    try {
+      await onSave(null, "header");
+      setHeaderSaveStatus("EDF header saved successfully.");
+    } catch (error) {
+      setHeaderSaveStatus(`Header save failed: ${String(error)}`);
+    }
+  }
+  async function saveAnnotationOnly(index) {
+    setAnnotationSaveStatus(current => ({...current, [index]: "Saving annotation…"}));
+    try {
+      await onSave(null, "annotations");
+      setAnnotationSaveStatus(current => ({...current, [index]: "EDF annotations saved successfully."}));
+    } catch (error) {
+      setAnnotationSaveStatus(current => ({...current, [index]: `Annotation save failed: ${String(error)}`}));
+    }
+  }
+  async function saveLinkedRecording() {
+    if (savingReview) return;
+    setSavingReview(true);
+    setSaveStatus({ type: "", message: "" });
     try {
       const metadata = JSON.parse(metadataText);
       if (!metadata || Array.isArray(metadata) || typeof metadata !== "object") {
         throw new Error("The metadata must be a JSON object.");
       }
       setMetadataError("");
-      onSave(metadata);
+      const saved = await onSave(metadata, "metadata");
+      setMetadataText(JSON.stringify(saved.linked_metadata ?? metadata, null, 2));
+      setSaveStatus({
+        type: "success",
+        message: "Linked JSON metadata saved successfully.",
+      });
     } catch (error) {
-      setMetadataError(String(error.message || error));
+      const message = String(error?.message ?? error);
+      setMetadataError(message);
+      setSaveStatus({ type: "error", message: `Save failed: ${message}` });
+    } finally {
+      setSavingReview(false);
     }
   }
 
@@ -2006,7 +2099,7 @@ function EDFReview({
 
   const pendingCount = pairs.filter(
 
-    pair => !["Accepted", "Rejected - Not Included"].includes(pair.status)
+    pair => !["Accepted", "Rejected - Not Included", "On Hold"].includes(pair.status)
 
   ).length;
 
@@ -2110,6 +2203,10 @@ function EDFReview({
 
     await onSetStatus("Accepted");
 
+  }
+
+  async function holdCurrent() {
+    await onSetStatus("On Hold");
   }
 
   async function rejectCurrent() {
@@ -2239,19 +2336,13 @@ function EDFReview({
 
                   <div>
 
-                    <h2>Raw EDF versus scrubbed EDF</h2>
+                    <h2>Raw versus scrubbed header</h2>
 
-                    <p>Raw values are read-only. Supported scrubbed values can be edited before the recording is accepted or rejected.</p>
+                    <p>Raw values are read-only. Edit the scrubbed header and save below.</p>
 
                   </div>
 
-                  <button className={styles.secondary} onClick={saveLinkedRecording}>
 
-                    <Save size={16} />
-
-                    Save Scrubbed EDF
-
-                  </button>
 
                 </div>
 
@@ -2263,9 +2354,9 @@ function EDFReview({
 
                       <th>Field</th>
 
-                      <th>Raw EDF</th>
+                      <th>Raw</th>
 
-                      <th>Scrubbed EDF</th>
+                      <th>Scrubbed</th>
 
                     </tr>
 
@@ -2289,7 +2380,7 @@ function EDFReview({
 
                       .map(field => {
 
-                        const editable = review.editable_header_fields?.includes(field);
+                        const editable = field !== "annotations";
 
                         return (
 
@@ -2328,7 +2419,115 @@ function EDFReview({
                   </tbody>
 
                 </table>
+                <div className={styles.ephysReviewSectionSave}><button type="button" className={styles.secondary} onClick={saveHeaderOnly}><Save size={16}/> Save EDF header</button><p role="status" aria-live="polite">{headerSaveStatus}</p></div>
 
+              </section>
+
+              <section className={styles.card}>
+                <h2>EDF signal preview</h2>
+                <p className={styles.helpText}>Inspect real recording signals and click the waveform to add an annotation at that time. Edit the event description below, then save the EDF.</p>
+                <div className={styles.ephysPreviewControls}>
+                  <label>Recording
+                    <select value={previewSource} onChange={e => setPreviewSource(e.target.value)}>
+                      <option value="scrubbed">Scrubbed EDF</option>
+                      <option value="raw">Raw EDF (read only)</option>
+                    </select>
+                  </label>
+                  <label>Time window
+                    <select value={previewWindow} onChange={e => setPreviewWindow(Number(e.target.value))}>
+                      {[5,10,30,60].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}
+                    </select>
+                  </label>
+                  <button type="button" className={styles.secondary} disabled={previewStart <= 0} onClick={() => { const next = Math.max(0, previewStart-previewWindow); setPreviewSliderStart(next); setPreviewStart(next); }}>Previous</button>
+                  <button type="button" className={styles.secondary} disabled={previewStart + previewWindow >= Number(preview?.duration_seconds ?? Infinity)} onClick={() => { const next = Math.min(Math.max(0, Number(preview?.duration_seconds ?? 0) - previewWindow), previewStart+previewWindow); setPreviewSliderStart(next); setPreviewStart(next); }}>Next</button>
+                </div>
+                <div className={styles.ephysPreviewModeControls} role="group" aria-label="Waveform display mode">
+                  <button type="button" className={previewMode === "stacked" ? styles.ephysPreviewModeActive : ""} aria-pressed={previewMode === "stacked"} onClick={() => setPreviewMode("stacked")}>Stacked</button>
+                  <button type="button" className={previewMode === "overlay" ? styles.ephysPreviewModeActive : ""} aria-pressed={previewMode === "overlay"} onClick={() => setPreviewMode("overlay")}>Overlay</button>
+                </div>
+                {preview && (
+                  <div className={styles.ephysPreviewWindowSlider}>
+                    <label htmlFor="ephys-step4-start-slider">Viewing window start: {previewSliderStart.toFixed(1)} sec</label>
+                    <input id="ephys-step4-start-slider" type="range" min="0"
+                      max={Math.max(0, Number(preview.duration_seconds ?? 0) - previewWindow)}
+                      step="0.5" value={Math.min(previewSliderStart, Math.max(0, Number(preview.duration_seconds ?? 0) - previewWindow))}
+                      onChange={e => setPreviewSliderStart(Number(e.target.value))}
+                      onPointerUp={() => setPreviewStart(previewSliderStart)}
+                      onKeyUp={() => setPreviewStart(previewSliderStart)}
+                      onMouseUp={() => setPreviewStart(previewSliderStart)}
+                      onTouchEnd={() => setPreviewStart(previewSliderStart)}
+                    />
+                    <div className={styles.ephysPreviewSliderLabels}>
+                      <span>0 sec</span>
+                      <button type="button" className={styles.secondary} onClick={() => setPreviewStart(previewSliderStart)}>Go to selected time</button>
+                      <span>{Math.max(0, Number(preview.duration_seconds ?? 0) - previewWindow).toFixed(1)} sec</span>
+                    </div>
+                  </div>
+                )}
+                {previewError && <p role="alert">{previewError}</p>}
+                {previewBusy && <p role="status">Loading recording signals…</p>}
+                {preview && <>
+                  <p className={styles.helpText}>Showing {preview.start_seconds.toFixed(1)}–{(preview.start_seconds+preview.window_seconds).toFixed(1)} s of {Math.round(preview.duration_seconds)} s. Click any trace to add a time-stamped event.</p>
+                  <div className={styles.ephysPreviewChannelList}>
+                    {(preview.channel_labels ?? []).map(label => <label key={label}>
+                      <input type="checkbox" checked={(previewChannels.length ? previewChannels : preview.selected_channels ?? []).includes(label)}
+                        onChange={() => { const current = previewChannels.length ? previewChannels : preview.selected_channels ?? [];
+                          setPreviewChannels(current.includes(label) ? current.filter(v => v !== label) : [...current,label]); }} /> {label}
+                    </label>)}
+                  </div>
+                  <div className={styles.ephysWaveformStack}>
+                    {previewMode === "stacked" && (preview.signals ?? []).map(channel => {
+                      const values = channel.values ?? [];
+                      const low = Math.min(...values), high = Math.max(...values);
+                      const spread = Math.max(1e-9, high-low);
+                      const points = values.map((value,i) => `${(i/Math.max(1,values.length-1))*1000},${55-(value-low)/spread*48}`).join(" ");
+                      return <div className={styles.ephysWaveformRow} key={channel.label}>
+                        <strong>{channel.label}</strong>
+                        <svg viewBox="0 0 1000 64" preserveAspectRatio="none"
+                          role="button" aria-label={`Add annotation on ${channel.label}`}
+                          onClick={event => {
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            insertAnnotationAt(Number(preview.start_seconds) + Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width))*Number(preview.window_seconds));
+                          }}>
+                          <polyline points={points} fill="none" stroke="#287aa9" strokeWidth="1.3" vectorEffect="non-scaling-stroke"/>
+                          {(review.scrubbed.annotations ?? []).filter(a => Number(a.onset) >= preview.start_seconds && Number(a.onset) <= preview.start_seconds+preview.window_seconds).map((a,i) => {
+                            const x=(Number(a.onset)-preview.start_seconds)/preview.window_seconds*1000;
+                            return <line key={i} x1={x} x2={x} y1="0" y2="64" stroke="#cb8a21" strokeWidth="2" vectorEffect="non-scaling-stroke"/>;
+                          })}
+                        </svg>
+                      </div>;
+                    })}
+                    {previewMode === "overlay" && (
+                      <div className={styles.ephysWaveformOverlay}>
+                        <strong>Overlay (all selected channels)</strong>
+                        <div className={styles.ephysOverlayLegend} aria-label="Overlay channel legend">
+                          {(preview.signals ?? []).map((channel,index) => {
+                            const colors = ["#287aa9","#b46b35","#7d5ca8","#3c9276","#ba5976"];
+                            return <span key={channel.label}><i style={{background:colors[index % colors.length]}} aria-hidden="true" />{channel.label}</span>;
+                          })}
+                        </div>
+                        <svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="button" aria-label="Add annotation on overlaid waveforms"
+                          onClick={event => {
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            insertAnnotationAt(Number(preview.start_seconds) + Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width))*Number(preview.window_seconds));
+                          }}>
+                          {(preview.signals ?? []).map((channel,index) => {
+                            const values=channel.values ?? [];
+                            if (!values.length) return null;
+                            const low=Math.min(...values), high=Math.max(...values), spread=Math.max(1e-9,high-low);
+                            const pts=values.map((value,i) => `${i/Math.max(1,values.length-1)*1000},${95-(value-low)/spread*135+67.5}`).join(" ");
+                            const colors=["#287aa9","#b46b35","#7d5ca8","#3c9276","#ba5976"];
+                            return <polyline key={channel.label} points={pts} stroke={colors[index%colors.length]} strokeOpacity=".75" strokeWidth="1.2" vectorEffect="non-scaling-stroke" fill="none"/>;
+                          })}
+                          {(review.scrubbed.annotations ?? []).filter(a => Number(a.onset)>=preview.start_seconds && Number(a.onset)<=preview.start_seconds+preview.window_seconds).map((a,i)=>{
+                            const x=(Number(a.onset)-preview.start_seconds)/preview.window_seconds*1000;
+                            return <line key={i} x1={x} x2={x} y1="0" y2="190" stroke="#cb8a21" strokeWidth="2" vectorEffect="non-scaling-stroke"/>;
+                          })}
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                </>}
               </section>
 
               <section className={styles.card}>
@@ -2375,50 +2574,41 @@ function EDFReview({
 
                     </div>
 
+                    <p className={styles.helpText}>Mark events in the EDF recording. Onset is seconds from recording start; duration is seconds (0 for an instant). A description is required. Save each annotation to write the events into the scrubbed EDF.</p>
                     {(review.scrubbed.annotations ?? []).length === 0 ? (
-
-                      <div className={styles.annotationEmpty}>No annotations.</div>
-
+                      <div className={styles.annotationEmpty}>No annotations. Select Add to describe an event.</div>
                     ) : (
-
                       (review.scrubbed.annotations ?? []).map((row, index) => (
-
-                        <div className={styles.annotationEdit} key={index}>
-
-                          <input
-
-                            type="number"
-
-                            value={row.onset}
-
-                            onChange={event => updateAnnotation(index, "onset", Number(event.target.value))}
-
-                          />
-
-                          <input
-
-                            type="number"
-
-                            value={row.duration}
-
-                            onChange={event => updateAnnotation(index, "duration", Number(event.target.value))}
-
-                          />
-
-                          <input
-
-                            value={row.description}
-
-                            onChange={event => updateAnnotation(index, "description", event.target.value)}
-
-                          />
-
-                          <button onClick={() => removeAnnotation(index)}>Remove</button>
-
+                        <div className={styles.ephysAnnotationCard} key={index}>
+                          <div className={styles.ephysAnnotationCardHeading}>
+                            <strong>Annotation {index + 1}</strong>
+                            <button type="button" onClick={() => removeAnnotation(index)}>Remove</button>
+                          </div>
+                          <div className={styles.ephysAnnotationInputs}>
+                            <label><span>Onset (seconds)</span>
+                              <input aria-label={`Annotation ${index + 1} onset in seconds`}
+                                type="number" min="0" step="any" value={row.onset}
+                                onChange={event => updateAnnotation(index, "onset", Number(event.target.value))} />
+                            </label>
+                            <label><span>Duration (seconds)</span>
+                              <input aria-label={`Annotation ${index + 1} duration in seconds`}
+                                type="number" min="0" step="any" value={row.duration}
+                                onChange={event => updateAnnotation(index, "duration", Number(event.target.value))} />
+                            </label>
+                          </div>
+                          <label className={styles.ephysAnnotationDescription}><span>Event description</span>
+                            <input aria-label={`Annotation ${index + 1} description`}
+                              placeholder="e.g., Eyes closed or seizure onset" value={row.description}
+                              onChange={event => updateAnnotation(index, "description", event.target.value)} />
+                          </label>
+                          <div className={styles.ephysReviewSectionSave}>
+                            <button type="button" className={styles.secondary} onClick={() => saveAnnotationOnly(index)}>
+                              <Save size={16} /> Save annotation {index + 1}
+                            </button>
+                            <p role="status" aria-live="polite">{annotationSaveStatus[index] ?? ""}</p>
+                          </div>
                         </div>
-
                       ))
-
                     )}
 
                   </div>
@@ -2432,10 +2622,18 @@ function EDFReview({
                 <p>Review or edit the JSON metadata associated with this EDF. Acquisition metadata comes first; CoCANoT dictionary metadata follows when available. Save changes to the scrubbed sidecar before exporting. If this recording was already exported, changes here do not silently overwrite its existing final export.</p>
                 <textarea className={styles.ephysLinkedMetadataEditor}
                   value={metadataText} rows={12}
-                  onChange={event => setMetadataText(event.target.value)}
+                  onChange={event => { setMetadataText(event.target.value); setSaveStatus({ type: "", message: "" }); }}
                   spellCheck={false} aria-label="Linked recording JSON metadata" />
-                {metadataError && <p role="alert">{metadataError}</p>}
-                <button type="button" className={styles.secondary} onClick={saveLinkedRecording}>Save EDF and linked metadata</button>
+                {saveStatus.message && (
+                  <p role="status" aria-live="polite" style={{
+                    color: saveStatus.type === "success" ? "#276842" : "#a63a45",
+                    fontWeight: 650,
+                    marginTop: 10,
+                  }}>{saveStatus.message}</p>
+                )}
+                <button type="button" className={styles.secondary} disabled={savingReview} onClick={saveLinkedRecording}>
+                  {savingReview ? "Saving linked metadata…" : "Save linked metadata"}
+                </button>
               </section>
 
               <div className={styles.reviewDecisionFooter}>
@@ -2449,6 +2647,10 @@ function EDFReview({
                 </div>
 
                 <div className={styles.reviewDecisionActions}>
+
+                  <button className={styles.secondary} onClick={holdCurrent}>
+                    On Hold
+                  </button>
 
                   <button className={styles.secondary} onClick={() => setRejectOpen(true)}>
 
@@ -2478,7 +2680,7 @@ function EDFReview({
 
                 <div className={styles.reviewHint}>
 
-                  Review all recordings before continuing. Accepted recordings continue to Step 5; rejected recordings remain local and are excluded from export.
+                  Review all recordings before continuing. Accepted recordings continue to Step 5; on-hold and rejected recordings are excluded from export.
 
                 </div>
 
@@ -2723,7 +2925,7 @@ function EphysBids({
 
             session_id: sessionId,
 
-            cocanot_metadata: structuredClone(draft),
+            cocanot_metadata: pruneInapplicableMetadata(structuredClone(draft)),
 
           }
 
@@ -2811,13 +3013,45 @@ function EphysBids({
 
   }
 
+  // Conditional applicability is defined by the active MR Electrophysiology
+  // dictionary, never by a list of field names. Clear descendants repeatedly
+  // so changing an upstream answer also clears nested hidden questions.
+  function pruneInapplicableMetadata(values) {
+    const next = { ...values };
+    const matches = rule => {
+      if (!rule.required_if_field) return true;
+      const current = next[rule.required_if_field];
+      const expected = rule.required_if_value;
+      const actualValues = (Array.isArray(current) ? current : [current])
+        .map(value => String(value ?? "").trim()).filter(Boolean);
+      const wantedValues = (Array.isArray(expected) ? expected : [expected])
+        .map(value => String(value ?? "").trim()).filter(Boolean);
+      const intersects = wantedValues.some(value => actualValues.includes(value));
+      const op = String(rule.required_if_operator ?? "").toLowerCase();
+      return op.includes("not") || op === "!=" || op === "not_equals"
+        ? !intersects : intersects;
+    };
+    for (let pass = 0; pass < rules.length; pass += 1) {
+      let changed = false;
+      for (const rule of rules) {
+        if (!rule.required_if_field || matches(rule)) continue;
+        if (Object.prototype.hasOwnProperty.call(next, rule.field_name)) {
+          delete next[rule.field_name];
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+    return next;
+  }
+
   function buildResumeState(nextRecords = records) {
 
     return {
       records: nextRecords,
       selectedIds,
       activeId,
-      draft: structuredClone(draft),
+      draft: pruneInapplicableMetadata(structuredClone(draft)),
       project,
       projectDescription,
       sessionId,
@@ -3232,7 +3466,7 @@ function EphysBids({
 
                   onChange={value =>
 
-                    setDraft(current => ({
+                    setDraft(current => pruneInapplicableMetadata({
 
                       ...current,
 
