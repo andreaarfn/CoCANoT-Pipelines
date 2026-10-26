@@ -61,7 +61,7 @@ export default function SiteTraining({ initialTutorial = null, onExit = null }) 
         </div>
         {index === 2 && <div style={{marginTop:20,paddingTop:18,borderTop:"1px solid #dce7ef"}}>
           <button type="button" aria-expanded={tutorialsOpen} aria-controls="data-capture-tutorials" onClick={() => setTutorialsOpen(open => !open)} style={{display:"flex",width:"100%",alignItems:"center",justifyContent:"space-between",gap:12,padding:"7px 0",border:0,background:"transparent",color:"#24597b",fontWeight:750,cursor:"pointer",textAlign:"left"}}>
-            <span style={{display:"flex",alignItems:"center",gap:9}}><BookOpen size={18}/> Interactive workflow tutorials</span>
+            <span>Interactive workflow tutorials</span>
             {tutorialsOpen ? <ChevronUp size={19}/> : <ChevronDown size={19}/>}
           </button>
           {tutorialsOpen && <div id="data-capture-tutorials" style={{paddingTop:12}}>
