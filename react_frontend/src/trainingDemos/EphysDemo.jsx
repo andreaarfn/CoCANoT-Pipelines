@@ -48,6 +48,19 @@ function StepIntroduction({ step, started, previewing, onShowHow, onSkip }) {
 
 function GuideOverview({ step, linked = false, wrapUp = false, onNext, onExplore, onSkip }) {
   const cardRef = useRef(null);
+
+  useEffect(() => {
+    const highlighted = Array.from(document.querySelectorAll(".ephys-public-demo .ephys-guide-focus-step"));
+    const original = highlighted.map(element => element.inert);
+    highlighted.forEach(element => { element.inert = true; });
+    const focusFrame = requestAnimationFrame(() => {
+      cardRef.current?.querySelector("button")?.focus();
+    });
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      highlighted.forEach((element, index) => { element.inert = original[index]; });
+    };
+  }, []);
   const [cardPlacement, setCardPlacement] = useState({ top: 16, left: 16, ready: false });
 
   useEffect(() => {
