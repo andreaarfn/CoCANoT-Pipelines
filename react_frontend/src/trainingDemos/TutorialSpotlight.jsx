@@ -18,11 +18,12 @@ export default function TutorialSpotlight({
   nextDisabled = false,
   nextLabel = "Next",
   allowTargetInteraction = false,
+  nonBlocking = false,
 }) {
   const [rect, setRect] = useState(null);
 
   useEffect(() => {
-    if (!enabled || !allowTargetInteraction || !target) return undefined;
+    if (!enabled || !allowTargetInteraction || nonBlocking || !target) return undefined;
     const guard = (event) => {
       const highlighted = document.querySelector(`[data-tutorial-id="${target}"]`);
       const tooltip = document.querySelector(`[data-atlas-tutorial-tooltip="true"]`);
@@ -36,7 +37,7 @@ export default function TutorialSpotlight({
       document.removeEventListener("pointerdown", guard, true);
       document.removeEventListener("click", guard, true);
     };
-  }, [enabled, allowTargetInteraction, target]);
+  }, [enabled, allowTargetInteraction, nonBlocking, target]);
 
   useEffect(() => {
     if (!enabled || !target) {
@@ -99,7 +100,7 @@ export default function TutorialSpotlight({
 
   return createPortal(
     <>
-      <div className={styles.blocker} style={{ pointerEvents: allowTargetInteraction ? "none" : "auto",  top: 0, left: 0, right: 0, height: rect.top }} />
+      <div className={styles.blocker} style={{ pointerEvents: nonBlocking || allowTargetInteraction ? "none" : "auto",  top: 0, left: 0, right: 0, height: rect.top }} />
       <div className={styles.blocker} style={{ top: rect.top, left: 0, width: rect.left, height: rect.height }} />
       <div className={styles.blocker} style={{ top: rect.top, left: rect.right, right: 0, height: rect.height }} />
       <div className={styles.blocker} style={{ top: rect.bottom, left: 0, right: 0, bottom: 0 }} />
