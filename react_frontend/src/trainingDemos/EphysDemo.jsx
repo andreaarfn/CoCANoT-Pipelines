@@ -850,7 +850,7 @@ export default function EphysDemo() {
                       </div>
                     </div>
                   </div>
-                  <div className="ephys-selection-summary"><Database size={26}/><div><strong>Selected data</strong><span>{selected ? "1 source · 1 EDF file selected" : "0 sources · 0 EDF files selected"}</span></div><details onToggle={event=>setSelectedDataExpanded(event.currentTarget.open)}><summary data-tutorial-id="ephys-view-selected-data">View Selected Data</summary><div className="ephys-selected-details">{selected ? <label><input type="checkbox" checked={selected} onChange={event => setSelected(event.target.checked)}/> {selectedSource} · sampleRecording.edf</label> : "No recordings selected."}</div></details></div>
+                  <div className="ephys-selection-summary"><Database size={26}/><div><strong>Selected data</strong><span>{selected ? "1 source · 1 EDF file selected" : "0 sources · 0 EDF files selected"}</span></div></div><details className="ephys-selected-accordion" onToggle={event=>setSelectedDataExpanded(event.currentTarget.open)}><summary data-tutorial-id="ephys-view-selected-data">View Selected Data</summary><div className="ephys-selected-details">{selected ? <label><input type="checkbox" checked={selected} onChange={event => setSelected(event.target.checked)}/> {selectedSource || "Selected source"} · sampleRecording.edf</label> : "No recordings selected."}</div></details>
                   <div className="ephys-actions"><button className="ephys-primary" data-tutorial-id="ephys-continue-1" disabled={!selected} onClick={()=>go(2)}>Continue to Output Folders →</button></div>
                 </div>
               </section>
@@ -1802,7 +1802,8 @@ const EPHYS_PUBLIC_CSS = `
 .ephys-selection-summary{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:15px;padding:14px 15px;border:1px solid #d9e3eb;border-radius:10px;background:white}
 .ephys-selection-summary>svg{padding:9px;box-sizing:content-box;border-radius:9px;background:#eff5f9;color:#436f8b}
 .ephys-selection-summary>div{display:grid;gap:3px;flex:1}.ephys-selection-summary strong{font-size:13px}.ephys-selection-summary span{font-size:11px;color:#718395}
-.ephys-selection-summary details{color:#236b9e;font-size:12px;font-weight:700}.ephys-selection-summary summary{cursor:pointer}.ephys-selected-details{padding:12px 0 0;line-height:2}
+.ephys-selection-summary details{color:#236b9e;font-size:12px;font-weight:700}
+.ephys-selected-accordion{margin-top:10px;padding:0 16px;border:1px solid #c9dce9;border-radius:10px;background:#fff;color:#286a98;font-size:13px;font-weight:750}.ephys-selected-accordion summary{padding:13px 0;cursor:pointer;list-style:disclosure-closed}.ephys-selected-accordion[open] summary{list-style:disclosure-open;border-bottom:1px solid #e2ebf2}.ephys-selected-accordion .ephys-selected-details{padding:12px 0 15px;font-weight:500;color:#314d63}.ephys-selection-summary summary{cursor:pointer}.ephys-selected-details{padding:12px 0 0;line-height:2}
 .ephys-actions{display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap;margin-top:19px;padding-top:15px;border-top:1px solid #e7edf2}.ephys-actions-between{justify-content:space-between}.ephys-actions-between>div{display:flex;flex-wrap:wrap;gap:8px}
 .ephys-folder-stack{display:grid;gap:11px}.ephys-folder-field{display:grid;gap:7px;font-size:12px;font-weight:800;color:#3c5167}.ephys-folder-field>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
 .ephys-folder-field input,.ephys-dataset input{width:100%;min-width:0;box-sizing:border-box;height:39px;padding:0 11px;border:1px solid #cbd7e1;border-radius:7px;background:white;color:#22354c;font:inherit;font-size:12px}
