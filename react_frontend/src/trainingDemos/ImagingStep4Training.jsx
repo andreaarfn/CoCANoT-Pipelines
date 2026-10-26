@@ -49,6 +49,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
     {guided && <TutorialSpotlight
       key={`step4-${stage}-${rejectOpen}-${metadataOpen}`}
       enabled
+      allowTargetInteraction
       target={stage===4&&rejectOpen?"step4-reject-options":targets[stage]}
       title={current.title}
       text={current.text}
