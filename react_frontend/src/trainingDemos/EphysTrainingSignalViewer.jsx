@@ -10,7 +10,7 @@ export default function EphysTrainingSignalViewer({annotations,onChooseTime,onCh
  const [scale,setScale]=useState(1);
  const paths=useMemo(()=>CHANNELS.map((_,ch)=>{
   const arr=[];for(let i=0;i<=900;i++){const t=start+(i/900)*WINDOW;const v=Math.sin(t*10+ch*2.1)*5+Math.sin(t*22+ch*0.7)*3+Math.sin(t*4+ch)*7;const event=Math.exp(-Math.pow((t-320.7)/0.24,2))*Math.sin(t*44+ch)*22;arr.push((i===0?"M":"L")+i.toFixed(1)+","+(40+ch*65+(v+event)*scale).toFixed(1));}return arr.join(" ");
- },[start,scale]);
+ }),[start,scale]);
  function seek(t){const v=clamp(t,0,DURATION);setCursor(v);onChooseTime?.(Number(v.toFixed(2)));}
  function move(n){setStart(v=>{const next=clamp(v+n,0,DURATION-WINDOW);onChangeWindow?.(next);return next;});}
  return <section data-tutorial-id="ephys-training-signal" style={{border:"1px solid #cbdde8",borderRadius:12,padding:16,background:"#fff",margin:"16px 0"}}>
