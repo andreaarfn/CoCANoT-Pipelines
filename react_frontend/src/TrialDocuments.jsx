@@ -126,12 +126,6 @@ export default function TrialDocuments({ section, siteId }) {
           ? "All regulatory document versions remain visible. The current version is marked."
           : "Current contract versions appear first. Show previous versions when needed."}</p>
       </div>
-      <div className={styles.notice}>
-        Pilot document workspace: files and activity are stored in this device's browser storage.
-        This is not a validated, tamper-evident regulatory audit trail or shared eTMF.
-        Do not upload sensitive, legally binding, or regulated trial records until
-        secure centralized storage, authentication, and audit validation are implemented.
-      </div>
       <div className={styles.card}>
         <h2>Upload document</h2>
         <div className={styles.form}>
