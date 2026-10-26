@@ -120,8 +120,8 @@ export default function TutorialSpotlight({
         <strong>{title}</strong>
         {onFocusTarget && <button type="button" onClick={onFocusTarget} style={{marginTop:8,padding:"6px 10px",border:"1px solid #a6c9dd",borderRadius:7,background:"#edf7fc",color:"#194765",cursor:"pointer",fontWeight:650}}>Click to edit highlighted field</button>}
         <p>{text}</p>
-        {onExplore && <div className={styles.hint} style={{marginTop:10}}><button type="button" onClick={onExplore} style={{padding:0,border:0,background:"transparent",color:"inherit",font:"inherit",fontWeight:800,cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2}}>Explore this step</button> before continuing when you are ready.</div>}
         {onNext ? <div style={{marginTop:12,display:"flex",alignItems:"center",gap:12}}><button type="button" disabled={nextDisabled} onClick={onNext} style={{border:0,borderRadius:18,padding:"8px 18px",background:"#1b5275",color:"white",fontWeight:700,opacity:nextDisabled?.45:1,cursor:nextDisabled?"not-allowed":"pointer"}}>{nextLabel} →</button>{nextDisabled && <span style={{fontSize:12}}>Complete the highlighted action first</span>}</div> : <div className={styles.hint}>Click the highlighted area to continue</div>}
+        {onExplore && <div style={{marginTop:13,paddingTop:14,borderTop:"1px solid #dce7ef"}}><button type="button" onClick={onExplore} style={{padding:0,border:0,background:"transparent",color:"#286b9a",fontSize:14,fontWeight:750,cursor:"pointer",textDecoration:"underline",textUnderlineOffset:3}}>or explore this step</button></div>}
       </aside>
     </>,
     document.body
