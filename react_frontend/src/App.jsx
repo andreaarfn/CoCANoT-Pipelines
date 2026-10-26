@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "./AppShell";
 import TrialDocuments from "./TrialDocuments";
 import SiteTraining from "./SiteTraining";
+import MetadataTutorial from "./trainingDemos/MetadataTutorial";
 
 
 
@@ -973,6 +974,14 @@ export default function App() {
     content = <TrialDocuments key={`${siteId}:${page}`} section={page} siteId={siteId} />;
   } else if (page === "site-training") {
     content = <SiteTraining onNavigate={navigate} />;
+  } else if (page === "training-demo") {
+    content = navigationContext.tutorial === "metadata"
+      ? <MetadataTutorial onBack={() => navigate("data-capture")} />
+      : <SiteTraining
+          key={navigationContext.tutorial || "training"}
+          initialTutorial={navigationContext.tutorial}
+          onExit={() => navigate("data-capture")}
+        />;
   } else if (page === "data-capture") {
     content = (
       <HomeDashboard
