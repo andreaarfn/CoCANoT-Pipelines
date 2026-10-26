@@ -23,7 +23,7 @@ const stages=[
   {title:"Open linked metadata",text:"Review the CoCANoT patient and imaging identifiers associated with the accepted example image."},
   {title:"Edit linked metadata",text:"Edit the JSON sidecar directly. The Comments field contains the patient name John Doe (PHI). Use your keyboard to remove John Doe from Comments while keeping valid JSON syntax and preserving the patient and imaging identifiers."},
   {title:"Save linked metadata",text:"Click Save JSON Metadata after removing John Doe from Comments. The tutorial refuses to save invalid JSON or a comment that still contains the patient name."},
-  {title:"Proceed to Metadata & BIDS",text:"Click the highlighted Continue to Step 5 button. The guide will continue directly—there is no Explore this step detour."},
+  {title:"Proceed to Metadata & BIDS",text:"Click Continue to Step 5 when ready, or choose Explore this step to inspect the reviewed image, header, and saved JSON metadata freely before continuing."},
 ];
 export default function ImagingStep4Training({ImageReview,onComplete,onBack,guided=true}){
   const [stage,setStage]=useState(0);
@@ -79,6 +79,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
       totalSteps={stages.length}
       onNext={stage<stages.length-1?advance:undefined}
       onSkip={() => setGuideDismissed(true)}
+      onExplore={stage === stages.length - 1 ? () => setGuideDismissed(true) : undefined}
       onFocusTarget={stage===1 ? () => { const input=document.querySelector('[data-tutorial-id="step4-header-input"]'); input?.scrollIntoView({block:"center",behavior:"instant"});input?.focus({preventScroll:true}); } : undefined}
       nextDisabled={!canProceed}
       nextLabel="Next"
