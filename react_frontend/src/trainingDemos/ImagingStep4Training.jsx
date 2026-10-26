@@ -84,7 +84,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
         </tr>)}</tbody>
       </table></div>
       {choice === "descrip" && !safeHeaderEdit && <p role="status" style={{fontSize:13,color:"#8b402c"}}>Type a replacement scrubbed value without “John Doe” to enable saving and continue the guide.</p>}
-      <button type="button" data-tutorial-id="step4-save-header" disabled={!safeHeaderEdit} onClick={()=>{setRows(old=>old.map(r=>r.name===choice?{...r,scrubbed:draft}:r));setHeaderSaved(true);}} style={{marginTop:12,padding:10,opacity:safeHeaderEdit?1:.5}}>Save Header Edit</button>
+      <button type="button" data-tutorial-id="step4-save-header" disabled={!safeHeaderEdit} onClick={()=>{setRows(old=>old.map(r=>r.name===choice?{...r,scrubbed:draft}:r));setHeaderSaved(true);}} style={{marginTop:12,padding:10,opacity:safeHeaderEdit?1:.5,position:stage===2?"relative":undefined,zIndex:stage===2?2002:undefined,background:"white",border:"1px solid #aabdcf",borderRadius:7,cursor:safeHeaderEdit?"pointer":"not-allowed"}}>Save Header Edit</button>
       {headerSaved&&<span role="status" style={{marginLeft:12,color:"#267045"}}><Check size={16}/> Example edit saved</span>}
     </section>
     <section style={{border:"1px solid #d7e5ef",borderRadius:12,padding:20,background:"white"}}>
