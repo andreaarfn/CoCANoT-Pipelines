@@ -101,9 +101,9 @@ export default function TutorialSpotlight({
   return createPortal(
     <>
       <div className={styles.blocker} style={{ pointerEvents: nonBlocking || allowTargetInteraction ? "none" : "auto",  top: 0, left: 0, right: 0, height: rect.top }} />
-      <div className={styles.blocker} style={{ top: rect.top, left: 0, width: rect.left, height: rect.height }} />
-      <div className={styles.blocker} style={{ top: rect.top, left: rect.right, right: 0, height: rect.height }} />
-      <div className={styles.blocker} style={{ top: rect.bottom, left: 0, right: 0, bottom: 0 }} />
+      <div className={styles.blocker} style={{ pointerEvents: nonBlocking || allowTargetInteraction ? "none" : "auto", top: rect.top, left: 0, width: rect.left, height: rect.height }} />
+      <div className={styles.blocker} style={{ pointerEvents: nonBlocking || allowTargetInteraction ? "none" : "auto", top: rect.top, left: rect.right, right: 0, height: rect.height }} />
+      <div className={styles.blocker} style={{ pointerEvents: nonBlocking || allowTargetInteraction ? "none" : "auto", top: rect.bottom, left: 0, right: 0, bottom: 0 }} />
 
       <div
         className={styles.spotlight}
