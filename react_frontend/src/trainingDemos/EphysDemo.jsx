@@ -1735,7 +1735,7 @@ function EphysOutputFinder({ guided, kind, onChoose, onClose }) {
 
 const EPHYS_PUBLIC_CSS = `
 /* High-contrast step introduction: the full step remains visible, but the guide is unmistakable. */
-.ephys-guide-overview-backdrop{position:fixed!important;inset:0!important;z-index:1200!important;display:block;padding:0;background:rgba(9,23,43,.72);width:100%!important;max-width:none!important;margin:0!important;box-sizing:border-box;pointer-events:auto}
+.ephys-guide-overview-backdrop{position:fixed!important;inset:0!important;z-index:1200!important;display:block;padding:0;background:transparent;width:100%!important;max-width:none!important;margin:0!important;box-sizing:border-box;pointer-events:auto}
 .ephys-guide-overview-card{position:fixed;z-index:1204;width:min(390px,calc(100vw - 32px));max-height:min(290px,calc(100vh - 48px));overflow:auto;box-sizing:border-box;padding:clamp(20px,2.5vw,27px);border:1px solid #70b8eb;border-radius:18px;background:#132b49;color:#fff;box-shadow:0 28px 90px rgba(0,0,0,.42),0 0 0 4px rgba(110,191,245,.18)}
 .ephys-guide-overview-eyebrow{margin:0!important;color:#8bd6ff!important;font-size:12px!important;font-weight:850;letter-spacing:.13em;text-transform:uppercase}
 .ephys-guide-overview-card h2{margin:10px 0 10px!important;color:#fff!important;font-family:Georgia,serif;font-size:clamp(23px,2.5vw,29px);font-weight:700;line-height:1.18}
