@@ -21,8 +21,8 @@ const stages=[
   {title:"Accept the reviewed image",text:"After examining the available rejection choices, use Accept to mark the synthetic image ready for the next step."},
   {title:"Inspect different slices",text:"Drag a sagittal, coronal or axial slider to compare another raw/defaced slice position."},
   {title:"Open linked metadata",text:"Review the CoCANoT patient and imaging identifiers associated with the accepted example image."},
-  {title:"Edit linked metadata",text:"Change the synthetic imaging comment to practice correcting linked metadata."},
-  {title:"Save linked metadata",text:"Click Save Linked Metadata to keep the example change."},
+  {title:"Edit linked metadata",text:"Edit the JSON sidecar directly. Change the Comments string while keeping valid JSON syntax, the patient identifier, and the imaging identifier intact."},
+  {title:"Save linked metadata",text:"Click Save JSON Metadata to validate the JSON and save the synthetic sidecar. Invalid JSON must be corrected before continuing."},
   {title:"Proceed to Metadata & BIDS",text:"Click the highlighted Continue to Step 5 button. The guide will continue directly—there is no Explore this step detour."},
 ];
 export default function ImagingStep4Training({ImageReview,onComplete,onBack,guided=true}){
@@ -39,7 +39,10 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
   const [decision,setDecision]=useState("");
   const [sliderUsed,setSliderUsed]=useState(false);
   const [metadataOpen,setMetadataOpen]=useState(false);
-  const [comment,setComment]=useState("Synthetic preoperative MRI");
+  const [metadataJson,setMetadataJson]=useState(() => JSON.stringify({PatientID:"001",ImageID:"001",ClinicalAssessmentID:"003",Modality:"MRI",Sequence:"T1w",Comments:"Synthetic preoperative MRI"},null,2));
+  const [metadataError,setMetadataError]=useState("");
+  const initialComment="Synthetic preoperative MRI";
+  const editedMetadata=(()=>{try{const data=JSON.parse(metadataJson);return data && !Array.isArray(data) && typeof data==="object" && data.PatientID==="001" && data.ImageID==="001" && typeof data.Comments==="string" && data.Comments.trim()!=="" && data.Comments!==initialComment;}catch{return false;}})();
   const [metadataSaved,setMetadataSaved]=useState(false);
   useEffect(() => {
     if (stage !== 1 || !guided || guideDismissed) return undefined;
@@ -61,7 +64,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
   const safeHeaderEdit = choice === "descrip" && headerTyped && draft.trim().length > 0 && !/john\s+doe/i.test(draft);
   const targets=["step4-header-table","step4-header-input","step4-save-header","step4-image-viewer","step4-reject","step4-accept","imaging-review-sliders","step4-linked-open","step4-linked-comment","step4-linked-save","imaging-step4-continue"];
   const advance=()=>{ if(stage===0){setChoice("descrip");setDraft(rows.find(row=>row.name==="descrip")?.scrubbed||"");setHeaderTyped(false);} setStage(v=>Math.min(stages.length-1,v+1)); };
-  const canProceed= stage===0 || (stage===1&&safeHeaderEdit) || (stage===2&&headerSaved) || stage===3 || (stage===4&&rejectionExplored) || (stage===5&&decision==="Accepted") || (stage===6&&sliderUsed) || (stage===7&&metadataOpen) || (stage===8&&comment!=="Synthetic preoperative MRI") || (stage===9&&metadataSaved);
+  const canProceed= stage===0 || (stage===1&&safeHeaderEdit) || (stage===2&&headerSaved) || stage===3 || (stage===4&&rejectionExplored) || (stage===5&&decision==="Accepted") || (stage===6&&sliderUsed) || (stage===7&&metadataOpen) || (stage===8&&editedMetadata) || (stage===9&&metadataSaved);
   function setRejection(value){setDecision(value);setRejectOpen(false);setRejectionExplored(true);}
   return <div style={{display:"grid",gap:18}}>
     {guided && !guideDismissed && <TutorialSpotlight
@@ -135,12 +138,25 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
       <h3>Linked CoCANoT metadata</h3>
       <button type="button" data-tutorial-id="step4-linked-open" onClick={()=>setMetadataOpen(v=>!v)}>{metadataOpen?"Hide":"Review / Edit"} Linked Metadata</button>
       {metadataOpen&&<div style={{marginTop:14,display:"grid",gap:10}}>
-        <p>Patient ID: 001 · Imaging ID: 001 · Clinical Assessment ID: 003</p>
-        <label data-tutorial-id="step4-linked-comment" style={{display:"grid",gap:7}}>Imaging comment
-          <input value={comment} onChange={e=>{setComment(e.target.value);setMetadataSaved(false);}} style={{padding:10,border:"1px solid #aabdcf",borderRadius:7}}/>
+        <div style={{padding:"10px 14px",borderRadius:8,background:"#eef5fa",fontWeight:700,color:"#245879"}}>sub-001_T1w.json <span style={{fontWeight:400,fontSize:12}}>· Synthetic imaging JSON sidecar</span></div>
+        <label data-tutorial-id="step4-linked-comment" style={{display:"grid",gap:7}}>
+          <span>Editable JSON metadata</span>
+          <textarea aria-label="Edit linked imaging JSON metadata" spellCheck={false} rows={11} value={metadataJson}
+            onChange={event=>{setMetadataJson(event.target.value);setMetadataSaved(false);setMetadataError("");}}
+            style={{width:"100%",boxSizing:"border-box",padding:14,border:"1px solid #aabdcf",borderRadius:7,background:"#f9fcff",color:"#193650",fontFamily:"ui-monospace, SFMono-Regular, Consolas, monospace",fontSize:13,lineHeight:1.6,resize:"vertical"}}/>
         </label>
-        <button type="button" data-tutorial-id="step4-linked-save" onClick={()=>setMetadataSaved(true)}>Save Linked Metadata</button>
-        {metadataSaved&&<p style={{color:"#267045"}}>Synthetic linked metadata saved.</p>}
+        <p style={{fontSize:12,color:"#5c6c7b",margin:0}}>Change the Comments value. PatientID and ImageID are required identifiers in this exercise.</p>
+        <div><button type="button" data-tutorial-id="step4-linked-save" onClick={()=>{
+          try{
+            const value=JSON.parse(metadataJson);
+            if(!value || Array.isArray(value) || typeof value!=="object") throw new Error("The metadata must be a JSON object.");
+            if(value.PatientID!=="001" || value.ImageID!=="001") throw new Error("Preserve PatientID and ImageID for this synthetic image.");
+            if(typeof value.Comments!=="string" || !value.Comments.trim() || value.Comments===initialComment) throw new Error("Change Comments to a nonempty new value.");
+            setMetadataJson(JSON.stringify(value,null,2));setMetadataSaved(true);setMetadataError("");
+          }catch(error){setMetadataSaved(false);setMetadataError(error instanceof SyntaxError ? "Invalid JSON: "+error.message : error.message);}
+        }} style={{padding:"10px 14px",borderRadius:7,border:"1px solid #b5ccdb",background:"#fff",cursor:"pointer"}}>Save JSON Metadata</button></div>
+        {metadataError&&<p role="alert" style={{color:"#a03b28",margin:0}}>{metadataError}</p>}
+        {metadataSaved&&<p role="status" style={{color:"#267045",margin:0}}>Valid JSON saved in this synthetic tutorial session.</p>}
       </div>}
     </section>
     <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
