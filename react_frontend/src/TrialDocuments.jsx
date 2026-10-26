@@ -175,11 +175,11 @@ export default function TrialDocuments({ section, siteId }) {
       ))}
       <div className={styles.sectionTitle}>
         <h2>Activity history</h2>
-        <button onClick={() => setShowHistory(value => !value)} className={styles.historyButton}>
+        {!regulatory && <button onClick={() => setShowHistory(value => !value)} className={styles.historyButton}>
           <History size={16} /> {showHistory ? "Hide activity" : "Show activity"} ({events.length})
-        </button>
+        </button>}
       </div>
-      {showHistory && <div className={styles.card}>
+      {(regulatory || showHistory) && <div className={styles.card}>
         {!events.length ? <p>No activity recorded.</p> :
           events.map(item => <div className={styles.event} key={item.id}>
             <strong>{item.action}</strong> {item.title} · v{item.version}
