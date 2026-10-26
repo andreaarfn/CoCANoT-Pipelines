@@ -1200,7 +1200,7 @@ export default function ImagingDemo() {
             )}
 
             {step === 4 && (
-              <section className={`${styles.card} imaging-ref-stepCard ${tutorialEnabled && tutorialPhase === "overview" ? "imaging-guide-focus-step" : ""}`}>
+              <section className={`${styles.card} imaging-ref-stepCard`}>
                 <div className={`${styles.cardHeader} imaging-ref-dashboardHeader`}>
                   <div className="imaging-ref-stepNumber">4</div>
                   <div><strong>Review de-identification</strong><span>Review raw and scrubbed headers, image slices, decisions, and linked metadata.</span></div>
