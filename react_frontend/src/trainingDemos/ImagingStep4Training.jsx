@@ -55,7 +55,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
       key={`step4-${stage}-${rejectOpen}-${metadataOpen}`}
       enabled
       allowTargetInteraction
-      nonBlocking={stage === 1}
+      nonBlocking
       target={stage===4&&rejectOpen?"step4-reject-options":targets[stage]}
       title={current.title}
       text={current.text}
