@@ -9,6 +9,7 @@ import SiteTraining from "./SiteTraining";
 
 
 import HomeDashboard from "./HomeDashboard";
+import TrialHome from "./TrialHome";
 
 
 
@@ -974,64 +975,16 @@ export default function App() {
     content = <SiteTraining onNavigate={navigate} />;
   } else if (page === "data-capture") {
     content = (
-      <section style={{maxWidth:960,display:"grid",gap:18}}>
-        <h1 style={{color:"#123658",margin:0}}>Data Capture & Monitoring</h1>
-        <p style={{color:"#65778c",margin:0}}>Select a workflow to capture, de-identify, validate, or review clinical trial data.</p>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:15}}>
-          {[
-            ["Imaging","imaging","Process and review MRI and other imaging files"],
-            ["Electrophysiology","ephys","Process and review EEG recordings"],
-            ["Metadata","metadata-home","Manage clinical and surgical metadata"],
-            ["Patient Data Review","patient-review","Review linked patient records"]
-          ].map(([name,target,description])=>(
-            <button key={target} type="button" onClick={()=>navigate(target)} style={{textAlign:"left",background:"#fff",border:"1px solid #dbe5ee",borderRadius:12,padding:22,color:"#183955",cursor:"pointer"}}>
-              <strong style={{display:"block",fontSize:16,marginBottom:10}}>{name}</strong>
-              <span style={{fontSize:13,color:"#63778d"}}>{description}</span>
-            </button>
-          ))}
-        </div>
-      </section>
+      <HomeDashboard
+        onNavigate={navigate}
+        attentionItems={attentionItems}
+        attentionLoading={attentionLoading}
+        attentionError={attentionError}
+        onRefreshAttention={refreshAttention}
+      />
     );
   } else if (page === "home") {
-
-
-
-    content = (
-
-
-
-      <HomeDashboard
-
-
-
-        onNavigate={navigate}
-
-
-
-        attentionItems={attentionItems}
-
-
-
-        attentionLoading={attentionLoading}
-
-
-
-        attentionError={attentionError}
-
-
-
-        onRefreshAttention={refreshAttention}
-
-
-
-      />
-
-
-
-    );
-
-
-
+    content = <TrialHome onNavigate={navigate} />;
   } else if (page === "needs-attention") {
 
 
