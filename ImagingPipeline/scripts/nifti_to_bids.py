@@ -78,11 +78,9 @@ MRI_SEQUENCE_MAP = {
 
     "DWI": ("dwi", "dwi"),
 
-    # Core BIDS 1.11.1 does not define an SWI suffix. CoCANoT represents
+    # CoCANoT-specific SWI suffix; not a standard raw BIDS suffix.
 
-    # appropriately T2*-weighted SWI output as acq-swi_T2starw.
-
-    "SWI": ("anat", "T2starw"),
+    "SWI": ("anat", "SWI"),
 
 }
 
@@ -894,7 +892,7 @@ def validate_record(
 
         if sequence == "SWI":
 
-            record["bids_entities"]["acq"] = "swi"
+            record["bids_entities"].pop("acq", None)
 
 
 
