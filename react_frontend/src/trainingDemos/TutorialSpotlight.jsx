@@ -13,6 +13,9 @@ export default function TutorialSpotlight({
   step,
   totalSteps,
   onSkip,
+  onNext,
+  nextDisabled = false,
+  nextLabel = "Next",
 }) {
   const [rect, setRect] = useState(null);
 
@@ -90,11 +93,11 @@ export default function TutorialSpotlight({
       <aside className={styles.tooltip} style={tooltipStyle}>
         <div className={styles.tooltipTop}>
           <span>GUIDE · STEP {step} OF {totalSteps}</span>
-          <button type="button" onClick={onSkip} aria-label="Skip tutorial"><X size={15} /></button>
+          {onSkip && <button type="button" onClick={onSkip} aria-label="Skip tutorial"><X size={15} /></button>}
         </div>
         <strong>{title}</strong>
         <p>{text}</p>
-        <div className={styles.hint}>Click the highlighted area to continue</div>
+        {onNext ? <div style={{marginTop:12,display:"flex",alignItems:"center",gap:12}}><button type="button" disabled={nextDisabled} onClick={onNext} style={{border:0,borderRadius:18,padding:"8px 18px",background:"#1b5275",color:"white",fontWeight:700,opacity:nextDisabled?.45:1,cursor:nextDisabled?"not-allowed":"pointer"}}>{nextLabel} →</button>{nextDisabled && <span style={{fontSize:12}}>Complete the highlighted action first</span>}</div> : <div className={styles.hint}>Click the highlighted area to continue</div>}
       </aside>
     </>
   );
