@@ -1131,7 +1131,7 @@ export default function EphysDemo() {
                       try{const data=JSON.parse(sidecarText);
                         if(!data||typeof data!=="object"||Array.isArray(data))throw Error("The sidecar must be a JSON object.");
                         if(data.PatientID!=="001"||data.RecordingID!=="001")throw Error("Preserve PatientID and RecordingID.");
-                        if(typeof data.Comments!=="string"||!data.Comments.trim()||/john\\s+doe/i.test(data.Comments))throw Error("Remove John Doe from the Comments field before saving.");
+                        if(typeof data.Comments!=="string"||!data.Comments.trim()||/john\s+doe/i.test(data.Comments))throw Error("Remove John Doe from the Comments field before saving.");
                         setSavedSidecar(data);setSidecarText(JSON.stringify(data,null,2));setSidecarError("");
                       }catch(error){setSavedSidecar(null);setSidecarError(error.message||String(error));}
                     }}>Save JSON Metadata</button>
