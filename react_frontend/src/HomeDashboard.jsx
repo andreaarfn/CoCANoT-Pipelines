@@ -4,6 +4,7 @@ import {
   Brain,
   FileText,
   Users,
+  BookOpen,
 } from "lucide-react";
 import NeedsAttention from "./NeedsAttention";
 import styles from "./HomeDashboard.module.css";
@@ -23,6 +24,7 @@ export default function HomeDashboard({
         "Prepare DICOM and NIfTI imaging data, scrub metadata, review defacing, and create BIDS datasets.",
       icon: Brain,
       button: "Open Imaging",
+      tutorial: "imaging",
     },
     {
       key: "ephys",
@@ -31,6 +33,7 @@ export default function HomeDashboard({
         "Select EDF recordings, scrub identifying header information, review results, and convert accepted recordings to BIDS.",
       icon: Activity,
       button: "Open Electrophysiology",
+      tutorial: "electrophysiology",
     },
     {
       key: "metadata-home",
@@ -39,6 +42,7 @@ export default function HomeDashboard({
         "Manage clinical, surgical, imaging, and electrophysiology metadata using the active CoCANoT dictionary.",
       icon: FileText,
       button: "Open Metadata",
+      tutorial: "metadata",
     },
   ];
 
@@ -83,6 +87,10 @@ export default function HomeDashboard({
               <p>{card.description}</p>
               <button onClick={() => onNavigate(card.key)}>
                 <span>{card.button}</span>
+                <ArrowRight size={17} />
+              </button>
+              <button type="button" className={styles.tutorialButton} onClick={() => onNavigate("training-demo", { tutorial: card.tutorial })}>
+                <span><BookOpen size={16} /> Guided tutorial</span>
                 <ArrowRight size={17} />
               </button>
             </article>
