@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 
 import TutorialSpotlight from "./TutorialSpotlight";
+import EphysTrainingSignalViewer from "./EphysTrainingSignalViewer";
 
 import styles from "./LinkedPatientPreview.module.css";
 
@@ -238,6 +239,8 @@ export default function LinkedPatientPreview({
       {!imaging && <section className="linked-review-card" style={{marginBottom:18}}>
         <div className="linked-review-card-head"><strong>EDF annotations · Step 4</strong><span>Recording event positions</span></div>
         <div style={{padding:16,overflowX:"auto"}}>
+          <p style={{fontSize:12,color:"#536e83",margin:"0 0 12px"}}>Choose View on any annotation to jump directly to its time in the recording. The event is highlighted on the waveform below.</p>
+          <LinkedAnnotationSignal annotations={savedEphysReview?.scrubbedAnnotations||[]} />
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,textAlign:"left"}}>
             <thead><tr><th style={{padding:9}}>Onset (s)</th><th>Duration (s)</th><th>Scrubbed description</th></tr></thead>
             <tbody>{(savedEphysReview?.scrubbedAnnotations||[]).map((item,i)=><tr key={i} style={{borderTop:"1px solid #e4edf3"}}><td style={{padding:9}}>{item.onset}</td><td>{item.duration}</td><td>{item.description}</td></tr>)}</tbody>
@@ -342,6 +345,21 @@ export default function LinkedPatientPreview({
 
   );
 
+}
+
+function LinkedAnnotationSignal({annotations}){
+  const [selected,setSelected]=useState(null);
+  return <div style={{border:"1px solid #d3e4ef",borderRadius:10,padding:12,marginBottom:12,background:"#f8fbfe"}}>
+    <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",marginBottom:12}}>
+      <strong style={{fontSize:13}}>Annotation navigator</strong>
+      {annotations.map((annotation,i)=><button type="button" key={i} onClick={()=>setSelected({index:i,onset:Number(annotation.onset)})}
+        style={{padding:"7px 11px",border:"1px solid #bed3e3",borderRadius:7,background:selected?.index===i?"#d8edfc":"white",cursor:"pointer",fontSize:12}}>
+        View {Number(annotation.onset).toFixed(1)}s · {annotation.description||"Event"}
+      </button>)}
+    </div>
+    <EphysTrainingSignalViewer key={selected ? selected.index+"-"+selected.onset : "initial"} annotations={annotations} initialOnset={selected?.onset ?? 0} />
+    {selected&&<p role="status" style={{fontSize:12,color:"#235c80"}}>Viewing annotation at {selected.onset.toFixed(2)} seconds. Orange marker indicates the saved event.</p>}
+  </div>;
 }
 
 function MetadataSummary({ title, recordLabel, rows }) {
