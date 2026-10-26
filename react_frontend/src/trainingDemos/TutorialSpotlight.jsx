@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
+import { createPortal } from "react-dom";
 import styles from "./TutorialSpotlight.module.css";
 
 const PAD = 8;
@@ -78,7 +79,7 @@ export default function TutorialSpotlight({
 
   if (!enabled || !rect) return null;
 
-  return (
+  return createPortal(
     <>
       <div className={styles.blocker} style={{ top: 0, left: 0, right: 0, height: rect.top }} />
       <div className={styles.blocker} style={{ top: rect.top, left: 0, width: rect.left, height: rect.height }} />
@@ -99,6 +100,7 @@ export default function TutorialSpotlight({
         <p>{text}</p>
         {onNext ? <div style={{marginTop:12,display:"flex",alignItems:"center",gap:12}}><button type="button" disabled={nextDisabled} onClick={onNext} style={{border:0,borderRadius:18,padding:"8px 18px",background:"#1b5275",color:"white",fontWeight:700,opacity:nextDisabled?.45:1,cursor:nextDisabled?"not-allowed":"pointer"}}>{nextLabel} →</button>{nextDisabled && <span style={{fontSize:12}}>Complete the highlighted action first</span>}</div> : <div className={styles.hint}>Click the highlighted area to continue</div>}
       </aside>
-    </>
+    </>,
+    document.body
   );
 }
