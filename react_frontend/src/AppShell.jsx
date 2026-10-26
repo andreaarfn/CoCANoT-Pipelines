@@ -10,6 +10,11 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Users,
+  ClipboardCheck,
+  FileSignature,
+  ShieldCheck,
+  GraduationCap,
+  Database,
 } from "lucide-react";
 import styles from "./AppShell.module.css";
 
@@ -20,10 +25,10 @@ const LOGO_SRC = new URL(
 
 const NAV = [
   { key: "home", label: "Home", icon: Home },
-  { key: "imaging", label: "Imaging", icon: Brain },
-  { key: "ephys", label: "Electrophysiology", icon: Activity },
-  { key: "metadata", label: "Metadata", icon: FileText },
-  { key: "patient-review", label: "Patient Data Review", icon: Users },
+  { key: "contracts", label: "Contracts", icon: FileSignature },
+  { key: "regulatory", label: "Regulatory", icon: ShieldCheck },
+  { key: "site-training", label: "Site Initiation & Training", icon: GraduationCap },
+  { key: "data-capture", label: "Data Capture & Monitoring", icon: Database },
   { key: "needs-attention", label: "Needs Attention", icon: AlertTriangle },
 ];
 
@@ -46,26 +51,13 @@ export default function AppShell({
     );
   }, [collapsed]);
 
-  const activeMain =
-    page.startsWith("imaging")
-      ? "imaging"
-      : page.startsWith("ephys")
-        ? "ephys"
-        : page.startsWith("metadata")
-          ? "metadata"
-          : page;
+  const dataPages = ["imaging", "ephys", "metadata", "patient-review"];
+  const activeMain = dataPages.some(item => page === item || page.startsWith(item + "-"))
+    ? "data-capture"
+    : page;
 
   function go(key) {
-    const targets = {
-      home: "home",
-      imaging: "imaging",
-      ephys: "ephys",
-      metadata: "metadata-home",
-      "patient-review": "patient-review",
-      "needs-attention": "needs-attention",
-    };
-
-    onNavigate(targets[key]);
+    onNavigate(key === "data-capture" ? "data-capture" : key);
   }
 
   return (
@@ -165,72 +157,29 @@ export default function AppShell({
                     )}
                 </button>
 
-                {!collapsed &&
-                  item.key === "imaging" &&
-                  active && (
-                    <button
-                      className={`${styles.subItem} ${
-                        page === "imaging-processing"
-                          ? styles.subItemActive
-                          : ""
-                      }`}
-                      onClick={() =>
-                        onNavigate("imaging-processing")
-                      }
-                    >
-                      Process Imaging
-                    </button>
-                  )}
-
-                {!collapsed &&
-                  item.key === "ephys" &&
-                  active && (
-                    <button
-                      className={`${styles.subItem} ${
-                        page === "ephys-processing"
-                          ? styles.subItemActive
-                          : ""
-                      }`}
-                      onClick={() =>
-                        onNavigate("ephys-processing")
-                      }
-                    >
-                      Process Recordings
-                    </button>
-                  )}
-
-                {!collapsed &&
-                  item.key === "metadata" &&
-                  active && (
-                    <>
+                {!collapsed && item.key === "data-capture" && active && (
+                  <>
+                    {[
+                      ["imaging", "Imaging"],
+                      ["ephys", "Electrophysiology"],
+                      ["metadata-home", "Metadata"],
+                      ["patient-review", "Patient Data Review"],
+                    ].map(([target, label]) => (
                       <button
+                        key={target}
                         className={`${styles.subItem} ${
-                          page === "metadata-patients" ||
-                          page === "patient-review"
-                            ? styles.subItemActive
-                            : ""
+                          (target === "imaging" && page.startsWith("imaging")) ||
+                          (target === "ephys" && page.startsWith("ephys")) ||
+                          (target === "metadata-home" && page.startsWith("metadata")) ||
+                          page === target
+                            ? styles.subItemActive : ""
                         }`}
-                        onClick={() =>
-                          onNavigate("metadata-patients")
-                        }
-                      >
-                        Manage Patients
-                      </button>
+                        onClick={() => onNavigate(target)}
+                      >{label}</button>
+                    ))}
+                  </>
+                )}
 
-                      <button
-                        className={`${styles.subItem} ${
-                          page === "metadata-bulk"
-                            ? styles.subItemActive
-                            : ""
-                        }`}
-                        onClick={() =>
-                          onNavigate("metadata-bulk")
-                        }
-                      >
-                        Bulk Upload
-                      </button>
-                    </>
-                  )}
               </div>
             );
           })}
