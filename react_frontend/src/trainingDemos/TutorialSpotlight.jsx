@@ -20,6 +20,7 @@ export default function TutorialSpotlight({
   allowTargetInteraction = false,
   nonBlocking = false,
   onFocusTarget,
+  onExplore,
 }) {
   const [rect, setRect] = useState(null);
 
@@ -119,6 +120,7 @@ export default function TutorialSpotlight({
         <strong>{title}</strong>
         {onFocusTarget && <button type="button" onClick={onFocusTarget} style={{marginTop:8,padding:"6px 10px",border:"1px solid #a6c9dd",borderRadius:7,background:"#edf7fc",color:"#194765",cursor:"pointer",fontWeight:650}}>Click to edit highlighted field</button>}
         <p>{text}</p>
+        {onExplore && <button type="button" onClick={onExplore} style={{marginTop:12,padding:"9px 14px",border:"1px solid #a7c3d5",borderRadius:9,background:"#eef6fb",color:"#194765",cursor:"pointer",fontWeight:700}}>Explore this step</button>}
         {onNext ? <div style={{marginTop:12,display:"flex",alignItems:"center",gap:12}}><button type="button" disabled={nextDisabled} onClick={onNext} style={{border:0,borderRadius:18,padding:"8px 18px",background:"#1b5275",color:"white",fontWeight:700,opacity:nextDisabled?.45:1,cursor:nextDisabled?"not-allowed":"pointer"}}>{nextLabel} →</button>{nextDisabled && <span style={{fontSize:12}}>Complete the highlighted action first</span>}</div> : <div className={styles.hint}>Click the highlighted area to continue</div>}
       </aside>
     </>,
