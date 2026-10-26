@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import TutorialSpotlight from "./TutorialSpotlight";
 
@@ -39,6 +39,11 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
   const [metadataOpen,setMetadataOpen]=useState(false);
   const [comment,setComment]=useState("Synthetic preoperative MRI");
   const [metadataSaved,setMetadataSaved]=useState(false);
+  useEffect(() => {
+    if (stage !== 1 || !guided) return undefined;
+    const timer = window.setTimeout(() => document.querySelector('[data-tutorial-id="step4-header-input"]')?.focus(), 120);
+    return () => window.clearTimeout(timer);
+  }, [stage, guided]);
   const current=stages[stage];
   const safeHeaderEdit = choice === "descrip" && headerTyped && draft.trim().length > 0 && !/john\\s+doe/i.test(draft);
   const targets=["step4-header-table","step4-header-input","step4-save-header","step4-image-viewer","step4-reject","step4-accept","imaging-review-sliders","step4-linked-open","step4-linked-comment","step4-linked-save","imaging-step4-continue"];
@@ -50,6 +55,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
       key={`step4-${stage}-${rejectOpen}-${metadataOpen}`}
       enabled
       allowTargetInteraction
+      nonBlocking={stage === 1}
       target={stage===4&&rejectOpen?"step4-reject-options":targets[stage]}
       title={current.title}
       text={current.text}
