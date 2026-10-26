@@ -129,6 +129,7 @@ export default function LinkedPatientPreview({
   onViewerTourExit,
   linkedMetadata,
   onSaveLinkedMetadata,
+  savedEphysReview,
 
 }) {
 
@@ -222,6 +223,31 @@ export default function LinkedPatientPreview({
 
       )}
 
+      {!imaging && <section className="linked-review-card" style={{marginBottom:18}}>
+        <div className="linked-review-card-head"><strong>Saved EDF header comparison · Step 4</strong><span>Raw versus scrubbed</span></div>
+        <div style={{padding:16,overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,textAlign:"left"}}>
+            <thead><tr><th style={{padding:9}}>EDF field</th><th>Raw value</th><th>Scrubbed value</th></tr></thead>
+            <tbody>{(savedEphysReview?.rawHeader||[]).map(([field,raw])=><tr key={field} style={{borderTop:"1px solid #e4edf3"}}>
+              <td style={{padding:9,fontWeight:650}}>{field}</td><td>{raw}</td><td>{savedEphysReview?.scrubbedHeader?.find(([name])=>name===field)?.[1]??"—"}</td>
+            </tr>)}</tbody>
+          </table>
+          {!savedEphysReview?.rawHeader?.length&&<p>No saved EDF header review is available.</p>}
+        </div>
+      </section>}
+      {!imaging && <section className="linked-review-card" style={{marginBottom:18}}>
+        <div className="linked-review-card-head"><strong>EDF annotations · Step 4</strong><span>Recording event positions</span></div>
+        <div style={{padding:16,overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,textAlign:"left"}}>
+            <thead><tr><th style={{padding:9}}>Onset (s)</th><th>Duration (s)</th><th>Scrubbed description</th></tr></thead>
+            <tbody>{(savedEphysReview?.scrubbedAnnotations||[]).map((item,i)=><tr key={i} style={{borderTop:"1px solid #e4edf3"}}><td style={{padding:9}}>{item.onset}</td><td>{item.duration}</td><td>{item.description}</td></tr>)}</tbody>
+          </table>
+        </div>
+      </section>}
+      {!imaging && <section className="linked-review-card" style={{marginBottom:18}}>
+        <div className="linked-review-card-head"><strong>Linked EDF JSON sidecar · Step 4</strong><span>sub-001_task-rest_eeg.json</span></div>
+        <pre style={{margin:16,padding:16,overflowX:"auto",background:"#f3f8fb",borderRadius:9,fontSize:12,lineHeight:1.6,color:"#183c54"}}>{savedEphysReview?.sidecar ? JSON.stringify(savedEphysReview.sidecar,null,2) : "No JSON metadata was saved in Step 4."}</pre>
+      </section>}
       {imaging ? (
         <MetadataSummary title="Linked metadata" recordLabel="Image record 001" rows={displayMetadata} />
       ) : (
