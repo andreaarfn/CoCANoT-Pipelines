@@ -4,9 +4,9 @@ const DURATION=600;
 const WINDOW=10;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const secs=v=>Number(v).toFixed(2)+"s";
-export default function EphysTrainingSignalViewer({annotations,onChooseTime,onChangeWindow}){
- const [start,setStart]=useState(310);
- const [cursor,setCursor]=useState(315);
+export default function EphysTrainingSignalViewer({annotations = [],onChooseTime,onChangeWindow,initialOnset = 315}){
+ const [start,setStart]=useState(clamp(Number(initialOnset)-5,0,DURATION-WINDOW));
+ const [cursor,setCursor]=useState(clamp(Number(initialOnset),0,DURATION));
  const [scale,setScale]=useState(1);
  const paths=useMemo(()=>CHANNELS.map((_,ch)=>{
   const arr=[];for(let i=0;i<=900;i++){const t=start+(i/900)*WINDOW;const v=Math.sin(t*10+ch*2.1)*5+Math.sin(t*22+ch*0.7)*3+Math.sin(t*4+ch)*7;const event=Math.exp(-Math.pow((t-320.7)/0.24,2))*Math.sin(t*44+ch)*22;arr.push((i===0?"M":"L")+i.toFixed(1)+","+(40+ch*65+(v+event)*scale).toFixed(1));}return arr.join(" ");
