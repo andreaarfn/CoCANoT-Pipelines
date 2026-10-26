@@ -332,6 +332,9 @@ export default function EphysDemo() {
   const [rawAnnotations] = useState([{ onset: 0, duration: 4, description: "Recording start" }, { onset: 320, duration: 8, description: "Jamie Example seizure event" }]);
   const [scrubbedAnnotations, setScrubbedAnnotations] = useState([{ onset: 0, duration: 4, description: "Recording start" }, { onset: 320, duration: 8, description: "[removed] seizure event" }]);
   const [annotationsSaved, setAnnotationsSaved] = useState(false);
+  const [sidecarText, setSidecarText] = useState(() => JSON.stringify({PatientID:"001",RecordingID:"001",Modality:"EEG",SamplingFrequency:256,RecordingDuration:600,Comments:"John Doe - synthetic EEG recording"},null,2));
+  const [savedSidecar, setSavedSidecar] = useState(null);
+  const [sidecarError, setSidecarError] = useState("");
   const [annotationCursor, setAnnotationCursor] = useState(315);
   const [viewerExplored, setViewerExplored] = useState(false);
   const [annotationAdded, setAnnotationAdded] = useState(false);
@@ -769,7 +772,7 @@ export default function EphysDemo() {
         )}
         
         <div data-tutorial-id="ephys-linked-review-content" className={tutorialEnabled && linkedTutorialStarted && !linkedTutorialActive && !linkedExploring ? "ephys-guide-focus-step" : ""}>
-          <LinkedPatientPreview type="ephys" linkedMetadata={metadata} onSaveLinkedMetadata={(next) => {setMetadata(next); setMetadataSaved(true);}} startViewerTour={linkedTutorialActive} onViewerTourExit={() => setLinkedTutorialActive(false)} onBack={() => {setShowLinkedRecord(false);setLinkedTutorialActive(false);setLinkedTutorialStarted(false);}} />
+          <LinkedPatientPreview type="ephys" linkedMetadata={metadata} savedEphysReview={{rawHeader:RAW_HEADER,scrubbedHeader,rawAnnotations,scrubbedAnnotations,sidecar:savedSidecar,reviewStatus}} onSaveLinkedMetadata={(next) => {setMetadata(next); setMetadataSaved(true);}} startViewerTour={linkedTutorialActive} onViewerTourExit={() => setLinkedTutorialActive(false)} onBack={() => {setShowLinkedRecord(false);setLinkedTutorialActive(false);setLinkedTutorialStarted(false);}} />
         </div>
       </div>
       ) : (
@@ -1120,6 +1123,21 @@ export default function EphysDemo() {
                       <div><div className="ephys-annotation-heading"><h3>Scrubbed EDF annotations</h3><button data-tutorial-id="ephys-training-add-annotation" className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>[...v,{onset:annotationCursor,duration:0,description:"New event"}]);setAnnotationsSaved(false);setAnnotationAdded(true);}}>Add</button></div>{scrubbedAnnotations.map((row,i)=><div className="ephys-edit-annotation" key={i}><input aria-label="Onset" type="number" value={row.onset} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,onset:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Duration" type="number" value={row.duration} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,duration:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Description" value={row.description} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,description:e.target.value}:r));setAnnotationsSaved(false);}}/><button className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>v.filter((_,j)=>i!==j));setAnnotationsSaved(false);}}>Remove</button></div>)}</div>
                     </div>{annotationsSaved && <p className="ephys-success">✓ Scrubbed EDF edits saved in this demonstration.</p>}
                   </div>
+                  <section style={{marginTop:18,padding:18,border:"1px solid #c9dce9",borderRadius:11,background:"#fff"}}>
+                    <h3 style={{fontSize:17,fontWeight:750,margin:"0 0 5px",color:"#234863"}}>Linked EDF JSON metadata · Step 4</h3>
+                    <p style={{fontSize:13,color:"#60788b",margin:"0 0 12px"}}>Synthetic sidecar: sub-001_task-rest_eeg.json. Remove the identifying name John Doe from Comments, then save valid JSON. The original recording is not changed.</p>
+                    <textarea aria-label="Edit synthetic EDF JSON metadata" value={sidecarText} onChange={event=>{setSidecarText(event.target.value);setSavedSidecar(null);setSidecarError("");}} spellCheck={false} rows={12} style={{display:"block",width:"100%",boxSizing:"border-box",padding:13,fontFamily:"ui-monospace,monospace",fontSize:13,lineHeight:1.6,border:"1px solid #afc6d6",borderRadius:8,color:"#243d52",background:"#f8fbfe"}}/>
+                    <button type="button" className="ephys-secondary" style={{marginTop:12}} onClick={()=>{
+                      try{const data=JSON.parse(sidecarText);
+                        if(!data||typeof data!=="object"||Array.isArray(data))throw Error("The sidecar must be a JSON object.");
+                        if(data.PatientID!=="001"||data.RecordingID!=="001")throw Error("Preserve PatientID and RecordingID.");
+                        if(typeof data.Comments!=="string"||!data.Comments.trim()||/john\\s+doe/i.test(data.Comments))throw Error("Remove John Doe from the Comments field before saving.");
+                        setSavedSidecar(data);setSidecarText(JSON.stringify(data,null,2));setSidecarError("");
+                      }catch(error){setSavedSidecar(null);setSidecarError(error.message||String(error));}
+                    }}>Save JSON Metadata</button>
+                    {sidecarError&&<p role="alert" style={{color:"#a93431",marginTop:9}}>{sidecarError}</p>}
+                    {savedSidecar&&<p role="status" style={{color:"#21784e",marginTop:9}}>✓ Synthetic JSON metadata saved.</p>}
+                  </section>
                   <div className="ephys-review-decision"><span>Review status: <strong>{reviewStatus}</strong></span><button className="ephys-secondary" onClick={()=>{setReviewStatus("Rejected - Not Included");setReviewed(false);}}>Reject & Exclude</button><button data-tutorial-id="ephys-review-accept" className="ephys-primary" disabled={!missedValueFixed} onClick={()=>{setReviewStatus("Accepted");setReviewed(true);remember({reviewed:true});}}>Accept</button></div>
                   <div className={styles.actions}>
 
