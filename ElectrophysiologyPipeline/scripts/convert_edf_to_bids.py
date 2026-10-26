@@ -1401,6 +1401,10 @@ def validate_record(
             metadata
 
         ),
+        # Retain the original scrubbed JSON through normalization; without
+        # this the exporter silently loses acquisition metadata.
+        "sidecar_metadata": dict(raw.get("sidecar_metadata") or {}),
+        "sidecar_path": str(raw.get("sidecar_path") or ""),
 
         "derivatives_root": str(
 
@@ -1470,6 +1474,10 @@ def build_bids_base(
     import re
     recording_id = str(record["cocanot_metadata"].get("Recording ID") or "").strip()
     safe_recording_id = re.sub(r"[^A-Za-z0-9]+", "", recording_id)
+    # Preserve the EPHYS-number identity while using the requested hyphen.
+    if safe_recording_id.upper().startswith("EPHYS"):
+        suffix = safe_recording_id[5:]
+        safe_recording_id = f"EPHYS-{suffix}" if suffix else "EPHYS"
     if not safe_recording_id:
         raise ValueError("Recording ID is required for electrophysiology export.")
     parts = [f"sub-{record['participant']}", safe_recording_id]
@@ -1516,6 +1524,21 @@ def choose_output_base(
         return base
 
 
+
+    # An existing export for the same patient and Recording ID is a
+    # replacement, not a second run. Never duplicate it automatically.
+    existing_json = data_dir / f"{base}.json"
+    if existing_json.is_file():
+        try:
+            existing_metadata = json.loads(existing_json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing_metadata = {}
+        identity = existing_metadata.get("CoCANoTMetadata", {}) if isinstance(existing_metadata, dict) else {}
+        new_identity = record["cocanot_metadata"]
+        if (isinstance(identity, dict)
+            and str(identity.get("CoCANoT Patient ID") or "").strip() == str(new_identity.get("CoCANoT Patient ID") or "").strip()
+            and str(identity.get("Recording ID") or "").strip() == str(new_identity.get("Recording ID") or "").strip()):
+            return base
 
     for run in range(
 
@@ -1765,6 +1788,13 @@ def copy_record(
 
 
     source_sidecar = record.get("sidecar_metadata") or {}
+    if record.get("sidecar_path"):
+        source_path = Path(record["sidecar_path"])
+        if source_path.is_file():
+            loaded_sidecar = json.loads(source_path.read_text(encoding="utf-8"))
+            if not isinstance(loaded_sidecar, dict):
+                raise ValueError(f"Invalid EDF acquisition JSON: {source_path}")
+            source_sidecar = {**loaded_sidecar, **source_sidecar}
     if not isinstance(source_sidecar, dict):
         raise ValueError("EDF sidecar metadata must be a JSON object.")
     # Preserve scrubbed/edited acquisition metadata, then standard EDF
