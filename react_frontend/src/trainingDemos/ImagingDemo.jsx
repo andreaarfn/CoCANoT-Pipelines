@@ -720,8 +720,8 @@ export default function ImagingDemo() {
   return (
     <div className="imaging-public-demo">
       <nav className="mb-5 flex flex-wrap items-center justify-between gap-3" aria-label="Demo navigation">
-        <button type="button" onClick={() => navigate(-1)} className="inline-flex items-center gap-2 text-sm font-semibold text-navy hover:underline">
-          <ArrowLeft size={16} aria-hidden="true" /> Back to CoCANoT Data
+        <button type="button" onClick={() => window.dispatchEvent(new Event("atlas-training-back"))} className="inline-flex items-center gap-2 text-sm font-semibold text-navy hover:underline">
+          <ArrowLeft size={16} aria-hidden="true" /> Back to Site Training
         </button>
         <button type="button" onClick={reset} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">
           Reset Demo
