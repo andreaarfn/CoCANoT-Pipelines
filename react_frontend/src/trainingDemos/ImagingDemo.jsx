@@ -306,6 +306,7 @@ export default function ImagingDemo() {
   const [tutorialRestartKey, setTutorialRestartKey] = useState(0);
 
   const [showLinkedRecord, setShowLinkedRecord] = useState(false);
+  const [savedImagingReview, setSavedImagingReview] = useState(null);
 
   const [linkedRecordVisited, setLinkedRecordVisited] = useState(false);
   const [linkedGuidePhase, setLinkedGuidePhase] = useState("idle");
@@ -902,6 +903,7 @@ export default function ImagingDemo() {
           <div data-tutorial-id="imaging-linked-review-content" className={linkedGuidePhase === "overview" ? "imaging-guide-focus-step" : ""}>
             <ImagingLinkedImageReview
               metadata={metadata}
+              savedReview={savedImagingReview}
               guided={linkedGuidePhase === "spotlight"}
               onGuideAction={(action) => {
                 if (action === "edit" && linkedGuideStep === 0) setLinkedGuideStep(1);
@@ -1209,6 +1211,7 @@ export default function ImagingDemo() {
                   <ImagingStep4Training
                     key={tutorialRestartKey}
                     ImageReview={ImagingNiftiReview}
+                    onSaveReview={setSavedImagingReview}
                     guided={tutorialEnabled}
                     onBack={() => go(3)}
                     onComplete={() => {setReviewed(true);remember({reviewed:true});go(5);}}
@@ -1780,7 +1783,7 @@ const LINKED_IMAGING_CSS = `
 @media(max-width:800px){.imaging-linked-review .linked-review-views{grid-template-columns:1fr;}.imaging-linked-review .linked-review-panel canvas{height:285px;}.imaging-linked-review .linked-review-editor{grid-template-columns:1fr;}}
 `;
 
-function ImagingLinkedImageReview({ metadata, onSaveMetadata, onBack, onGuideAction }) {
+function ImagingLinkedImageReview({ metadata, savedReview, onSaveMetadata, onBack, onGuideAction }) {
   const [volume, setVolume] = useState(null);
   const [error, setError] = useState('');
   const [slices, setSlices] = useState({ x: 0, y: 0, z: 0 });
@@ -1831,7 +1834,23 @@ function ImagingLinkedImageReview({ metadata, onSaveMetadata, onBack, onGuideAct
         <button type="button" className="linked-review-back" onClick={onBack}><ArrowLeft size={16}/> Back to Imaging Workflow</button>
       </div>
       <section className="linked-review-card">
-        <div className="linked-review-card-head"><strong>Linked metadata</strong><span>Image record {metadata.imageId}</span></div>
+        <div className="linked-review-card-head"><strong>Saved NIfTI header review · Step 4</strong><span>Raw and de-identified header values</span></div>
+        {savedReview?.headerRows?.length ? (
+          <div style={{overflowX:"auto",padding:16}}>
+            <table style={{width:"100%",borderCollapse:"collapse",textAlign:"left",fontSize:13}}>
+              <thead><tr><th style={{padding:9}}>Header field</th><th>Raw</th><th>Saved scrubbed</th></tr></thead>
+              <tbody>{savedReview.headerRows.map(row=><tr key={row.name} style={{borderTop:"1px solid #e1e9ef"}}><td style={{padding:9}}>{row.name}</td><td>{row.raw}</td><td>{row.scrubbed||"(removed)"}</td></tr>)}</tbody>
+            </table>
+            <p style={{fontSize:12,color:"#64778b",marginTop:12}}>These illustrative values reflect the header edits saved in the synthetic Step 4 review.</p>
+          </div>
+        ) : <p style={{padding:16}}>No Step 4 header edits were saved for this tutorial session.</p>}
+      </section>
+      <section className="linked-review-card">
+        <div className="linked-review-card-head"><strong>Saved imaging JSON sidecar · Step 4</strong><span>sub-001_T1w.json</span></div>
+        <pre style={{margin:16,padding:16,overflowX:"auto",borderRadius:8,background:"#f3f8fb",fontSize:12,lineHeight:1.6,color:"#1b405d"}}>{JSON.stringify(savedReview?.sidecar ?? {},null,2)}</pre>
+      </section>
+      <section className="linked-review-card">
+        <div className="linked-review-card-head"><strong>CoCANoT imaging metadata · Step 5</strong><span>Image record {metadata.imageId}</span></div>
         {editing ? (
           <div className="linked-review-editor" data-tutorial-id="imaging-linked-metadata-editor">
             {[
