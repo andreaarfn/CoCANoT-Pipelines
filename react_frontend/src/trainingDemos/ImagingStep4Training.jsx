@@ -61,15 +61,28 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
     <section style={{border:"1px solid #d7e5ef",borderRadius:12,padding:20,background:"white"}}>
       <h3>Raw header versus scrubbed header</h3>
       <p>Example fields extracted from a synthetic NIfTI header. Values here are illustrative, not extracted from the sample volume.</p>
-      <div data-tutorial-id="step4-header-table" style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",textAlign:"left"}}>
+      <div data-tutorial-id="step4-header-table" style={{overflowX:"auto",position:stage===1?"relative":undefined,zIndex:stage===1?2002:undefined,background:stage===1?"white":undefined}}><table style={{width:"100%",borderCollapse:"collapse",textAlign:"left"}}>
         <thead><tr><th>Field</th><th>Raw value</th><th>Scrubbed value</th><th>Editable</th></tr></thead>
-        <tbody>{rows.map(row=><tr key={row.name} onClick={()=>{if(row.editable){setChoice(row.name);setDraft(row.scrubbed);setHeaderTyped(false);setHeaderSaved(false);}}} style={{cursor:row.editable?"pointer":"default",background:choice===row.name?"#e9f4fd":"transparent"}}>
-          <td style={{padding:10}}>{row.name}</td><td>{row.raw}</td><td>{row.scrubbed||"(removed)"}</td><td>{row.editable?"Yes":"Protected"}</td>
+        <tbody>{rows.map(row=><tr key={row.name} style={{background:choice===row.name?"#e9f4fd":"transparent"}}>
+          <td style={{padding:10}}>{row.name}</td>
+          <td>{row.raw}</td>
+          <td style={{minWidth:230}}>
+            {row.name==="descrip" ? (
+              <input aria-label="Scrubbed header value for descrip" data-tutorial-id="step4-header-input" type="text"
+                value={choice==="descrip"?draft:row.scrubbed}
+                onFocus={()=>{if(choice!=="descrip"){setChoice("descrip");setDraft(row.scrubbed);setHeaderTyped(false);}}}
+                onChange={event=>{setChoice("descrip");setDraft(event.target.value);setHeaderTyped(true);setHeaderSaved(false);}}
+                style={{width:"100%",boxSizing:"border-box",padding:"9px 10px",border:"1px solid #aabdcf",borderRadius:6,background:"white",color:"#172f48"}}
+              />
+            ) : row.editable ? (
+              <button type="button" onClick={()=>{setChoice(row.name);setDraft(row.scrubbed);setHeaderTyped(false);setHeaderSaved(false);}} style={{background:"transparent",border:0,textAlign:"left",cursor:"pointer",padding:5,color:"inherit"}}>
+                {choice===row.name?draft:(row.scrubbed||"(removed)")}
+              </button>
+            ) : row.scrubbed}
+          </td>
+          <td>{row.editable?"Yes":"Protected"}</td>
         </tr>)}</tbody>
       </table></div>
-      <label style={{display:"grid",gap:7,marginTop:14}}>Scrubbed value for {choice}
-        <input data-tutorial-id="step4-header-input" value={draft} onChange={e=>{setDraft(e.target.value);setHeaderTyped(true);setHeaderSaved(false);}} disabled={!rows.find(r=>r.name===choice)?.editable} style={{padding:10,border:"1px solid #aabdcf",borderRadius:7}}/>
-      </label>
       {choice === "descrip" && !safeHeaderEdit && <p role="status" style={{fontSize:13,color:"#8b402c"}}>Type a replacement scrubbed value without “John Doe” to enable saving and continue the guide.</p>}
       <button type="button" data-tutorial-id="step4-save-header" disabled={!safeHeaderEdit} onClick={()=>{setRows(old=>old.map(r=>r.name===choice?{...r,scrubbed:draft}:r));setHeaderSaved(true);}} style={{marginTop:12,padding:10,opacity:safeHeaderEdit?1:.5}}>Save Header Edit</button>
       {headerSaved&&<span role="status" style={{marginLeft:12,color:"#267045"}}><Check size={16}/> Example edit saved</span>}
