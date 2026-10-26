@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { FileImage, FolderOpen, Folder, ArrowLeft, X, Check } from "lucide-react";
 
 import TutorialSpotlight from "./TutorialSpotlight";
+import ImagingStep4Training from "./ImagingStep4Training";
 
 
 import { DEMO_FILES } from "./demoData";
@@ -957,7 +958,7 @@ export default function ImagingDemo() {
               }}
             />
           )}
-          {tutorialEnabled && tutorialPhase === "spotlight" && stepActionsFinished && !exploreAcknowledged[step] && !finderMode && !outputFinderKind && (
+          {step !== 4 && tutorialEnabled && tutorialPhase === "spotlight" && stepActionsFinished && !exploreAcknowledged[step] && !finderMode && !outputFinderKind && (
             <SpotlightExploreLink
               guideTitle={tutorial?.title}
               onExplore={() => {
@@ -968,7 +969,7 @@ export default function ImagingDemo() {
           )}
           <TutorialSpotlight
             key={`${step}-${tutorialRestartKey}`}
-            enabled={tutorialEnabled && tutorialPhase === "spotlight" && Boolean(tutorial) && !finderMode && !outputFinderKind}
+            enabled={step !== 4 && tutorialEnabled && tutorialPhase === "spotlight" && Boolean(tutorial) && !finderMode && !outputFinderKind}
             target={tutorial?.target}
             title={tutorial?.title}
             text={tutorial?.text}
@@ -1202,27 +1203,16 @@ export default function ImagingDemo() {
               <section className={`${styles.card} imaging-ref-stepCard ${tutorialEnabled && tutorialPhase === "overview" ? "imaging-guide-focus-step" : ""}`}>
                 <div className={`${styles.cardHeader} imaging-ref-dashboardHeader`}>
                   <div className="imaging-ref-stepNumber">4</div>
-                  <div>
-                    <strong>Review de-identification</strong>
-                    <span>Compare the original NIfTI volume with its PyDeface-processed result.</span>
-                  </div>
+                  <div><strong>Review de-identification</strong><span>Review raw and scrubbed headers, image slices, decisions, and linked metadata.</span></div>
                 </div>
-                <div className={`${styles.body} imaging-ref-dashboardBody`}>
-                  <ImagingNiftiReview />
-                  <div className={styles.actions}>
-                    <button className={styles.secondary} onClick={() => go(3)}>Back</button>
-                    <button
-                      data-tutorial-id="imaging-accept"
-                      className={styles.primary}
-                      onClick={() => {
-                        setReviewed(true);
-                        remember({ reviewed: true });
-                        go(5);
-                      }}
-                    >
-                      Accept Reviewed Image
-                    </button>
-                  </div>
+                <div className={styles.body}>
+                  <ImagingStep4Training
+                    key={tutorialRestartKey}
+                    ImageReview={ImagingNiftiReview}
+                    guided={tutorialEnabled}
+                    onBack={() => go(3)}
+                    onComplete={() => {setReviewed(true);remember({reviewed:true});go(5);}}
+                  />
                 </div>
               </section>
             )}
