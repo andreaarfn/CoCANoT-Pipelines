@@ -14,7 +14,7 @@ export default function DemoShell({
   function returnToPlatformSection(event) {
     event.preventDefault();
 
-    window.location.assign("/data#cocanot-demo-section");
+    window.dispatchEvent(new Event("atlas-training-back"));
   }
 
   return (
@@ -27,7 +27,7 @@ export default function DemoShell({
             onClick={returnToPlatformSection}
           >
             <ArrowLeft size={16} />
-            Back to CoCANoT Data
+            Back to Site Training
           </a>
 
           <button type="button" className={styles.reset} onClick={onReset}>
