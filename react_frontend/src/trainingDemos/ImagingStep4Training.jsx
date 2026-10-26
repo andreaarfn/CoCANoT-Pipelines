@@ -14,7 +14,7 @@ const fields = [
 ];
 const stages=[
   {title:"Inspect the extracted NIfTI header",text:"CoCANoT extracts the available header fields and displays their original values beside the scrubbed values. Compare both columns to check for residual identifiers."},
-  {title:"Edit a safe header field",text:"Click the editable descrip row, then use your keyboard to remove John Doe from the scrubbed value. The raw value is preserved for comparison. Structural fields are protected to prevent corruption."},
+  {title:"Edit a safe header field",text:"The descrip field is selected below. Click the highlighted text box and use your keyboard to remove John Doe from the scrubbed value. Keep a meaningful description such as Patient Name: De-identified MRI. The raw value stays unchanged."},
   {title:"Save the scrubbed header edit",text:"After removing John Doe from the scrubbed description, click Save Header Edit. The raw header remains unchanged; this demonstration saves only in synthetic tutorial state."},
   {title:"Compare raw and PyDeface images",text:"The upper row shows the raw sagittal, coronal and axial slices. The lower row shows the corresponding output from PyDeface. Compare anatomy and facial removal."},
   {title:"Explore rejection and replacement",text:"Click Reject to see three options: exclude the image, put it on hold pending a replacement, or select an external defaced replacement. These are simulated decisions."},
@@ -41,15 +41,15 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
   const [metadataSaved,setMetadataSaved]=useState(false);
   const current=stages[stage];
   const safeHeaderEdit = choice === "descrip" && headerTyped && draft.trim().length > 0 && !/john\\s+doe/i.test(draft);
-  const targets=["step4-header-table","step4-header-table","step4-save-header","step4-image-viewer","step4-reject","step4-accept","imaging-review-sliders","step4-linked-open","step4-linked-comment","step4-linked-save","imaging-step4-continue"];
-  const advance=()=>setStage(v=>Math.min(stages.length-1,v+1));
+  const targets=["step4-header-table","step4-header-input","step4-save-header","step4-image-viewer","step4-reject","step4-accept","imaging-review-sliders","step4-linked-open","step4-linked-comment","step4-linked-save","imaging-step4-continue"];
+  const advance=()=>{ if(stage===0){setChoice("descrip");setDraft(rows.find(row=>row.name==="descrip")?.scrubbed||"");setHeaderTyped(false);} setStage(v=>Math.min(stages.length-1,v+1)); };
   const canProceed= stage===0 || (stage===1&&safeHeaderEdit) || (stage===2&&headerSaved) || stage===3 || (stage===4&&rejectionExplored) || (stage===5&&decision==="Accepted") || (stage===6&&sliderUsed) || (stage===7&&metadataOpen) || (stage===8&&comment!=="Synthetic preoperative MRI") || (stage===9&&metadataSaved);
   function setRejection(value){setDecision(value);setRejectOpen(false);setRejectionExplored(true);}
   return <div style={{display:"grid",gap:18}}>
     {guided && <TutorialSpotlight
       key={`step4-${stage}-${rejectOpen}-${metadataOpen}`}
       enabled
-      target={stage===4&&rejectOpen?"step4-reject-options":stage===1&&choice==="descrip"?"step4-header-input":targets[stage]}
+      target={stage===4&&rejectOpen?"step4-reject-options":targets[stage]}
       title={current.title}
       text={current.text}
       step={stage+1}
