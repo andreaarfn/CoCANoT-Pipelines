@@ -352,6 +352,7 @@ export default function EphysDemo() {
   const [linkedTutorialKey, setLinkedTutorialKey] = useState(0);
 
   const [selected, setSelected] = useState(false);
+  const [selectedDataExpanded, setSelectedDataExpanded] = useState(false);
 
   const [scrub, setScrub] = useState("not_started");
 
@@ -405,6 +406,8 @@ export default function EphysDemo() {
       };
 
     }
+
+    if (step === 1 && selected && !selectedDataExpanded) return {target:"ephys-view-selected-data",title:"View the selected recording",text:"Click View Selected Data to expand the list and confirm which EDF recording was selected."};
 
     if (step === 1 && selected) {
 
@@ -480,8 +483,8 @@ export default function EphysDemo() {
           : "Compare raw and scrubbed headers, then select Edit missed value in the recording_notes row.",
       };
     }
-    if (step === 4 && !viewerExplored) return {target:"ephys-training-signal",title:"Explore the EEG recording",text:"Navigate the 10-second EEG windows, then click a point on the signal to choose the onset time for an annotation. The green line marks the selected position."};
-    if (step === 4 && !annotationAdded) return {target:"ephys-training-add-annotation",title:"Add an annotation at the selected time",text:"Click Add to create an annotation at the time you selected on the EEG. Its marker appears on the waveform. Edit the onset, duration, or description below."};
+    if (step === 4 && !viewerExplored) return {target:"ephys-training-signal",title:"Explore the EEG recording",text:"Navigate the 10-second EEG windows, then click a waveform to automatically create an annotation at that time. The marker appears on the recording and in the editor below."};
+    if (step === 4 && !annotationAdded) return {target:"ephys-training-signal",title:"Add an annotation on the recording",text:"Click directly on the synthetic EEG waveform to create an annotation at that time. The event appears automatically below, where you can edit its start, duration, and comment."};
     if (step === 4 && !reviewed) {
       return {
         target: "ephys-review-accept",
@@ -556,6 +559,7 @@ export default function EphysDemo() {
     step,
 
     selected,
+    selectedDataExpanded,
     derivativesFolder,
     finalFolder,
     folderSettingsSaved,
@@ -846,7 +850,7 @@ export default function EphysDemo() {
                       </div>
                     </div>
                   </div>
-                  <div className="ephys-selection-summary"><Database size={26}/><div><strong>Selected data</strong><span>{selected ? "1 source · 1 EDF file selected" : "0 sources · 0 EDF files selected"}</span></div><details><summary>View Selected Data</summary><div className="ephys-selected-details">{selected ? <label><input type="checkbox" checked={selected} onChange={event => setSelected(event.target.checked)}/> {selectedSource} · sampleRecording.edf</label> : "No recordings selected."}</div></details></div>
+                  <div className="ephys-selection-summary"><Database size={26}/><div><strong>Selected data</strong><span>{selected ? "1 source · 1 EDF file selected" : "0 sources · 0 EDF files selected"}</span></div><details onToggle={event=>setSelectedDataExpanded(event.currentTarget.open)}><summary data-tutorial-id="ephys-view-selected-data">View Selected Data</summary><div className="ephys-selected-details">{selected ? <label><input type="checkbox" checked={selected} onChange={event => setSelected(event.target.checked)}/> {selectedSource} · sampleRecording.edf</label> : "No recordings selected."}</div></details></div>
                   <div className="ephys-actions"><button className="ephys-primary" data-tutorial-id="ephys-continue-1" disabled={!selected} onClick={()=>go(2)}>Continue to Output Folders →</button></div>
                 </div>
               </section>
@@ -1123,16 +1127,16 @@ export default function EphysDemo() {
                   <div className="ephys-annotation-review">
                     <div style={{padding:"16px 18px 5px"}}>
                       <h3 style={{margin:"0 0 8px",fontSize:18,color:"#214b6b"}}>EDF recording · Visual annotation placement</h3>
-                      <p style={{fontSize:13,color:"#53728b",margin:"0 0 10px"}}>Click on the EEG trace to choose an annotation time, then select Add below. The orange markers show annotations on the same timeline.</p>
+                      <p style={{fontSize:13,color:"#53728b",margin:"0 0 10px"}}>Click the EEG waveform to add an annotation immediately. Orange markers appear on the recording, and new annotations appear in the editor below.</p>
                       <EphysTrainingSignalViewer
                         annotations={scrubbedAnnotations}
-                        onChooseTime={value=>{setAnnotationCursor(value);setViewerExplored(true);}}
+                        onChooseTime={value=>{setAnnotationCursor(value);setViewerExplored(true);setScrubbedAnnotations(current=>[...current,{onset:value,duration:0,description:"New event"}]);setAnnotationsSaved(false);setAnnotationAdded(true);}}
                         onChangeWindow={()=>setViewerExplored(true)}
                       />
                     </div>
-                    <div className="ephys-annotation-heading"><div><strong>Annotations</strong><p>Navigate the recording above, click a waveform to set the event time, then click Add. Annotations appear as markers on the timeline and can be edited below.</p></div><button className="ephys-secondary" onClick={()=>setAnnotationsSaved(true)}><Save size={15}/> Save Scrubbed EDF</button></div>
-                    <div className="ephys-annotation-grid"><div><h3>Raw EDF annotations</h3>{rawAnnotations.map((row,i)=><div className="ephys-raw-annotation" key={i}><span>{row.onset}s</span><span>{row.duration}s</span><span>{row.description}</span></div>)}</div>
-                      <div><div className="ephys-annotation-heading"><h3>Scrubbed EDF annotations</h3><button data-tutorial-id="ephys-training-add-annotation" className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>[...v,{onset:annotationCursor,duration:0,description:"New event"}]);setAnnotationsSaved(false);setAnnotationAdded(true);}}>Add</button></div>{scrubbedAnnotations.map((row,i)=><div className="ephys-edit-annotation" key={i}><input aria-label="Onset" type="number" value={row.onset} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,onset:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Duration" type="number" value={row.duration} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,duration:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Description" value={row.description} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,description:e.target.value}:r));setAnnotationsSaved(false);}}/><button className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>v.filter((_,j)=>i!==j));setAnnotationsSaved(false);}}>Remove</button></div>)}</div>
+                    <div className="ephys-annotation-heading"><div><strong>Annotations</strong><p>Click the waveform above to add an annotation automatically. Edit its start time, duration, or comment below; the waveform updates with the event.</p></div><button className="ephys-secondary" onClick={()=>setAnnotationsSaved(true)}><Save size={15}/> Save Scrubbed EDF</button></div>
+                    <div className="ephys-annotation-grid"><div><h3>Raw EDF annotations</h3><div className="ephys-annotation-column-labels"><span>Start time (seconds)</span><span>Duration (seconds)</span><span>Comments</span></div>{rawAnnotations.map((row,i)=><div className="ephys-raw-annotation" key={i}><span>{row.onset}s</span><span>{row.duration}s</span><span>{row.description}</span></div>)}</div>
+                      <div><div className="ephys-annotation-heading"><h3>Scrubbed EDF annotations</h3><button data-tutorial-id="ephys-training-add-annotation" className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>[...v,{onset:annotationCursor,duration:0,description:"New event"}]);setAnnotationsSaved(false);setAnnotationAdded(true);}}>Add</button></div><div className="ephys-annotation-column-labels ephys-edit-labels"><span>Start time (seconds)</span><span>Duration (seconds)</span><span>Comments</span><span>Action</span></div>{scrubbedAnnotations.map((row,i)=><div className="ephys-edit-annotation" key={i}><input aria-label="Start time (seconds)" type="number" value={row.onset} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,onset:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Duration (seconds)" type="number" value={row.duration} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,duration:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Annotation comments" value={row.description} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,description:e.target.value}:r));setAnnotationsSaved(false);}}/><button className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>v.filter((_,j)=>i!==j));setAnnotationsSaved(false);}}>Remove</button></div>)}</div>
                     </div>{annotationsSaved && <p className="ephys-success">✓ Scrubbed EDF edits saved in this demonstration.</p>}
                   </div>
                   <section style={{marginTop:18,padding:18,border:"1px solid #c9dce9",borderRadius:11,background:"#fff"}}>
@@ -1806,6 +1810,7 @@ const EPHYS_PUBLIC_CSS = `
 .ephys-info-strip{margin:0;padding:10px 12px;border:1px solid #dce5ec;border-radius:8px;background:#f7fafc;color:#61778b;font-size:12px;line-height:1.5}.ephys-success{padding:10px 12px;margin:12px 0 0;border:1px solid #bfd9c9;border-radius:8px;background:#fbfefc;color:#2f7754;font-size:12px;font-weight:750}
 .ephys-overwrite{display:flex;gap:8px;align-items:center;margin:16px 0;color:#61778b;font-size:12px}.ephys-status{overflow:hidden;margin-top:16px;border:1px solid #d7e1e9;border-radius:10px;background:white}.ephys-status>div{display:grid;gap:3px;padding:12px 14px}.ephys-status strong{font-size:12px}.ephys-status span{font-size:11px;color:#718496}.ephys-status pre{max-height:220px;overflow:auto;margin:0;padding:15px;background:#172433;color:#d5e0e8;font-size:11px;white-space:pre-wrap}
 .ephys-annotation-review{margin-top:18px;padding:16px;border:1px solid #d9e3ec;border-radius:10px}.ephys-annotation-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.ephys-annotation-heading strong{font-size:15px}.ephys-annotation-heading h3{font-size:12px;font-weight:800}.ephys-annotation-heading p{margin:5px 0;font-size:11px;color:#6b7f91}.ephys-annotation-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px}.ephys-annotation-grid h3{font-size:12px;font-weight:800}
+.ephys-annotation-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:24px}.ephys-annotation-grid>div{min-width:0}.ephys-annotation-column-labels{display:grid;grid-template-columns:110px 110px minmax(120px,1fr);gap:10px;padding:12px 10px 8px;font-size:11px;font-weight:800;color:#48647a}.ephys-annotation-column-labels.ephys-edit-labels{grid-template-columns:minmax(105px,1fr) minmax(105px,1fr) minmax(175px,2fr) 100px;padding-left:0}.ephys-edit-annotation{grid-template-columns:minmax(105px,1fr) minmax(105px,1fr) minmax(175px,2fr) 100px!important;gap:10px!important;align-items:center;margin-bottom:12px!important}.ephys-edit-annotation input{min-height:40px;font-size:12px!important;padding:9px!important}.ephys-raw-annotation{grid-template-columns:110px 110px minmax(120px,1fr)!important;gap:10px!important;padding:13px 10px!important;font-size:12px!important}@media(max-width:1000px){.ephys-annotation-grid{grid-template-columns:1fr}.ephys-annotation-grid>div{overflow-x:auto}}
 .ephys-raw-annotation{display:grid;grid-template-columns:60px 60px 1fr;gap:8px;padding:10px;border-bottom:1px solid #edf1f4;color:#566c80;font-size:11px}
 .ephys-edit-annotation{display:grid;grid-template-columns:75px 75px minmax(80px,1fr) auto;gap:6px;margin-bottom:8px}.ephys-edit-annotation input{width:100%;min-width:0;padding:8px;border:1px solid #cbd7e1;border-radius:6px;font-size:11px}
 .ephys-review-decision{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:15px}.ephys-review-decision>span{margin-right:auto;font-size:12px;color:#607589}
