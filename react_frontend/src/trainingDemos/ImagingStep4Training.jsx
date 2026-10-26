@@ -20,7 +20,7 @@ const stages=[
   {title:"Explore rejection and replacement",text:"Click Reject to see three options: exclude the image, put it on hold pending a replacement, or select an external defaced replacement. These are simulated decisions."},
   {title:"Accept the reviewed image",text:"After examining the available rejection choices, use Accept to mark the synthetic image ready for the next step."},
   {title:"Inspect different slices",text:"Drag a sagittal, coronal or axial slider to compare another raw/defaced slice position."},
-  {title:"Open linked metadata",text:"Review the CoCANoT patient and imaging identifiers associated with the accepted example image."},
+  {title:"Open linked metadata",text:"Open the JSON sidecar and check the Comments field for identifying information. The synthetic example contains John Doe; you must remove that name before saving."},
   {title:"Edit linked metadata",text:"Edit the JSON sidecar directly. The Comments field contains the patient name John Doe (PHI). Use your keyboard to remove John Doe from Comments while keeping valid JSON syntax and preserving the patient and imaging identifiers."},
   {title:"Save linked metadata",text:"Click Save JSON Metadata after removing John Doe from Comments. The tutorial refuses to save invalid JSON or a comment that still contains the patient name."},
   {title:"Proceed to Metadata & BIDS",text:"Click Continue to Step 5 when ready, or choose Explore this step to inspect the reviewed image, header, and saved JSON metadata freely before continuing."},
