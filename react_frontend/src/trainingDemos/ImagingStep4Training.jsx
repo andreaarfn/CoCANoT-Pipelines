@@ -3,7 +3,7 @@ import { ArrowRight, Check } from "lucide-react";
 import TutorialSpotlight from "./TutorialSpotlight";
 
 const fields = [
-  {name:"descrip",raw:"Patient Name: Example Patient",scrubbed:"",editable:true},
+  {name:"descrip",raw:"Patient Name: John Doe",scrubbed:"Patient Name: John Doe",editable:true},
   {name:"aux_file",raw:"Patient001_MRI_2022",scrubbed:"",editable:true},
   {name:"intent_name",raw:"T1 MRI PREOP",scrubbed:"T1 MRI",editable:true},
   {name:"datatype",raw:"16 (FLOAT32)",scrubbed:"16 (FLOAT32)",editable:false},
@@ -14,8 +14,8 @@ const fields = [
 ];
 const stages=[
   {title:"Inspect the extracted NIfTI header",text:"CoCANoT extracts the available header fields and displays their original values beside the scrubbed values. Compare both columns to check for residual identifiers."},
-  {title:"Edit a safe header field",text:"Select an editable text field such as descrip. Structural fields (dimensions, datatype and spatial transforms) are protected because changing them can corrupt or misinterpret the image."},
-  {title:"Save the scrubbed header edit",text:"Update the scrubbed description and click Save Header Edit. This demonstration saves only to the synthetic tutorial state."},
+  {title:"Edit a safe header field",text:"Click the editable descrip row, then use your keyboard to remove John Doe from the scrubbed value. The raw value is preserved for comparison. Structural fields are protected to prevent corruption."},
+  {title:"Save the scrubbed header edit",text:"After removing John Doe from the scrubbed description, click Save Header Edit. The raw header remains unchanged; this demonstration saves only in synthetic tutorial state."},
   {title:"Compare raw and PyDeface images",text:"The upper row shows the raw sagittal, coronal and axial slices. The lower row shows the corresponding output from PyDeface. Compare anatomy and facial removal."},
   {title:"Explore rejection and replacement",text:"Click Reject to see three options: exclude the image, put it on hold pending a replacement, or select an external defaced replacement. These are simulated decisions."},
   {title:"Accept the reviewed image",text:"After examining the available rejection choices, use Accept to mark the synthetic image ready for the next step."},
@@ -29,7 +29,8 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
   const [stage,setStage]=useState(0);
   const [rows,setRows]=useState(fields);
   const [choice,setChoice]=useState("");
-  const [draft,setDraft]=useState("De-identified T1 MRI");
+  const [draft,setDraft]=useState("");
+  const [headerTyped,setHeaderTyped]=useState(false);
   const [headerSaved,setHeaderSaved]=useState(false);
   const [rejectOpen,setRejectOpen]=useState(false);
   const [rejectionExplored,setRejectionExplored]=useState(false);
@@ -39,15 +40,16 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
   const [comment,setComment]=useState("Synthetic preoperative MRI");
   const [metadataSaved,setMetadataSaved]=useState(false);
   const current=stages[stage];
+  const safeHeaderEdit = choice === "descrip" && headerTyped && draft.trim().length > 0 && !/john\\s+doe/i.test(draft);
   const targets=["step4-header-table","step4-header-table","step4-save-header","step4-image-viewer","step4-reject","step4-accept","imaging-review-sliders","step4-linked-open","step4-linked-comment","step4-linked-save","imaging-step4-continue"];
   const advance=()=>setStage(v=>Math.min(stages.length-1,v+1));
-  const canProceed= stage===0 || (stage===1&&Boolean(choice)) || (stage===2&&headerSaved) || stage===3 || (stage===4&&rejectionExplored) || (stage===5&&decision==="Accepted") || (stage===6&&sliderUsed) || (stage===7&&metadataOpen) || (stage===8&&comment!=="Synthetic preoperative MRI") || (stage===9&&metadataSaved);
+  const canProceed= stage===0 || (stage===1&&safeHeaderEdit) || (stage===2&&headerSaved) || stage===3 || (stage===4&&rejectionExplored) || (stage===5&&decision==="Accepted") || (stage===6&&sliderUsed) || (stage===7&&metadataOpen) || (stage===8&&comment!=="Synthetic preoperative MRI") || (stage===9&&metadataSaved);
   function setRejection(value){setDecision(value);setRejectOpen(false);setRejectionExplored(true);}
   return <div style={{display:"grid",gap:18}}>
     {guided && <TutorialSpotlight
       key={`step4-${stage}-${rejectOpen}-${metadataOpen}`}
       enabled
-      target={stage===4&&rejectOpen?"step4-reject-options":targets[stage]}
+      target={stage===4&&rejectOpen?"step4-reject-options":stage===1&&choice==="descrip"?"step4-header-input":targets[stage]}
       title={current.title}
       text={current.text}
       step={stage+1}
@@ -61,14 +63,15 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
       <p>Example fields extracted from a synthetic NIfTI header. Values here are illustrative, not extracted from the sample volume.</p>
       <div data-tutorial-id="step4-header-table" style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",textAlign:"left"}}>
         <thead><tr><th>Field</th><th>Raw value</th><th>Scrubbed value</th><th>Editable</th></tr></thead>
-        <tbody>{rows.map(row=><tr key={row.name} onClick={()=>{if(row.editable){setChoice(row.name);setDraft(row.scrubbed);}}} style={{cursor:row.editable?"pointer":"default",background:choice===row.name?"#e9f4fd":"transparent"}}>
+        <tbody>{rows.map(row=><tr key={row.name} onClick={()=>{if(row.editable){setChoice(row.name);setDraft(row.scrubbed);setHeaderTyped(false);setHeaderSaved(false);}}} style={{cursor:row.editable?"pointer":"default",background:choice===row.name?"#e9f4fd":"transparent"}}>
           <td style={{padding:10}}>{row.name}</td><td>{row.raw}</td><td>{row.scrubbed||"(removed)"}</td><td>{row.editable?"Yes":"Protected"}</td>
         </tr>)}</tbody>
       </table></div>
       <label style={{display:"grid",gap:7,marginTop:14}}>Scrubbed value for {choice}
-        <input value={draft} onChange={e=>{setDraft(e.target.value);setHeaderSaved(false);}} disabled={!rows.find(r=>r.name===choice)?.editable} style={{padding:10,border:"1px solid #aabdcf",borderRadius:7}}/>
+        <input data-tutorial-id="step4-header-input" value={draft} onChange={e=>{setDraft(e.target.value);setHeaderTyped(true);setHeaderSaved(false);}} disabled={!rows.find(r=>r.name===choice)?.editable} style={{padding:10,border:"1px solid #aabdcf",borderRadius:7}}/>
       </label>
-      <button type="button" data-tutorial-id="step4-save-header" onClick={()=>{setRows(old=>old.map(r=>r.name===choice?{...r,scrubbed:draft}:r));setHeaderSaved(true);}} style={{marginTop:12,padding:10}}>Save Header Edit</button>
+      {choice === "descrip" && !safeHeaderEdit && <p role="status" style={{fontSize:13,color:"#8b402c"}}>Type a replacement scrubbed value without “John Doe” to enable saving and continue the guide.</p>}
+      <button type="button" data-tutorial-id="step4-save-header" disabled={!safeHeaderEdit} onClick={()=>{setRows(old=>old.map(r=>r.name===choice?{...r,scrubbed:draft}:r));setHeaderSaved(true);}} style={{marginTop:12,padding:10,opacity:safeHeaderEdit?1:.5}}>Save Header Edit</button>
       {headerSaved&&<span role="status" style={{marginLeft:12,color:"#267045"}}><Check size={16}/> Example edit saved</span>}
     </section>
     <section style={{border:"1px solid #d7e5ef",borderRadius:12,padding:20,background:"white"}}>
