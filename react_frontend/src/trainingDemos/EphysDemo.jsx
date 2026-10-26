@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 
 
 import TutorialSpotlight from "./TutorialSpotlight";
+import EphysTrainingSignalViewer from "./EphysTrainingSignalViewer";
 
 import LinkedPatientPreview from "./LinkedPatientPreview";
 
@@ -331,6 +332,7 @@ export default function EphysDemo() {
   const [rawAnnotations] = useState([{ onset: 0, duration: 4, description: "Recording start" }, { onset: 320, duration: 8, description: "Jamie Example seizure event" }]);
   const [scrubbedAnnotations, setScrubbedAnnotations] = useState([{ onset: 0, duration: 4, description: "Recording start" }, { onset: 320, duration: 8, description: "[removed] seizure event" }]);
   const [annotationsSaved, setAnnotationsSaved] = useState(false);
+  const [annotationCursor, setAnnotationCursor] = useState(315);
   const [reviewStatus, setReviewStatus] = useState("Pending");
   const [project, setProject] = useState("CoCANoT Phase 1");
   const [sessionId, setSessionId] = useState("01");
@@ -1109,10 +1111,11 @@ export default function EphysDemo() {
 
                   </div>
 
+                  <EphysTrainingSignalViewer annotations={scrubbedAnnotations} onChooseTime={setAnnotationCursor}/>
                   <div className="ephys-annotation-review">
-                    <div className="ephys-annotation-heading"><div><strong>Annotations</strong><p>Raw annotations are read-only. Scrubbed annotations can be edited before acceptance.</p></div><button className="ephys-secondary" onClick={()=>setAnnotationsSaved(true)}><Save size={15}/> Save Scrubbed EDF</button></div>
+                    <div className="ephys-annotation-heading"><div><strong>Annotations</strong><p>Navigate the recording above, click a waveform to set the event time, then click Add. Annotations appear as markers on the timeline and can be edited below.</p></div><button className="ephys-secondary" onClick={()=>setAnnotationsSaved(true)}><Save size={15}/> Save Scrubbed EDF</button></div>
                     <div className="ephys-annotation-grid"><div><h3>Raw EDF annotations</h3>{rawAnnotations.map((row,i)=><div className="ephys-raw-annotation" key={i}><span>{row.onset}s</span><span>{row.duration}s</span><span>{row.description}</span></div>)}</div>
-                      <div><div className="ephys-annotation-heading"><h3>Scrubbed EDF annotations</h3><button className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>[...v,{onset:0,duration:0,description:""}]);setAnnotationsSaved(false);}}>Add</button></div>{scrubbedAnnotations.map((row,i)=><div className="ephys-edit-annotation" key={i}><input aria-label="Onset" type="number" value={row.onset} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,onset:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Duration" type="number" value={row.duration} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,duration:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Description" value={row.description} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,description:e.target.value}:r));setAnnotationsSaved(false);}}/><button className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>v.filter((_,j)=>i!==j));setAnnotationsSaved(false);}}>Remove</button></div>)}</div>
+                      <div><div className="ephys-annotation-heading"><h3>Scrubbed EDF annotations</h3><button className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>[...v,{onset:annotationCursor,duration:0,description:"New event"}]);setAnnotationsSaved(false);}}>Add</button></div>{scrubbedAnnotations.map((row,i)=><div className="ephys-edit-annotation" key={i}><input aria-label="Onset" type="number" value={row.onset} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,onset:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Duration" type="number" value={row.duration} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,duration:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Description" value={row.description} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,description:e.target.value}:r));setAnnotationsSaved(false);}}/><button className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>v.filter((_,j)=>i!==j));setAnnotationsSaved(false);}}>Remove</button></div>)}</div>
                     </div>{annotationsSaved && <p className="ephys-success">✓ Scrubbed EDF edits saved in this demonstration.</p>}
                   </div>
                   <div className="ephys-review-decision"><span>Review status: <strong>{reviewStatus}</strong></span><button className="ephys-secondary" onClick={()=>{setReviewStatus("Rejected - Not Included");setReviewed(false);}}>Reject & Exclude</button><button data-tutorial-id="ephys-review-accept" className="ephys-primary" disabled={!missedValueFixed} onClick={()=>{setReviewStatus("Accepted");setReviewed(true);remember({reviewed:true});}}>Accept</button></div>
