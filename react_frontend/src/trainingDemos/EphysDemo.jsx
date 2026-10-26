@@ -959,18 +959,6 @@ export default function EphysDemo() {
 
                 <div className={styles.body}>
 
-                  <div className={styles.reviewSafeguard}>
-
-                    <strong>Why this review step matters</strong>
-
-                    <p>
-
-                      Our automated scrubbing rules are built from example files shared by participating members, but real-world headers can vary. The review window is an additional safeguard: it lets you compare raw and scrubbed values, correct anything the automated pass missed, and save the fix before the recording is accepted.
-
-                    </p>
-
-                  </div>
-
                   <div
 
                     data-tutorial-id="ephys-header-differences"
