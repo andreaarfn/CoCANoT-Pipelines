@@ -959,6 +959,11 @@ export default function EphysDemo() {
 
                 <div className={styles.body}>
 
+                  <div style={{padding:12,marginBottom:18,border:"2px solid #82b5d6",borderRadius:13,background:"#f5fbff"}}>
+                    <h3 style={{color:"#1a5277",margin:"0 0 6px",fontSize:18}}>Explore recording and place annotations</h3>
+                    <p style={{fontSize:13,color:"#4f6c83",margin:"0 0 10px"}}>Navigate the synthetic EEG, click a time on the waveform, then choose Add under Scrubbed EDF annotations. The new event will appear at the chosen time.</p>
+                    <EphysTrainingSignalViewer annotations={scrubbedAnnotations} onChooseTime={value=>{setAnnotationCursor(value);setViewerExplored(true);}} onChangeWindow={()=>setViewerExplored(true)}/>
+                  </div>
                   <div
 
                     data-tutorial-id="ephys-header-differences"
@@ -1105,7 +1110,6 @@ export default function EphysDemo() {
 
                   </div>
 
-                  <EphysTrainingSignalViewer annotations={scrubbedAnnotations} onChooseTime={value=>{setAnnotationCursor(value);setViewerExplored(true);}} onChangeWindow={()=>setViewerExplored(true)}/>
                   <div className="ephys-annotation-review">
                     <div className="ephys-annotation-heading"><div><strong>Annotations</strong><p>Navigate the recording above, click a waveform to set the event time, then click Add. Annotations appear as markers on the timeline and can be edited below.</p></div><button className="ephys-secondary" onClick={()=>setAnnotationsSaved(true)}><Save size={15}/> Save Scrubbed EDF</button></div>
                     <div className="ephys-annotation-grid"><div><h3>Raw EDF annotations</h3>{rawAnnotations.map((row,i)=><div className="ephys-raw-annotation" key={i}><span>{row.onset}s</span><span>{row.duration}s</span><span>{row.description}</span></div>)}</div>
