@@ -46,6 +46,17 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
     const timer = window.setTimeout(() => document.querySelector('[data-tutorial-id="step4-header-input"]')?.focus(), 120);
     return () => window.clearTimeout(timer);
   }, [stage, guided, guideDismissed]);
+  useEffect(() => {
+    if (stage !== 1 || !guided || guideDismissed) return undefined;
+    const restore = event => {
+      const input = document.querySelector('[data-tutorial-id="step4-header-input"]');
+      const tooltip = document.querySelector('[data-atlas-tutorial-tooltip="true"]');
+      if (!input || tooltip?.contains(event.target) || event.target === input) return;
+      window.requestAnimationFrame(() => input.focus({preventScroll:true}));
+    };
+    document.addEventListener("pointerdown", restore, true);
+    return () => document.removeEventListener("pointerdown", restore, true);
+  }, [stage, guided, guideDismissed]);
   const current=stages[stage];
   const safeHeaderEdit = choice === "descrip" && headerTyped && draft.trim().length > 0 && !/john\s+doe/i.test(draft);
   const targets=["step4-header-table","step4-header-input","step4-save-header","step4-image-viewer","step4-reject","step4-accept","imaging-review-sliders","step4-linked-open","step4-linked-comment","step4-linked-save","imaging-step4-continue"];
@@ -65,6 +76,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
       totalSteps={stages.length}
       onNext={stage<stages.length-1?advance:undefined}
       onSkip={() => setGuideDismissed(true)}
+      onFocusTarget={stage===1 ? () => { const input=document.querySelector('[data-tutorial-id="step4-header-input"]'); input?.scrollIntoView({block:"center",behavior:"instant"});input?.focus({preventScroll:true}); } : undefined}
       nextDisabled={!canProceed}
       nextLabel="Next"
     />}
