@@ -25,7 +25,7 @@ const stages=[
   {title:"Save linked metadata",text:"Click Save JSON Metadata after removing John Doe from Comments. The tutorial refuses to save invalid JSON or a comment that still contains the patient name."},
   {title:"Proceed to Metadata & BIDS",text:"Click Continue to Step 5 when ready, or choose Explore this step to inspect the reviewed image, header, and saved JSON metadata freely before continuing."},
 ];
-export default function ImagingStep4Training({ImageReview,onComplete,onBack,guided=true}){
+export default function ImagingStep4Training({ImageReview,onComplete,onBack,onSaveReview,guided=true}){
   const [stage,setStage]=useState(0);
   const [guideDismissed,setGuideDismissed]=useState(false);
   const [rows,setRows]=useState(fields);
@@ -163,7 +163,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
     </section>
     <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
       <button type="button" onClick={onBack}>Back to Process</button>
-      <button type="button" disabled={guided&&(stage!==stages.length-1||!metadataSaved||decision!=="Accepted")} data-tutorial-id="imaging-step4-continue" onClick={onComplete} style={{padding:"12px 22px",background:"#286c99",border:0,borderRadius:8,color:"white",fontWeight:750}}>Continue to Step 5 <ArrowRight size={16}/></button>
+      <button type="button" disabled={guided&&(stage!==stages.length-1||!metadataSaved||decision!=="Accepted")} data-tutorial-id="imaging-step4-continue" onClick={() => {onSaveReview?.({headerRows:rows,sidecar:JSON.parse(metadataJson),decision});onComplete();}} style={{padding:"12px 22px",background:"#286c99",border:0,borderRadius:8,color:"white",fontWeight:750}}>Continue to Step 5 <ArrowRight size={16}/></button>
     </div>
   </div>;
 }
