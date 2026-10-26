@@ -58,22 +58,22 @@ export default function SiteTraining({ initialTutorial = null, onExit = null }) 
               onChange={event=>setDone(current=>({...current,[index]:event.target.checked}))}/> Reviewed
           </label>
         </div>
+        {index === 2 && <div style={{marginTop:20,paddingTop:18,borderTop:"1px solid #dce7ef"}}>
+          <h4 style={{margin:"0 0 8px"}}>Interactive workflow tutorials</h4>
+          <p style={{margin:"0 0 14px",fontSize:13}}>Practice with synthetic data. These tutorials do not change your ATLAS patient database.</p>
+          <label style={{display:"flex",alignItems:"center",gap:10,fontSize:13,marginBottom:16}}>
+            <input type="checkbox" checked={guided} onChange={event=>setGuided(event.target.checked)}/>
+            Start with guided step-by-step instructions
+          </label>
+          <div style={{display:"grid",gap:12}}>
+            {TUTORIALS.map(([id,tutorialTitle,tutorialDescription,TutorialIcon]) => <div key={id} style={{display:"flex",gap:14,alignItems:"center",flexWrap:"wrap",border:"1px solid #dce7ef",borderRadius:10,padding:14,background:"#f7fbfe"}}>
+              <TutorialIcon size={23} color="#28678e"/>
+              <div style={{flex:"1 1 220px"}}><strong>{tutorialTitle}</strong><p style={{fontSize:13,margin:"5px 0 0"}}>{tutorialDescription}</p></div>
+              <button type="button" className={styles.historyButton} onClick={()=>setActive(id)}><BookOpen size={16}/> Start tutorial</button>
+            </div>)}
+          </div>
+        </div>}
       </div>
     ))}
-    <div className={styles.sectionTitle}><h2>Interactive workflow tutorials</h2></div>
-    <p>Practice safely with synthetic demonstration records. Tutorials do not change your local ATLAS patient database.</p>
-    <label style={{display:"flex",alignItems:"center",gap:10,fontSize:13}}>
-      <input type="checkbox" checked={guided} onChange={event=>setGuided(event.target.checked)}/>
-      Start with guided step-by-step instructions
-    </label>
-    {TUTORIALS.map(([id,title,description,Icon]) => <div className={styles.card} key={id}>
-      <div style={{display:"flex",alignItems:"center",gap:15}}>
-        <Icon size={25} color="#28678e"/>
-        <div style={{flex:1}}><h3>{title}</h3><p>{description}</p></div>
-        <button type="button" className={styles.historyButton} onClick={()=>setActive(id)}>
-          <BookOpen size={17}/> Start tutorial
-        </button>
-      </div>
-    </div>)}
   </section>;
 }
