@@ -1703,7 +1703,7 @@ const EPHYS_PUBLIC_CSS = `
 @media(max-width:560px){.ephys-guide-overview-backdrop{padding:16px}.ephys-guide-overview-card{padding:24px}.ephys-guide-overview-description{font-size:14px!important}}
 /* Highlight the actual active workflow section, rather than covering it with the introduction. */
 .ephys-public-demo .ephys-guide-focus-step{position:relative!important;z-index:1202!important;outline:4px solid #80cdff!important;outline-offset:5px!important;box-shadow:0 0 0 9px rgba(80,177,239,.27),0 16px 60px rgba(0,0,0,.32)!important;background:#fff}
-.ephys-guide-overview-backdrop .ephys-guide-overview-card{pointer-events:auto}
+.ephys-public-demo .ephys-guide-focus-step{pointer-events:none!important;user-select:none!important} .ephys-guide-overview-backdrop .ephys-guide-overview-card{pointer-events:auto}
 @media(max-width:680px){.ephys-guide-overview-backdrop{padding:0}.ephys-guide-overview-card{width:min(390px,calc(100vw - 32px));max-height:42vh}.ephys-guide-overview-description{font-size:13px!important}}
 /* Match the public Imaging demo page frame and spacing exactly. */
 .ephys-public-demo {
