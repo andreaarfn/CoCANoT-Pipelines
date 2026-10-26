@@ -27,6 +27,7 @@ const stages=[
 ];
 export default function ImagingStep4Training({ImageReview,onComplete,onBack,guided=true}){
   const [stage,setStage]=useState(0);
+  const [guideDismissed,setGuideDismissed]=useState(false);
   const [rows,setRows]=useState(fields);
   const [choice,setChoice]=useState("");
   const [draft,setDraft]=useState("");
@@ -41,10 +42,10 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
   const [comment,setComment]=useState("Synthetic preoperative MRI");
   const [metadataSaved,setMetadataSaved]=useState(false);
   useEffect(() => {
-    if (stage !== 1 || !guided) return undefined;
+    if (stage !== 1 || !guided || guideDismissed) return undefined;
     const timer = window.setTimeout(() => document.querySelector('[data-tutorial-id="step4-header-input"]')?.focus(), 120);
     return () => window.clearTimeout(timer);
-  }, [stage, guided]);
+  }, [stage, guided, guideDismissed]);
   const current=stages[stage];
   const safeHeaderEdit = choice === "descrip" && headerTyped && draft.trim().length > 0 && !/john\s+doe/i.test(draft);
   const targets=["step4-header-table","step4-header-input","step4-save-header","step4-image-viewer","step4-reject","step4-accept","imaging-review-sliders","step4-linked-open","step4-linked-comment","step4-linked-save","imaging-step4-continue"];
@@ -52,7 +53,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
   const canProceed= stage===0 || (stage===1&&safeHeaderEdit) || (stage===2&&headerSaved) || stage===3 || (stage===4&&rejectionExplored) || (stage===5&&decision==="Accepted") || (stage===6&&sliderUsed) || (stage===7&&metadataOpen) || (stage===8&&comment!=="Synthetic preoperative MRI") || (stage===9&&metadataSaved);
   function setRejection(value){setDecision(value);setRejectOpen(false);setRejectionExplored(true);}
   return <div style={{display:"grid",gap:18}}>
-    {guided && <TutorialSpotlight
+    {guided && !guideDismissed && <TutorialSpotlight
       key={`step4-${stage}-${rejectOpen}-${metadataOpen}`}
       enabled
       allowTargetInteraction
@@ -63,6 +64,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
       step={stage+1}
       totalSteps={stages.length}
       onNext={stage<stages.length-1?advance:undefined}
+      onSkip={() => setGuideDismissed(true)}
       nextDisabled={!canProceed}
       nextLabel="Next"
     />}
@@ -91,6 +93,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
           <td>{row.editable?"Yes":"Protected"}</td>
         </tr>)}</tbody>
       </table></div>
+      {guideDismissed && <button type="button" onClick={() => setGuideDismissed(false)} style={{marginTop:12,marginRight:10,padding:9,borderRadius:8,border:"1px solid #b6cada",background:"white",cursor:"pointer"}}>Resume guide</button>}
       {choice === "descrip" && !safeHeaderEdit && <p role="status" style={{fontSize:13,color:"#8b402c"}}>Type a replacement scrubbed value without “John Doe” to enable saving and continue the guide.</p>}
       <button type="button" data-tutorial-id="step4-save-header" onClick={()=>{if(!safeHeaderEdit){setHeaderError("The scrubbed description must be edited to remove John Doe before it can be saved.");document.querySelector('[data-tutorial-id="step4-header-input"]')?.focus();return;}setRows(old=>old.map(r=>r.name===choice?{...r,scrubbed:draft}:r));setHeaderSaved(true);setHeaderError("");}} style={{marginTop:12,padding:10,position:stage===2?"relative":undefined,zIndex:stage===2?2002:undefined,background:"white",border:"1px solid #aabdcf",borderRadius:7,cursor:"pointer"}}>Save Header Edit</button>
       {headerError&&<p role="alert" style={{color:"#9c3e25",fontWeight:600}}>{headerError}</p>}
