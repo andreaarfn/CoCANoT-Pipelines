@@ -17,8 +17,26 @@ export default function TutorialSpotlight({
   onNext,
   nextDisabled = false,
   nextLabel = "Next",
+  allowTargetInteraction = false,
 }) {
   const [rect, setRect] = useState(null);
+
+  useEffect(() => {
+    if (!enabled || !allowTargetInteraction || !target) return undefined;
+    const guard = (event) => {
+      const highlighted = document.querySelector(`[data-tutorial-id="${target}"]`);
+      const tooltip = document.querySelector(`[data-atlas-tutorial-tooltip="true"]`);
+      if (highlighted?.contains(event.target) || tooltip?.contains(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    document.addEventListener("pointerdown", guard, true);
+    document.addEventListener("click", guard, true);
+    return () => {
+      document.removeEventListener("pointerdown", guard, true);
+      document.removeEventListener("click", guard, true);
+    };
+  }, [enabled, allowTargetInteraction, target]);
 
   useEffect(() => {
     if (!enabled || !target) {
@@ -81,7 +99,7 @@ export default function TutorialSpotlight({
 
   return createPortal(
     <>
-      <div className={styles.blocker} style={{ top: 0, left: 0, right: 0, height: rect.top }} />
+      <div className={styles.blocker} style={{ pointerEvents: allowTargetInteraction ? "none" : "auto",  top: 0, left: 0, right: 0, height: rect.top }} />
       <div className={styles.blocker} style={{ top: rect.top, left: 0, width: rect.left, height: rect.height }} />
       <div className={styles.blocker} style={{ top: rect.top, left: rect.right, right: 0, height: rect.height }} />
       <div className={styles.blocker} style={{ top: rect.bottom, left: 0, right: 0, bottom: 0 }} />
@@ -91,7 +109,7 @@ export default function TutorialSpotlight({
         style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
       />
 
-      <aside className={styles.tooltip} style={tooltipStyle}>
+      <aside data-atlas-tutorial-tooltip="true" className={styles.tooltip} style={tooltipStyle}>
         <div className={styles.tooltipTop}>
           <span>GUIDE · STEP {step} OF {totalSteps}</span>
           {onSkip && <button type="button" onClick={onSkip} aria-label="Skip tutorial"><X size={15} /></button>}
