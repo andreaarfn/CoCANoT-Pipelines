@@ -17,9 +17,6 @@ export default function SiteTraining({ onNavigate }) {
       <h1>Site Initiation & Training</h1>
       <p>Site onboarding and training coordination, based on the established CoCANoT workflows.</p>
     </div>
-    <div className={styles.notice}>Training checkboxes are a local preview only. Verified completion,
-      learner identity, document acknowledgements, and certification records require
-      a dedicated training backend before this is used for trial compliance.</div>
     {MODULES.map(([title, description], index) => <div className={styles.card} key={title}>
       <div style={{display:"flex",gap:14,alignItems:"center"}}>
         {done[index] ? <CheckCircle2 color="#248450" size={25}/> : <BookOpen color="#2c6899" size={25}/>}
