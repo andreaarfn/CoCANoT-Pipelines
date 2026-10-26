@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Building2, ScrollText, Database, ChartNoAxesCombined, CheckCircle2, Brain, Activity, Users, ArrowLeft, BookOpen } from "lucide-react";
+import { Building2, ScrollText, Database, ChartNoAxesCombined, CheckCircle2, Brain, Activity, Users, ArrowLeft, BookOpen, ChevronDown, ChevronUp } from "lucide-react";
 import { MemoryRouter } from "react-router-dom";
 import ImagingDemo from "./trainingDemos/ImagingDemo";
 import EphysDemo from "./trainingDemos/EphysDemo";
@@ -24,6 +24,7 @@ export default function SiteTraining({ initialTutorial = null, onExit = null }) 
   const [done, setDone] = useState({});
   const [active, setActive] = useState(initialTutorial);
   const [guided, setGuided] = useState(true);
+  const [tutorialsOpen, setTutorialsOpen] = useState(false);
   useEffect(() => {
     const listener = () => { if (onExit) onExit(); else setActive(null); };
     window.addEventListener("atlas-training-back", listener);
@@ -59,7 +60,11 @@ export default function SiteTraining({ initialTutorial = null, onExit = null }) 
           </label>
         </div>
         {index === 2 && <div style={{marginTop:20,paddingTop:18,borderTop:"1px solid #dce7ef"}}>
-          <h4 style={{margin:"0 0 8px"}}>Interactive workflow tutorials</h4>
+          <button type="button" aria-expanded={tutorialsOpen} aria-controls="data-capture-tutorials" onClick={() => setTutorialsOpen(open => !open)} style={{display:"flex",width:"100%",alignItems:"center",justifyContent:"space-between",gap:12,padding:"7px 0",border:0,background:"transparent",color:"#24597b",fontWeight:750,cursor:"pointer",textAlign:"left"}}>
+            <span style={{display:"flex",alignItems:"center",gap:9}}><BookOpen size={18}/> Interactive workflow tutorials</span>
+            {tutorialsOpen ? <ChevronUp size={19}/> : <ChevronDown size={19}/>}
+          </button>
+          {tutorialsOpen && <div id="data-capture-tutorials" style={{paddingTop:12}}>
           <p style={{margin:"0 0 14px",fontSize:13}}>Practice with synthetic data. These tutorials do not change your ATLAS patient database.</p>
           <label style={{display:"flex",alignItems:"center",gap:10,fontSize:13,marginBottom:16}}>
             <input type="checkbox" checked={guided} onChange={event=>setGuided(event.target.checked)}/>
@@ -72,6 +77,7 @@ export default function SiteTraining({ initialTutorial = null, onExit = null }) 
               <button type="button" className={styles.historyButton} onClick={()=>setActive(id)}><BookOpen size={16}/> Start tutorial</button>
             </div>)}
           </div>
+          </div>}
         </div>}
       </div>
     ))}
