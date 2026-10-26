@@ -959,11 +959,6 @@ export default function EphysDemo() {
 
                 <div className={styles.body}>
 
-                  <div style={{padding:12,marginBottom:18,border:"2px solid #82b5d6",borderRadius:13,background:"#f5fbff"}}>
-                    <h3 style={{color:"#1a5277",margin:"0 0 6px",fontSize:18}}>Explore recording and place annotations</h3>
-                    <p style={{fontSize:13,color:"#4f6c83",margin:"0 0 10px"}}>Navigate the synthetic EEG, click a time on the waveform, then choose Add under Scrubbed EDF annotations. The new event will appear at the chosen time.</p>
-                    <EphysTrainingSignalViewer annotations={scrubbedAnnotations} onChooseTime={value=>{setAnnotationCursor(value);setViewerExplored(true);}} onChangeWindow={()=>setViewerExplored(true)}/>
-                  </div>
                   <div
 
                     data-tutorial-id="ephys-header-differences"
@@ -1111,6 +1106,15 @@ export default function EphysDemo() {
                   </div>
 
                   <div className="ephys-annotation-review">
+                    <div style={{padding:"16px 18px 5px"}}>
+                      <h3 style={{margin:"0 0 8px",fontSize:18,color:"#214b6b"}}>EDF recording · Visual annotation placement</h3>
+                      <p style={{fontSize:13,color:"#53728b",margin:"0 0 10px"}}>Click on the EEG trace to choose an annotation time, then select Add below. The orange markers show annotations on the same timeline.</p>
+                      <EphysTrainingSignalViewer
+                        annotations={scrubbedAnnotations}
+                        onChooseTime={value=>{setAnnotationCursor(value);setViewerExplored(true);}}
+                        onChangeWindow={()=>setViewerExplored(true)}
+                      />
+                    </div>
                     <div className="ephys-annotation-heading"><div><strong>Annotations</strong><p>Navigate the recording above, click a waveform to set the event time, then click Add. Annotations appear as markers on the timeline and can be edited below.</p></div><button className="ephys-secondary" onClick={()=>setAnnotationsSaved(true)}><Save size={15}/> Save Scrubbed EDF</button></div>
                     <div className="ephys-annotation-grid"><div><h3>Raw EDF annotations</h3>{rawAnnotations.map((row,i)=><div className="ephys-raw-annotation" key={i}><span>{row.onset}s</span><span>{row.duration}s</span><span>{row.description}</span></div>)}</div>
                       <div><div className="ephys-annotation-heading"><h3>Scrubbed EDF annotations</h3><button data-tutorial-id="ephys-training-add-annotation" className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>[...v,{onset:annotationCursor,duration:0,description:"New event"}]);setAnnotationsSaved(false);setAnnotationAdded(true);}}>Add</button></div>{scrubbedAnnotations.map((row,i)=><div className="ephys-edit-annotation" key={i}><input aria-label="Onset" type="number" value={row.onset} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,onset:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Duration" type="number" value={row.duration} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,duration:+e.target.value}:r));setAnnotationsSaved(false);}}/><input aria-label="Description" value={row.description} onChange={e=>{setScrubbedAnnotations(v=>v.map((r,j)=>j===i?{...r,description:e.target.value}:r));setAnnotationsSaved(false);}}/><button className="ephys-secondary" onClick={()=>{setScrubbedAnnotations(v=>v.filter((_,j)=>i!==j));setAnnotationsSaved(false);}}>Remove</button></div>)}</div>
