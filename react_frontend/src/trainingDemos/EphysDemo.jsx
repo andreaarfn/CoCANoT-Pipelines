@@ -489,6 +489,16 @@ export default function EphysDemo() {
         text: "Once the missed header value is corrected, accept the de-identified recording.",
       };
     }
+    if (step === 4 && !savedSidecar) {
+      let hasRemovedName = false;
+      try {
+        const data = JSON.parse(sidecarText);
+        hasRemovedName = typeof data?.Comments === "string" && data.Comments.trim() !== "" && !/john\s+doe/i.test(data.Comments);
+      } catch (_) { /* Show editing instruction until JSON is valid. */ }
+      return hasRemovedName
+        ? { target: "ephys-step4-save-json", title: "Save the corrected JSON metadata", text: "You removed John Doe from Comments. Click Save JSON Metadata to validate and save the synthetic EDF sidecar before continuing." }
+        : { target: "ephys-step4-json-editor", title: "Remove patient information from linked metadata", text: "The JSON Comments field contains John Doe, which is identifying patient information. Click inside the highlighted JSON editor and remove John Doe from Comments using your keyboard. Keep the JSON syntax and identifiers intact, then save." };
+    }
     if (step === 4) {
       return {
         target: "ephys-accept",
@@ -556,6 +566,8 @@ export default function EphysDemo() {
     missedValueFixed,
     viewerExplored,
     annotationAdded,
+    savedSidecar,
+    sidecarText,
 
     reviewFocus,
 
@@ -1126,8 +1138,8 @@ export default function EphysDemo() {
                   <section style={{marginTop:18,padding:18,border:"1px solid #c9dce9",borderRadius:11,background:"#fff"}}>
                     <h3 style={{fontSize:17,fontWeight:750,margin:"0 0 5px",color:"#234863"}}>Linked EDF JSON metadata · Step 4</h3>
                     <p style={{fontSize:13,color:"#60788b",margin:"0 0 12px"}}>Synthetic sidecar: sub-001_task-rest_eeg.json. Remove the identifying name John Doe from Comments, then save valid JSON. The original recording is not changed.</p>
-                    <textarea aria-label="Edit synthetic EDF JSON metadata" value={sidecarText} onChange={event=>{setSidecarText(event.target.value);setSavedSidecar(null);setSidecarError("");}} spellCheck={false} rows={12} style={{display:"block",width:"100%",boxSizing:"border-box",padding:13,fontFamily:"ui-monospace,monospace",fontSize:13,lineHeight:1.6,border:"1px solid #afc6d6",borderRadius:8,color:"#243d52",background:"#f8fbfe"}}/>
-                    <button type="button" className="ephys-secondary" style={{marginTop:12}} onClick={()=>{
+                    <textarea data-tutorial-id="ephys-step4-json-editor" aria-label="Edit synthetic EDF JSON metadata" value={sidecarText} onChange={event=>{setSidecarText(event.target.value);setSavedSidecar(null);setSidecarError("");}} spellCheck={false} rows={12} style={{display:"block",width:"100%",boxSizing:"border-box",padding:13,fontFamily:"ui-monospace,monospace",fontSize:13,lineHeight:1.6,border:"1px solid #afc6d6",borderRadius:8,color:"#243d52",background:"#f8fbfe"}}/>
+                    <button type="button" data-tutorial-id="ephys-step4-save-json" className="ephys-secondary" style={{marginTop:12}} onClick={()=>{
                       try{const data=JSON.parse(sidecarText);
                         if(!data||typeof data!=="object"||Array.isArray(data))throw Error("The sidecar must be a JSON object.");
                         if(data.PatientID!=="001"||data.RecordingID!=="001")throw Error("Preserve PatientID and RecordingID.");
@@ -1149,7 +1161,7 @@ export default function EphysDemo() {
 
                       className={styles.primary}
 
-                      disabled={!reviewed}
+                      disabled={!reviewed || !savedSidecar}
 
                       onClick={() => {
 
