@@ -944,7 +944,7 @@ export default function ImagingDemo() {
               setTutorialStartedSteps({});
             }}
           />
-          {tutorialEnabled && tutorialPhase === "overview" && Boolean(tutorialStartedSteps[step]) && (
+          {step !== 4 && tutorialEnabled && tutorialPhase === "overview" && Boolean(tutorialStartedSteps[step]) && (
             <GuideOverview
               step={step}
               onNext={() => {
