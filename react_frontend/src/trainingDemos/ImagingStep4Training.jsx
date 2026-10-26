@@ -21,8 +21,8 @@ const stages=[
   {title:"Accept the reviewed image",text:"After examining the available rejection choices, use Accept to mark the synthetic image ready for the next step."},
   {title:"Inspect different slices",text:"Drag a sagittal, coronal or axial slider to compare another raw/defaced slice position."},
   {title:"Open linked metadata",text:"Review the CoCANoT patient and imaging identifiers associated with the accepted example image."},
-  {title:"Edit linked metadata",text:"Edit the JSON sidecar directly. Change the Comments string while keeping valid JSON syntax, the patient identifier, and the imaging identifier intact."},
-  {title:"Save linked metadata",text:"Click Save JSON Metadata to validate the JSON and save the synthetic sidecar. Invalid JSON must be corrected before continuing."},
+  {title:"Edit linked metadata",text:"Edit the JSON sidecar directly. The Comments field contains the patient name John Doe (PHI). Use your keyboard to remove John Doe from Comments while keeping valid JSON syntax and preserving the patient and imaging identifiers."},
+  {title:"Save linked metadata",text:"Click Save JSON Metadata after removing John Doe from Comments. The tutorial refuses to save invalid JSON or a comment that still contains the patient name."},
   {title:"Proceed to Metadata & BIDS",text:"Click the highlighted Continue to Step 5 button. The guide will continue directly—there is no Explore this step detour."},
 ];
 export default function ImagingStep4Training({ImageReview,onComplete,onBack,guided=true}){
@@ -39,10 +39,10 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
   const [decision,setDecision]=useState("");
   const [sliderUsed,setSliderUsed]=useState(false);
   const [metadataOpen,setMetadataOpen]=useState(false);
-  const [metadataJson,setMetadataJson]=useState(() => JSON.stringify({PatientID:"001",ImageID:"001",ClinicalAssessmentID:"003",Modality:"MRI",Sequence:"T1w",Comments:"Synthetic preoperative MRI"},null,2));
+  const [metadataJson,setMetadataJson]=useState(() => JSON.stringify({PatientID:"001",ImageID:"001",ClinicalAssessmentID:"003",Modality:"MRI",Sequence:"T1w",Comments:"John Doe - synthetic preoperative MRI"},null,2));
   const [metadataError,setMetadataError]=useState("");
-  const initialComment="Synthetic preoperative MRI";
-  const editedMetadata=(()=>{try{const data=JSON.parse(metadataJson);return data && !Array.isArray(data) && typeof data==="object" && data.PatientID==="001" && data.ImageID==="001" && typeof data.Comments==="string" && data.Comments.trim()!=="" && data.Comments!==initialComment;}catch{return false;}})();
+  const initialComment="John Doe - synthetic preoperative MRI";
+  const editedMetadata=(()=>{try{const data=JSON.parse(metadataJson);return data && !Array.isArray(data) && typeof data==="object" && data.PatientID==="001" && data.ImageID==="001" && typeof data.Comments==="string" && data.Comments.trim()!=="" && data.Comments!==initialComment && !/john\\s+doe/i.test(data.Comments);}catch{return false;}})();
   const [metadataSaved,setMetadataSaved]=useState(false);
   useEffect(() => {
     if (stage !== 1 || !guided || guideDismissed) return undefined;
@@ -145,13 +145,14 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
             onChange={event=>{setMetadataJson(event.target.value);setMetadataSaved(false);setMetadataError("");}}
             style={{width:"100%",boxSizing:"border-box",padding:14,border:"1px solid #aabdcf",borderRadius:7,background:"#f9fcff",color:"#193650",fontFamily:"ui-monospace, SFMono-Regular, Consolas, monospace",fontSize:13,lineHeight:1.6,resize:"vertical"}}/>
         </label>
-        <p style={{fontSize:12,color:"#5c6c7b",margin:0}}>Change the Comments value. PatientID and ImageID are required identifiers in this exercise.</p>
+        <p style={{fontSize:12,color:"#5c6c7b",margin:0}}>The Comments value contains PHI: John Doe. Remove that name from Comments, keep the remaining description meaningful, and preserve PatientID and ImageID.</p>
         <div><button type="button" data-tutorial-id="step4-linked-save" onClick={()=>{
           try{
             const value=JSON.parse(metadataJson);
             if(!value || Array.isArray(value) || typeof value!=="object") throw new Error("The metadata must be a JSON object.");
             if(value.PatientID!=="001" || value.ImageID!=="001") throw new Error("Preserve PatientID and ImageID for this synthetic image.");
-            if(typeof value.Comments!=="string" || !value.Comments.trim() || value.Comments===initialComment) throw new Error("Change Comments to a nonempty new value.");
+            if(typeof value.Comments!=="string" || !value.Comments.trim() || value.Comments===initialComment) throw new Error("Edit Comments to remove the patient name.");
+            if(/john\\s+doe/i.test(value.Comments)) throw new Error("PHI detected: remove John Doe from Comments before saving.");
             setMetadataJson(JSON.stringify(value,null,2));setMetadataSaved(true);setMetadataError("");
           }catch(error){setMetadataSaved(false);setMetadataError(error instanceof SyntaxError ? "Invalid JSON: "+error.message : error.message);}
         }} style={{padding:"10px 14px",borderRadius:7,border:"1px solid #b5ccdb",background:"#fff",cursor:"pointer"}}>Save JSON Metadata</button></div>
