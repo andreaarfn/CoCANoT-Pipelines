@@ -272,6 +272,7 @@ export default function ImagingDemo() {
 
   const [selected, setSelected] = useState(false);
   const [selectionType, setSelectionType] = useState(null);
+  const [selectedDataExpanded, setSelectedDataExpanded] = useState(false);
   const [finderMode, setFinderMode] = useState(null);
   const [finderFolderOpen, setFinderFolderOpen] = useState(false);
   const [outputFinderKind, setOutputFinderKind] = useState(null);
@@ -371,6 +372,14 @@ export default function ImagingDemo() {
     }
 
     if (step === 1 && selected) {
+
+      if (!selectedDataExpanded) {
+        return {
+          target: "imaging-view-selected-data",
+          title: "View the selected data",
+          text: "Click View Selected Data to expand the panel and inspect the synthetic DICOM file or folder you chose.",
+        };
+      }
 
       return {
 
@@ -534,6 +543,7 @@ export default function ImagingDemo() {
     step,
 
     selected,
+    selectedDataExpanded,
     finderMode,
     finderFolderOpen,
     outputFinderKind,
@@ -1031,8 +1041,8 @@ export default function ImagingDemo() {
                     {selected && <span className={"imaging-ref-sourceChip"}>{selectionType === "folder" ? "imagingdata/" : DEMO_FILES.imaging.fileName}</span>}
                   </div>
                   {selected && (
-                    <details className={"imaging-ref-selectedDetails"}>
-                      <summary>View Selected Data</summary>
+                    <details className={"imaging-ref-selectedDetails"} onToggle={event => { if (event.currentTarget.open) setSelectedDataExpanded(true); }}>
+                      <summary data-tutorial-id="imaging-view-selected-data">View Selected Data</summary>
                       <div><strong>{selectionType === "folder" ? "DICOM folder" : "DICOM file"}</strong><span>{selectionType === "folder" ? `imagingdata/ · Includes ${DEMO_FILES.imaging.fileName}` : `imagingdata/${DEMO_FILES.imaging.fileName}`}</span></div>
                     </details>
                   )}
