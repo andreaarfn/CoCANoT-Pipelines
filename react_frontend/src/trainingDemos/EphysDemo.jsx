@@ -485,13 +485,6 @@ export default function EphysDemo() {
     }
     if (step === 4 && !viewerExplored) return {target:"ephys-training-signal",title:"Explore the EEG recording",text:"Navigate the 10-second EEG windows, then click a waveform to automatically create an annotation at that time. The marker appears on the recording and in the editor below."};
     if (step === 4 && !annotationAdded) return {target:"ephys-training-signal",title:"Add an annotation on the recording",text:"Click directly on the synthetic EEG waveform to create an annotation at that time. The event appears automatically below, where you can edit its start, duration, and comment."};
-    if (step === 4 && !reviewed) {
-      return {
-        target: "ephys-review-accept",
-        title: "Accept the corrected EDF",
-        text: "Once the missed header value is corrected, accept the de-identified recording.",
-      };
-    }
     if (step === 4 && !savedSidecar) {
       let hasRemovedName = false;
       try {
@@ -500,8 +493,9 @@ export default function EphysDemo() {
       } catch (_) { /* Show editing instruction until JSON is valid. */ }
       return hasRemovedName
         ? { target: "ephys-step4-save-json", title: "Save the corrected JSON metadata", text: "You removed John Doe from Comments. Click Save JSON Metadata to validate and save the synthetic EDF sidecar before continuing." }
-        : { target: "ephys-step4-json-editor", title: "Remove patient information from linked metadata", text: "Privacy reminder: the JSON metadata Comments field contains the patient name John Doe. Delete John Doe from Comments with your keyboard, keep a non-identifying description and valid JSON, and then click Save JSON Metadata." };
+        : { target: "ephys-step4-json-editor", title: "Edit the linked EDF JSON metadata", text: "Privacy reminder: the JSON metadata Comments field contains the patient name John Doe. Delete John Doe from Comments with your keyboard, keep a non-identifying description and valid JSON, and then click Save JSON Metadata." };
     }
+    if (step === 4 && !reviewed) return {target:"ephys-review-accept",title:"Accept the corrected EDF",text:"The linked JSON metadata is now saved. Review the annotations, then accept the de-identified recording."};
     if (step === 4) {
       return {
         target: "ephys-accept",
