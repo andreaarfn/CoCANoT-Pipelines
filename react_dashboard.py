@@ -135,7 +135,7 @@ MRI_SEQUENCE_MAP = {
     "T2": ("anat", "T2w"),
     "FLAIR": ("anat", "FLAIR"),
     "DWI": ("dwi", "dwi"),
-    "SWI": ("anat", "T2starw"),
+    "SWI": ("anat", "SWI"),
 }
 
 EPHYS_SCRUBBER = EPHYS_SCRIPTS / "scrub_edf_metadata.py"
@@ -875,62 +875,83 @@ class CoCANoTAPI:
         return str(result[0]) if result else ""
 
     def _sync_ephys_scrub_from_disk(self) -> None:
-        """Verify included sources against persistent staged/scrubbed outputs.
+        """Recognize completed EDFs across file, parent, and subfolder selections.
 
-        Absolute EDF identity stays constant whether selected as an individual
-        file, inside a subfolder, or through a parent folder.
+        The most recent manifest is only a hint: earlier staged files remain
+        authoritative when their content matches a currently selected source.
+        Do not report completion unless both derivative and JSON exist.
         """
         try:
             config = load_pipeline_config()
             staging = config.electrophysiology.derivatives_dir / "_selected_raw"
             scrubbed = config.electrophysiology.scrubbed_dir
-            manifest = staging / "selection.json"
-            if not manifest.is_file():
-                return
-            payload = json.loads(manifest.read_text(encoding="utf-8"))
-            sources = payload.get("selected_files") or []
-            staged_files = payload.get("staged_files") or []
-            if not isinstance(sources, list) or not isinstance(staged_files, list):
-                return
-            if len(sources) != len(staged_files) or not sources:
-                return
-
-            by_source = {
-                str(Path(src).expanduser().resolve()): str(relative)
-                for src, relative in zip(sources, staged_files)
-            }
-            current = {
-                str(Path(record["edf_path"]).expanduser().resolve())
+            selected = [
+                Path(record["edf_path"]).expanduser().resolve()
                 for record in _scan_edf_sources(self.ephys_sources)
-            }
-            if not current:
+                if record.get("edf_path") and record.get("include", True)
+            ]
+            if not selected:
+                self.ephys_stage_state["scrub"] = "not_started"
+                return
+            if not staging.is_dir() or not scrubbed.is_dir():
                 self.ephys_stage_state["scrub"] = "not_started"
                 return
 
-            def complete(source_text: str) -> bool:
-                rel = by_source.get(source_text)
-                if not rel:
+            manifest = staging / "selection.json"
+            known: dict[str, list[Path]] = {}
+            if manifest.is_file():
+                payload = json.loads(manifest.read_text(encoding="utf-8"))
+                for source, relative in zip(
+                    payload.get("selected_files") or [],
+                    payload.get("staged_files") or [],
+                ):
+                    staged = (staging / str(relative)).resolve()
+                    if staged.is_relative_to(staging.resolve()):
+                        known.setdefault(str(Path(source).expanduser().resolve()), []).append(staged)
+
+            staged_by_size: dict[int, list[Path]] = {}
+            for candidate in staging.rglob("*.edf"):
+                if candidate.is_file():
+                    staged_by_size.setdefault(candidate.stat().st_size, []).append(candidate)
+            hash_cache: dict[Path, str] = {}
+
+            def file_hash(path: Path) -> str:
+                if path not in hash_cache:
+                    hash_cache[path] = self._file_hash(path)
+                return hash_cache[path]
+
+            def derivative_complete(staged: Path) -> bool:
+                relative = staged.relative_to(staging)
+                output = scrubbed / relative.parent / f"{staged.stem}_scrubbed.edf"
+                sidecar = output.with_suffix(".json")
+                if not (output.is_file() and output.stat().st_size > 0 and sidecar.is_file()):
                     return False
-                raw = staging / rel
-                if not raw.is_file():
+                try:
+                    return isinstance(json.loads(sidecar.read_text(encoding="utf-8")), dict)
+                except (OSError, ValueError, json.JSONDecodeError):
                     return False
-                source = Path(source_text)
+
+            def complete(source: Path) -> bool:
                 if not source.is_file():
                     return False
-                if (source.stat().st_size != raw.stat().st_size
-                        or source.stat().st_mtime_ns != raw.stat().st_mtime_ns):
-                    return False
-                out = scrubbed / Path(rel).parent / f"{Path(rel).stem}_scrubbed.edf"
-                sidecar = out.with_suffix(".json")
-                if not (out.is_file() and out.stat().st_size > 0 and sidecar.is_file()):
-                    return False
-                stored = json.loads(sidecar.read_text(encoding="utf-8"))
-                return isinstance(stored, dict)
+                candidates = known.get(str(source), []) + staged_by_size.get(source.stat().st_size, [])
+                seen: set[Path] = set()
+                for staged in candidates:
+                    if staged in seen or not staged.is_file():
+                        continue
+                    seen.add(staged)
+                    if staged.stat().st_size != source.stat().st_size:
+                        continue
+                    if derivative_complete(staged) and file_hash(source) == file_hash(staged):
+                        return True
+                return False
 
-            all_complete = all(complete(src) for src in current)
-            self.ephys_stage_state["scrub"] = "complete" if all_complete else "not_started"
+            self.ephys_stage_state["scrub"] = (
+                "complete" if all(complete(source) for source in selected)
+                else "not_started"
+            )
         except (OSError, ValueError, TypeError, json.JSONDecodeError, PipelineConfigError):
-            pass
+            self.ephys_stage_state["scrub"] = "not_started"
 
     def ephys_get_state(self) -> dict[str, Any]:
         try:
@@ -1273,6 +1294,8 @@ class CoCANoTAPI:
             str(staging),
             "--output-dir",
             str(scrubbed_dir),
+            "--selection-manifest",
+            str(staging / "selection.json"),
         ]
 
         if overwrite:
@@ -1337,7 +1360,7 @@ class CoCANoTAPI:
                 self.ephys_stage_state["review"] = "not_started"
             return
 
-        terminal = {"Accepted", "Rejected - Not Included"}
+        terminal = {"Accepted", "Rejected - Not Included", "On Hold"}
         self.ephys_stage_state["review"] = (
             "complete"
             if all(str(pair.get("status", "Pending")) in terminal for pair in pairs)
@@ -1512,7 +1535,7 @@ class CoCANoTAPI:
             raise ValueError("EDF review pair not found.")
 
         normalized = str(status or "").strip()
-        allowed = {"Accepted", "Rejected - Not Included"}
+        allowed = {"Accepted", "Rejected - Not Included", "On Hold", "Pending"}
 
         if normalized not in allowed:
             raise ValueError("Invalid EDF review status.")
@@ -1542,6 +1565,7 @@ class CoCANoTAPI:
         scrubbed_header: dict[str, Any],
         scrubbed_annotations: list[dict[str, Any]],
         linked_metadata: dict[str, Any] | None = None,
+        save_mode: str = "all",
     ) -> dict[str, Any]:
         pairs = self.ephys_review_get_pairs()
 
@@ -1556,13 +1580,17 @@ class CoCANoTAPI:
         pair = pairs[index]
         helpers = _load_ephys_comparison_module()
 
-        helpers.rewrite_scrubbed_edf(
-            Path(pair["scrubbed_path"]),
-            scrubbed_header,
-            scrubbed_annotations,
-        )
+        if save_mode not in {"all", "header", "annotations", "metadata"}:
+            raise ValueError("Unsupported EDF save section.")
+        if save_mode in {"all", "header", "annotations"}:
+            existing = helpers.read_review_data(Path(pair["scrubbed_path"]))
+            header_to_write = scrubbed_header if save_mode in {"all", "header"} else existing["header"]
+            annotations_to_write = scrubbed_annotations if save_mode in {"all", "annotations"} else existing["annotations"]
+            helpers.rewrite_scrubbed_edf(
+                Path(pair["scrubbed_path"]), header_to_write, annotations_to_write
+            )
 
-        if linked_metadata is not None:
+        if save_mode in {"all", "metadata"} and linked_metadata is not None:
             if not isinstance(linked_metadata, dict):
                 raise ValueError("Linked EDF metadata must be a JSON object.")
             # Do not silently change the already-exported final file.
@@ -2169,7 +2197,7 @@ class CoCANoTAPI:
             # A legacy PatientDataLinkStore path in another folder is useful
             # for recovery, but cannot mark this output directory complete.
             if existing_export is not None:
-                exported_path = Path(str(existing_export.get("nifti_path", ""))).expanduser()
+                exported_path = Path(str(existing_export.get("edf_path", ""))).expanduser()
                 try:
                     in_current_output = exported_path.resolve().is_relative_to(output_dir.resolve())
                 except (OSError, ValueError):
@@ -2177,7 +2205,7 @@ class CoCANoTAPI:
                 if (
                     not in_current_output
                     or not exported_path.is_file()
-                    or _matching_json(exported_path) is None
+                    or not Path(str(existing_export.get("json_path", ""))).is_file()
                 ):
                     existing_export = None
 
@@ -10981,6 +11009,57 @@ class CoCANoTAPI:
         self,
         record: dict[str, Any],
     ) -> Path:
+        # Match Imaging: prefer an authoritative final export for this
+        # patient and Recording ID, not an older scrubbed derivative.
+        metadata = dict(record.get("metadata", {}) or {})
+        patient_id = str(metadata.get("CoCANoT Patient ID") or "").strip()
+        recording_id = str(metadata.get("Recording ID") or "").strip()
+        context = dict(record.get("context", {}) or {})
+        try:
+            link = PatientDataLinkStore().get_link(
+                self.get_site_id(), patient_id, "Electrophysiology", recording_id
+            ) or {}
+        except (OSError, ValueError):
+            link = {}
+
+        def is_linked_final(path: Path) -> bool:
+            if not path.is_file() or path.suffix.lower() != ".edf":
+                return False
+            sidecar = path.with_suffix(".json")
+            if not sidecar.is_file():
+                return False
+            try:
+                payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return False
+            if not isinstance(payload, dict):
+                return False
+            cocanot = payload.get("CoCANoTMetadata")
+            return (
+                isinstance(cocanot, dict)
+                and str(cocanot.get("CoCANoT Patient ID") or "").strip() == patient_id
+                and str(cocanot.get("Recording ID") or "").strip() == recording_id
+            )
+
+        for candidate_text in [
+            link.get("bids_data_path"), context.get("bids_data_path"),
+            *(link.get("final_paths") or []),
+        ]:
+            if candidate_text:
+                candidate = Path(str(candidate_text)).expanduser()
+                if is_linked_final(candidate):
+                    return candidate.resolve()
+
+        for root_text in [
+            link.get("final_output_root"), context.get("bids_output_dir"),
+        ]:
+            if root_text:
+                root = Path(str(root_text)).expanduser()
+                if root.is_dir():
+                    for candidate in root.rglob("*.edf"):
+                        if is_linked_final(candidate):
+                            return candidate.resolve()
+
         for candidate in (
             self._metadata_record_file_candidates(
                 record,
@@ -11090,6 +11169,28 @@ class CoCANoTAPI:
         raise FileNotFoundError(
             "The EDF file linked to this Electrophysiology "
             "record could not be found on this computer."
+        )
+
+    def ephys_review_signal_preview(
+        self, pair_id: str | int, source: str = "scrubbed",
+        start_seconds: float = 0.0, window_seconds: float = 10.0,
+        channels: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Read waveform windows from the selected Step 4 EDF, without modifying it."""
+        pairs = self.ephys_review_get_pairs()
+        try:
+            index = int(pair_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid EDF review selection.") from exc
+        if index < 0 or index >= len(pairs):
+            raise ValueError("EDF review pair not found.")
+        if source not in {"raw", "scrubbed"}:
+            raise ValueError("Select raw or scrubbed EDF.")
+        path = Path(pairs[index][f"{source}_path"])
+        # The preview method resolves explicitly linked EDF paths.
+        return self.metadata_get_ephys_signal_preview(
+            {"context": {"edf_path": str(path)}, "metadata": {}},
+            start_seconds, window_seconds, channels,
         )
 
     def metadata_get_ephys_signal_preview(
@@ -11306,11 +11407,53 @@ class CoCANoTAPI:
                     }
                 )
 
+            sidecar_metadata = {}
+            sidecar_path = path.with_suffix(".json")
+            if sidecar_path.is_file():
+                try:
+                    sidecar_value = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                    if isinstance(sidecar_value, dict):
+                        sidecar_metadata = {
+                            **{key: value for key, value in sidecar_value.items()
+                               if key != "CoCANoTMetadata"},
+                            **({"CoCANoTMetadata": sidecar_value["CoCANoTMetadata"]}
+                               if isinstance(sidecar_value.get("CoCANoTMetadata"), dict)
+                               else {}),
+                        }
+                except (OSError, json.JSONDecodeError):
+                    pass
+            try:
+                header = reader.getHeader()
+                header = {
+                    str(key): (value.isoformat() if hasattr(value, "isoformat") else str(value))
+                    for key, value in header.items()
+                }
+            except Exception:
+                header = {}
+
+            try:
+                annotation_onsets, annotation_durations, annotation_descriptions = reader.readAnnotations()
+                annotations = [
+                    {
+                        "onset": float(onset),
+                        "duration": float(duration),
+                        "description": str(description),
+                    }
+                    for onset, duration, description in zip(
+                        annotation_onsets, annotation_durations, annotation_descriptions
+                    )
+                ]
+            except Exception:
+                annotations = []
+
             return {
                 "path": str(
                     path
                 ),
                 "file_name": path.name,
+                "header": header,
+                "annotations": annotations,
+                "linked_metadata": sidecar_metadata,
                 "duration_seconds": duration,
                 "channel_labels": labels,
                 "selected_channels": requested,
@@ -11612,7 +11755,7 @@ class CoCANoTAPI:
         )
 
     def _sync_edited_imaging_export(
-        self, metadata: dict[str, Any], existing: dict[str, Any] | None
+        self, metadata: dict[str, Any], existing: dict[str, Any] | None, original_id: str = ""
     ) -> dict[str, Any] | None:
         """Update an already exported image and matching JSON after metadata edits.
 
@@ -11624,7 +11767,7 @@ class CoCANoTAPI:
         patient = str(metadata.get("CoCANoT Patient ID") or "").strip()
         image_id = str(metadata.get("Image ID") or "").strip()
         link_store = PatientDataLinkStore()
-        link = link_store.get_link(self.get_site_id(), patient, "Imaging", image_id) or {}
+        link = link_store.get_link(self.get_site_id(), patient, "Imaging", original_id or image_id) or {}
         old_context = dict(existing.get("context") or {})
         candidate_text = str(link.get("bids_data_path") or old_context.get("bids_data_path") or "")
         if not candidate_text:
@@ -11637,7 +11780,7 @@ class CoCANoTAPI:
         embedded = sidecar.get("CoCANoTMetadata")
         if not isinstance(embedded, dict) or (
             str(embedded.get("CoCANoT Patient ID") or "") != patient
-            or str(embedded.get("Image ID") or "") != image_id
+            or str(embedded.get("Image ID") or "") != (original_id or image_id)
         ):
             raise ValueError("Saved imaging sidecar identity does not match the patient record; export was not renamed.")
         modality = str(metadata.get("Imaging Modality") or "").strip()
@@ -11647,7 +11790,7 @@ class CoCANoTAPI:
             sequence = self._imaging_sequence_value(metadata)
             mapping = {"T1": ("anat", "T1w"), "T2": ("anat", "T2w"),
                        "FLAIR": ("anat", "FLAIR"), "DWI": ("dwi", "dwi"),
-                       "SWI": ("anat", "T2starw")}
+                       "SWI": ("anat", "SWI")}
             if sequence not in mapping:
                 raise ValueError("Cannot rename MRI export: unsupported sequence.")
             datatype, suffix = mapping[sequence]
@@ -11670,6 +11813,11 @@ class CoCANoTAPI:
         if run_match:
             parts.append(f"run-{run_match.group(1)}")
         parts.append(suffix)
+        # SWI retains its acquisition identity in the BIDS basename while
+        # using the established anatomical T2starw representation.
+        # Do not append a duplicate acq label if one already exists.
+        if modality == "MRI" and sequence == "SWI":
+            parts = [part for part in parts if part != "acq-SWI"]
         new_base = "_".join(parts)
         # Keep the same project and optional session directories; move only
         # the final datatype directory if the sequence/modality changes.
@@ -11679,13 +11827,56 @@ class CoCANoTAPI:
         new_json = target_dir / f"{new_base}.json"
         old_extra = old_path.with_name(f"{old_base}_cocanot.json")
         new_extra = target_dir / f"{new_base}_cocanot.json"
+        # DWI requires genuine gradients: a metadata edit cannot derive them
+        # from an anatomical scan. Fail before touching the existing export.
+        old_bval = old_path.with_name(f"{old_base}.bval")
+        old_bvec = old_path.with_name(f"{old_base}.bvec")
+        if datatype == "dwi":
+            if not old_bval.is_file() or not old_bvec.is_file():
+                raise ValueError(
+                    "Cannot reclassify this anatomical export as DWI: matching "
+                    ".bval and .bvec gradient files are missing. Reprocess the "
+                    "original diffusion acquisition in Imaging Step 3/5 to "
+                    "recover genuine gradient information."
+                )
+            try:
+                import nibabel as nib
+                import numpy as np
+                count = len(old_bval.read_text(encoding="utf-8").split())
+                gradient_rows = [
+                    row.split() for row in old_bvec.read_text(encoding="utf-8").splitlines()
+                    if row.strip()
+                ]
+                volumes = int(nib.load(str(old_path)).shape[3]) if len(nib.load(str(old_path)).shape) > 3 else 1
+                if count != volumes or len(gradient_rows) != 3 or any(len(row) != volumes for row in gradient_rows):
+                    raise ValueError(
+                        f"gradient counts do not match NIfTI volumes ({volumes})"
+                    )
+                bvals = np.asarray([float(v) for v in old_bval.read_text().split()])
+                bvecs = np.asarray([[float(v) for v in row] for row in gradient_rows])
+                if not np.isfinite(bvals).all() or not np.isfinite(bvecs).all():
+                    raise ValueError("gradient data contain non-finite values")
+            except (OSError, ValueError, IndexError) as exc:
+                raise ValueError(f"Cannot reclassify as DWI: invalid gradient files: {exc}") from exc
         movements = [(old_path, new_path), (old_json, new_json)]
-        if old_extra.is_file():
-            movements.append((old_extra, new_extra))
+        # CoCANoT metadata is embedded in the canonical JSON sidecar.
+        # Diffusion sidecars belong exclusively to DWI exports.
         for suffix_ext in (".bval", ".bvec"):
             old_associated = old_path.with_name(f"{old_base}{suffix_ext}")
-            if old_associated.is_file():
+            if datatype == "dwi" and old_associated.is_file():
                 movements.append((old_associated, target_dir / f"{new_base}{suffix_ext}"))
+        # Never turn a mislabeled or incomplete export into a new SWI link.
+        # Check source image integrity before making any filesystem changes.
+        if modality == "MRI" and sequence == "SWI":
+            try:
+                import nibabel as nib
+                image = nib.load(str(old_path))
+                if len(image.shape) < 3 or any(dim < 1 for dim in image.shape[:3]):
+                    raise ValueError("Invalid SWI image dimensions.")
+            except Exception as exc:
+                raise ValueError(
+                    f"Cannot export SWI: the existing NIfTI cannot be read: {exc}"
+                ) from exc
         for source, destination in movements:
             if source != destination and destination.exists():
                 raise ValueError(f"Edited imaging filename already exists: {destination}")
@@ -11721,27 +11912,131 @@ class CoCANoTAPI:
                     source.rename(destination)
                     moved.append((source, destination))
             new_json.write_text(json.dumps(sidecar, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-            if new_extra.is_file():
-                extra = json.loads(new_extra.read_text(encoding="utf-8"))
-                if not isinstance(extra, dict):
-                    extra = {}
-                extra["CoCANoTMetadata"] = dict(metadata)
-                new_extra.write_text(json.dumps(extra, indent=2, allow_nan=False) + "\n", encoding="utf-8")
         except Exception:
             for source, destination in reversed(moved):
                 if destination.exists():
                     destination.rename(source)
             raise
+        # Only after the new image and JSON have been written successfully,
+        # remove obsolete gradients when converting DWI to anatomical/CT.
+        if datatype != "dwi":
+            for obsolete in (old_bval, old_bvec):
+                obsolete.unlink(missing_ok=True)
+        if modality == "MRI" and sequence == "SWI":
+            # Confirm the new export resolves before changing patient links.
+            if not new_path.is_file() or not new_json.is_file():
+                raise RuntimeError("SWI export verification failed: NIfTI or JSON missing.")
+            verified_sidecar = json.loads(new_json.read_text(encoding="utf-8"))
+            if (verified_sidecar.get("MRISequence") != "SWI"
+                or verified_sidecar.get("ImageID") != image_id):
+                raise RuntimeError("SWI export verification failed: metadata mismatch.")
         updated = {**old_context, **link, "bids_data_path": str(new_path.resolve()),
                    "bids_sidecar_path": str(new_json.resolve()),
                    "final_output_root": str(Path(link.get("final_output_root") or old_context.get("bids_output_dir") or new_path.parent.parent).resolve()),
                    "final_paths": [str(dest.resolve()) for _, dest in movements]}
         # New exports use the consolidated JSON; older dual-file exports
         # retain their own metadata path until explicitly migrated.
-        updated["cocanot_metadata_path"] = str(
-            (new_extra if new_extra.is_file() else new_json).resolve()
-        )
+        updated["cocanot_metadata_path"] = str(new_json.resolve())
+        # The unified JSON has been written successfully; retire obsolete legacy metadata.
+        if old_extra.is_file() and old_extra != new_json:
+            old_extra.unlink()
         link_store.save_link(self.get_site_id(), patient, "Imaging", image_id, updated)
+        if original_id and original_id != image_id:
+            link_store.delete_link(self.get_site_id(), patient, "Imaging", original_id)
+        return updated
+
+    def _sync_edited_ephys_export(
+        self, metadata: dict[str, Any], existing: dict[str, Any] | None, original_id: str = ""
+    ) -> dict[str, Any] | None:
+        """Rename the existing final EDF and sidecars in place after metadata edits."""
+        if not existing:
+            return None
+        patient = str(metadata.get("CoCANoT Patient ID") or "").strip()
+        recording_id = str(metadata.get("Recording ID") or "").strip()
+        if not patient or not recording_id:
+            return None
+        store = PatientDataLinkStore()
+        link = store.get_link(self.get_site_id(), patient, "Electrophysiology", original_id or recording_id) or {}
+        old_context = dict(existing.get("context") or {})
+        candidate = link.get("bids_data_path") or old_context.get("bids_data_path")
+        if not candidate:
+            return None
+        old_edf = Path(str(candidate)).expanduser()
+        old_json = old_edf.with_suffix(".json")
+        if not old_edf.is_file() or not old_json.is_file():
+            return None
+        payload = json.loads(old_json.read_text(encoding="utf-8"))
+        embedded = payload.get("CoCANoTMetadata") if isinstance(payload, dict) else None
+        if not isinstance(embedded, dict) or (
+            str(embedded.get("CoCANoT Patient ID") or "").strip() != patient
+            or str(embedded.get("Recording ID") or "").strip() != (original_id or recording_id)
+        ):
+            raise ValueError("Final EDF JSON identity does not match this patient and recording; no files were renamed.")
+
+        from ElectrophysiologyPipeline.scripts.convert_edf_to_bids import (
+            RECORDING_MODALITY_TO_DATATYPE,
+        )
+        modality = str(metadata.get("Recording Modality") or "").strip()
+        datatype = RECORDING_MODALITY_TO_DATATYPE.get(modality)
+        if not datatype or datatype == "meg":
+            raise ValueError(f"Unsupported EDF recording modality: {modality!r}")
+        normalized_id = re.sub(r"[^A-Za-z0-9]+", "", recording_id)
+        if normalized_id.upper().startswith("EPHYS"):
+            normalized_id = "EPHYS-" + normalized_id[5:]
+        filename_parts = [f"sub-{self._derive_bids_subject(patient)}", normalized_id]
+        session = re.search(r"(?:^|_)ses-([A-Za-z0-9]+)(?:_|$)", old_edf.stem)
+        run = re.search(r"(?:^|_)run-([A-Za-z0-9]+)(?:_|$)", old_edf.stem)
+        if session:
+            filename_parts.append("ses-" + session.group(1))
+        if run:
+            filename_parts.append("run-" + run.group(1))
+        filename_parts.append(datatype)
+        new_base = "_".join(filename_parts)
+        new_dir = old_edf.parent if old_edf.parent.name == datatype else old_edf.parent.parent / datatype
+        old_base = old_edf.stem
+        moves = [
+            (old_edf, new_dir / f"{new_base}.edf"),
+            (old_json, new_dir / f"{new_base}.json"),
+        ]
+        for suffix in ("_channels.tsv", "_events.tsv", "_electrodes.tsv", "_coordsystem.json", "_cocanot.json"):
+            old_file = old_edf.with_name(old_base + suffix)
+            if old_file.is_file():
+                moves.append((old_file, new_dir / (new_base + suffix)))
+        for source, target in moves:
+            if source != target and target.exists():
+                raise ValueError(f"Cannot rename EDF export: destination exists: {target}")
+        payload = {
+            **{key: value for key, value in payload.items() if key != "CoCANoTMetadata"},
+            "CoCANoTMetadata": dict(metadata),
+            "CoCANoTPatientID": patient,
+            "RecordingID": recording_id,
+            "RecordingModality": modality,
+        }
+        new_dir.mkdir(parents=True, exist_ok=True)
+        moved = []
+        try:
+            for source, target in moves:
+                if source != target:
+                    source.rename(target)
+                    moved.append((source, target))
+            moves[1][1].write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        except Exception:
+            for source, target in reversed(moved):
+                if target.exists():
+                    target.rename(source)
+            raise
+        updated = {
+            **old_context, **link,
+            "bids_data_path": str(moves[0][1].resolve()),
+            "bids_sidecar_path": str(moves[1][1].resolve()),
+            "cocanot_metadata_path": str(moves[1][1].resolve()),
+            "final_paths": [str(target.resolve()) for _, target in moves],
+        }
+        if "final_output_root" not in updated:
+            updated["final_output_root"] = str(new_dir.parent.parent.resolve())
+        store.save_link(self.get_site_id(), patient, "Electrophysiology", recording_id, updated)
+        if original_id and original_id != recording_id:
+            store.delete_link(self.get_site_id(), patient, "Electrophysiology", original_id)
         return updated
 
     def metadata_save_record(
@@ -11812,6 +12107,12 @@ class CoCANoTAPI:
             ),
             rules,
         )
+        if table_name == "Imaging" and str(clean.get("Imaging Modality") or "").strip() != "MRI":
+            # MRI-only dictionary fields may remain from an earlier editor
+            # selection; they must not block a valid CT record.
+            for key in list(clean):
+                if key.startswith("MRI Sequence(s)"):
+                    clean.pop(key, None)
         # Preserve links to pre-normalization patient keys until a database migration.
         if clean.get("CoCANoT Patient ID"):
             clean["CoCANoT Patient ID"] = self._resolve_existing_patient_id(clean["CoCANoT Patient ID"])
@@ -11931,21 +12232,43 @@ class CoCANoTAPI:
                     "before importing this record to avoid losing associations."
                 )
 
+        original_id = str((local_context or {}).get("original_record_id") or "").strip()
+        patient_key = clean.get("CoCANoT Patient ID", "")
+        if original_id and original_id != canonical_record_id:
+            if self.repository.get_record(self.get_site_id(), table_name, canonical_record_id, patient_id=patient_key):
+                raise ValueError("Destination record ID already exists; cannot rename.")
         saved_context = dict(context or {})
         if table_name == "Imaging":
             existing_record = self.repository.get_record(
-                self.get_site_id(), "Imaging", canonical_record_id,
+                self.get_site_id(), "Imaging", original_id or canonical_record_id,
                 patient_id=clean.get("CoCANoT Patient ID", "")
             )
-            synced = self._sync_edited_imaging_export(clean, existing_record)
+            if original_id and original_id != canonical_record_id and not existing_record:
+                raise ValueError("Original patient record could not be found; rename was cancelled to avoid duplicates.")
+            synced = self._sync_edited_imaging_export(clean, existing_record, original_id)
             if synced is not None:
                 saved_context.update(synced)
             elif existing_record:
                 saved_context = {**dict(existing_record.get("context") or {}), **saved_context}
-        return self.repository.save_record(
+        if table_name == "Electrophysiology":
+            existing_record = self.repository.get_record(
+                self.get_site_id(), "Electrophysiology", original_id or canonical_record_id,
+                patient_id=clean.get("CoCANoT Patient ID", "")
+            )
+            if original_id and original_id != canonical_record_id and not existing_record:
+                raise ValueError("Original patient record could not be found; rename was cancelled to avoid duplicates.")
+            synced = self._sync_edited_ephys_export(clean, existing_record, original_id)
+            if synced is not None:
+                saved_context.update(synced)
+            elif existing_record:
+                saved_context = {**dict(existing_record.get("context") or {}), **saved_context}
+        saved = self.repository.save_record(
             self.get_site_id(), table_name, clean,
             source="metadata_dashboard", context=saved_context,
         )
+        if original_id and original_id != canonical_record_id and table_name in {"Imaging", "Electrophysiology"}:
+            RecordDeletionService().delete_metadata_record(self.get_site_id(), patient_key, table_name, original_id)
+        return saved
 
     def metadata_validate_record(
         self,
