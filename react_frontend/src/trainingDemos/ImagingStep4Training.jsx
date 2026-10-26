@@ -32,6 +32,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
   const [draft,setDraft]=useState("");
   const [headerTyped,setHeaderTyped]=useState(false);
   const [headerSaved,setHeaderSaved]=useState(false);
+  const [headerError,setHeaderError]=useState("");
   const [rejectOpen,setRejectOpen]=useState(false);
   const [rejectionExplored,setRejectionExplored]=useState(false);
   const [decision,setDecision]=useState("");
@@ -45,7 +46,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
     return () => window.clearTimeout(timer);
   }, [stage, guided]);
   const current=stages[stage];
-  const safeHeaderEdit = choice === "descrip" && headerTyped && draft.trim().length > 0 && !/john\\s+doe/i.test(draft);
+  const safeHeaderEdit = choice === "descrip" && headerTyped && draft.trim().length > 0 && !/john\s+doe/i.test(draft);
   const targets=["step4-header-table","step4-header-input","step4-save-header","step4-image-viewer","step4-reject","step4-accept","imaging-review-sliders","step4-linked-open","step4-linked-comment","step4-linked-save","imaging-step4-continue"];
   const advance=()=>{ if(stage===0){setChoice("descrip");setDraft(rows.find(row=>row.name==="descrip")?.scrubbed||"");setHeaderTyped(false);} setStage(v=>Math.min(stages.length-1,v+1)); };
   const canProceed= stage===0 || (stage===1&&safeHeaderEdit) || (stage===2&&headerSaved) || stage===3 || (stage===4&&rejectionExplored) || (stage===5&&decision==="Accepted") || (stage===6&&sliderUsed) || (stage===7&&metadataOpen) || (stage===8&&comment!=="Synthetic preoperative MRI") || (stage===9&&metadataSaved);
@@ -78,7 +79,7 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
               <input aria-label="Scrubbed header value for descrip" data-tutorial-id="step4-header-input" type="text"
                 value={choice==="descrip"?draft:row.scrubbed}
                 onFocus={()=>{if(choice!=="descrip"){setChoice("descrip");setDraft(row.scrubbed);setHeaderTyped(false);}}}
-                onChange={event=>{setChoice("descrip");setDraft(event.target.value);setHeaderTyped(true);setHeaderSaved(false);}}
+                onChange={event=>{setChoice("descrip");setDraft(event.target.value);setHeaderTyped(true);setHeaderSaved(false);setHeaderError("");}}
                 style={{width:"100%",boxSizing:"border-box",padding:"9px 10px",border:"1px solid #aabdcf",borderRadius:6,background:"white",color:"#172f48"}}
               />
             ) : row.editable ? (
@@ -91,7 +92,8 @@ export default function ImagingStep4Training({ImageReview,onComplete,onBack,guid
         </tr>)}</tbody>
       </table></div>
       {choice === "descrip" && !safeHeaderEdit && <p role="status" style={{fontSize:13,color:"#8b402c"}}>Type a replacement scrubbed value without “John Doe” to enable saving and continue the guide.</p>}
-      <button type="button" data-tutorial-id="step4-save-header" disabled={!safeHeaderEdit} onClick={()=>{setRows(old=>old.map(r=>r.name===choice?{...r,scrubbed:draft}:r));setHeaderSaved(true);}} style={{marginTop:12,padding:10,opacity:safeHeaderEdit?1:.5,position:stage===2?"relative":undefined,zIndex:stage===2?2002:undefined,background:"white",border:"1px solid #aabdcf",borderRadius:7,cursor:safeHeaderEdit?"pointer":"not-allowed"}}>Save Header Edit</button>
+      <button type="button" data-tutorial-id="step4-save-header" onClick={()=>{if(!safeHeaderEdit){setHeaderError("The scrubbed description must be edited to remove John Doe before it can be saved.");document.querySelector('[data-tutorial-id="step4-header-input"]')?.focus();return;}setRows(old=>old.map(r=>r.name===choice?{...r,scrubbed:draft}:r));setHeaderSaved(true);setHeaderError("");}} style={{marginTop:12,padding:10,position:stage===2?"relative":undefined,zIndex:stage===2?2002:undefined,background:"white",border:"1px solid #aabdcf",borderRadius:7,cursor:"pointer"}}>Save Header Edit</button>
+      {headerError&&<p role="alert" style={{color:"#9c3e25",fontWeight:600}}>{headerError}</p>}
       {headerSaved&&<span role="status" style={{marginLeft:12,color:"#267045"}}><Check size={16}/> Example edit saved</span>}
     </section>
     <section style={{border:"1px solid #d7e5ef",borderRadius:12,padding:20,background:"white"}}>
