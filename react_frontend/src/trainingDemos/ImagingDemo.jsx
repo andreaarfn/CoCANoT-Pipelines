@@ -814,7 +814,7 @@ export default function ImagingDemo() {
 @media(max-width:560px){.imaging-guide-overview-backdrop{padding:16px}.imaging-guide-overview-card{padding:24px}.imaging-guide-overview-description{font-size:14px!important}}
 /* Highlight the actual active workflow section, rather than covering it with the introduction. */
 .imaging-public-demo .imaging-guide-focus-step{position:relative!important;z-index:1202!important;outline:4px solid #80cdff!important;outline-offset:5px!important;box-shadow:0 0 0 9px rgba(80,177,239,.27),0 16px 60px rgba(0,0,0,.32)!important;background:#fff}
-.imaging-guide-overview-backdrop .imaging-guide-overview-card{pointer-events:auto}
+.imaging-public-demo .imaging-guide-focus-step{pointer-events:none!important;user-select:none!important} .imaging-guide-overview-backdrop .imaging-guide-overview-card{pointer-events:auto}
 @media(max-width:680px){.imaging-guide-overview-backdrop{padding:0}.imaging-guide-overview-card{width:min(390px,calc(100vw - 32px));max-height:42vh}.imaging-guide-overview-description{font-size:13px!important}}
 
 .imaging-guide-small-explore{margin-top:8px;padding-top:8px;border-top:1px solid #e6edf4;text-align:left}
