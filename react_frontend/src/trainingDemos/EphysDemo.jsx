@@ -497,13 +497,13 @@ export default function EphysDemo() {
       } catch (_) { /* Show editing instruction until JSON is valid. */ }
       return hasRemovedName
         ? { target: "ephys-step4-save-json", title: "Save the corrected JSON metadata", text: "You removed John Doe from Comments. Click Save JSON Metadata to validate and save the synthetic EDF sidecar before continuing." }
-        : { target: "ephys-step4-json-editor", title: "Remove patient information from linked metadata", text: "The JSON Comments field contains John Doe, which is identifying patient information. Click inside the highlighted JSON editor and remove John Doe from Comments using your keyboard. Keep the JSON syntax and identifiers intact, then save." };
+        : { target: "ephys-step4-json-editor", title: "Remove patient information from linked metadata", text: "Privacy reminder: the JSON metadata Comments field contains the patient name John Doe. Delete John Doe from Comments with your keyboard, keep a non-identifying description and valid JSON, and then click Save JSON Metadata." };
     }
     if (step === 4) {
       return {
         target: "ephys-accept",
         title: "Continue to metadata",
-        text: "The recording is accepted. Continue to Step 5.",
+        text: "Before continuing, confirm that you removed John Doe from the linked JSON Comments field and saved your changes. Then continue to Step 5.",
       };
     }
 
