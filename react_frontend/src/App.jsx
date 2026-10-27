@@ -971,20 +971,22 @@ export default function App() {
 
 
   if (page === "contracts" || page === "regulatory") {
-    content = <TrialDocuments key={`${siteId}:${page}`} section={page} siteId={siteId} />;
+    content = <TrialDocuments key={`${siteId}:${page}`} section={page} siteId={siteId} experience="research" />;
   } else if (page === "site-training") {
-    content = <SiteTraining onNavigate={navigate} />;
+    content = <SiteTraining onNavigate={navigate} experience="research" />;
   } else if (page === "training-demo") {
     content = navigationContext.tutorial === "metadata"
       ? <MetadataTutorial onBack={() => navigate("data-capture")} />
       : <SiteTraining
           key={navigationContext.tutorial || "training"}
+          experience="research"
           initialTutorial={navigationContext.tutorial}
           onExit={() => navigate("data-capture")}
         />;
   } else if (page === "data-capture") {
     content = (
       <HomeDashboard
+        experience="research"
         onNavigate={navigate}
         attentionItems={attentionItems}
         attentionLoading={attentionLoading}
@@ -995,7 +997,7 @@ export default function App() {
   } else if (page === "home") {
     content = <TrialHome experience="research" onNavigate={navigate} />;
   } else if (page === "project-management") {
-    content = <ProjectManagement experience="research" siteId={siteId} onNavigate={navigate} />;
+    content = <ProjectManagement userId={userId} experience="research" siteId={siteId} onNavigate={navigate} />;
   } else if (page === "needs-attention") {
 
 
