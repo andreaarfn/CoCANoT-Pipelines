@@ -20,7 +20,7 @@ const TUTORIALS = [
   ["patient", "Patient data review tutorial", "Explore linked synthetic clinical, surgical, imaging, and recording data.", Users, PatientDemo],
 ];
 
-export default function SiteTraining({ initialTutorial = null, onExit = null }) {
+export default function SiteTraining({ initialTutorial = null, onExit = null, experience = "research" }) {
   const [done, setDone] = useState({});
   const [active, setActive] = useState(initialTutorial);
   const [guided, setGuided] = useState(true);
@@ -33,6 +33,7 @@ export default function SiteTraining({ initialTutorial = null, onExit = null }) 
 
   if (active) {
     const item = TUTORIALS.find(row => row[0] === active);
+    if (!item || (experience !== "research" && active !== "patient")) return <p>This tutorial is not available for your role.</p>;
     const Demo = item[4];
     return <div style={{minWidth:0}}>
       <button type="button" onClick={() => onExit ? onExit() : setActive(null)} className={styles.historyButton} style={{marginBottom:16}}>
@@ -71,7 +72,7 @@ export default function SiteTraining({ initialTutorial = null, onExit = null }) 
             Start with guided step-by-step instructions
           </label>
           <div style={{display:"grid",gap:12}}>
-            {TUTORIALS.map(([id,tutorialTitle,tutorialDescription,TutorialIcon]) => <div key={id} style={{display:"flex",gap:14,alignItems:"center",flexWrap:"wrap",border:"1px solid #dce7ef",borderRadius:10,padding:14,background:"#f7fbfe"}}>
+            {TUTORIALS.filter(row => experience === "research" || row[0] === "patient").map(([id,tutorialTitle,tutorialDescription,TutorialIcon]) => <div key={id} style={{display:"flex",gap:14,alignItems:"center",flexWrap:"wrap",border:"1px solid #dce7ef",borderRadius:10,padding:14,background:"#f7fbfe"}}>
               <TutorialIcon size={23} color="#28678e"/>
               <div style={{flex:"1 1 220px"}}><strong>{tutorialTitle}</strong><p style={{fontSize:13,margin:"5px 0 0"}}>{tutorialDescription}</p></div>
               <button type="button" className={styles.historyButton} onClick={()=>setActive(id)}><BookOpen size={16}/> Start tutorial</button>
