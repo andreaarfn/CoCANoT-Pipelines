@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Bug, Clipboard, LifeBuoy, Send } from "lucide-react";
 import styles from "./HelpSupport.module.css";
 
-export default function HelpSupport({ siteId }) {
+export default function HelpSupport({ siteId, userId }) {
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
   const [steps, setSteps] = useState("");
@@ -15,6 +15,7 @@ export default function HelpSupport({ siteId }) {
 
   const reportText = [
     `Site: ${siteId || "Unknown"}`,
+    `User: ${userId || "Unknown"}`,
     `Summary: ${summary || "(not provided)"}`,
     "",
     "Description:",
@@ -52,7 +53,7 @@ export default function HelpSupport({ siteId }) {
       if (!bridge?.submit_bug_report) {
         throw new Error("Bug reporting is unavailable. Restart the updated desktop application.");
       }
-      const fingerprint = JSON.stringify([siteId, summary.trim(), description.trim(), submittedSteps]);
+      const fingerprint = JSON.stringify([siteId, userId, summary.trim(), description.trim(), submittedSteps]);
       if (!pendingReport.current || pendingReport.current.fingerprint !== fingerprint) {
         pendingReport.current = { fingerprint, requestId: crypto.randomUUID() };
       }
@@ -88,6 +89,7 @@ export default function HelpSupport({ siteId }) {
         </div>
         <form onSubmit={submitReport} style={{ display: "grid", gap: 15 }}>
           <label><span>Reporting site</span><input value={siteId || ""} readOnly /></label>
+          <label><span>Reporting user</span><input value={userId || ""} readOnly /></label>
           <label><span>Short summary</span><input value={summary} maxLength={160} required onChange={event => setSummary(event.target.value)} placeholder="Example: Surgical record will not save" /></label>
           <label><span>What happened?</span><textarea value={description} maxLength={4000} required onChange={event => setDescription(event.target.value)} rows={5} placeholder="Describe the problem and any error message you saw." /></label>
           <label><span>Steps to reproduce</span><textarea value={steps} maxLength={3000} onChange={event => setSteps(event.target.value)} rows={5} placeholder={"1. Open Metadata\n2. Load a patient\n3. ..."} /></label>
