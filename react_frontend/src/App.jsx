@@ -11,6 +11,7 @@ import MetadataTutorial from "./trainingDemos/MetadataTutorial";
 
 import HomeDashboard from "./HomeDashboard";
 import TrialHome from "./TrialHome";
+import ProjectManagement from "./ProjectManagement";
 
 
 
@@ -993,7 +994,9 @@ export default function App() {
       />
     );
   } else if (page === "home") {
-    content = <TrialHome onNavigate={navigate} />;
+    content = <TrialHome experience="administration" onNavigate={navigate} />;
+  } else if (page === "project-management") {
+    content = <ProjectManagement experience="administration" siteId={siteId} onNavigate={navigate} />;
   } else if (page === "needs-attention") {
 
 
@@ -1499,6 +1502,7 @@ export default function App() {
 
 
       siteId={siteId}
+      experience="administration"
 
 
 
