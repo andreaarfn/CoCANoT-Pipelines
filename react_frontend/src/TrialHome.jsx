@@ -26,6 +26,7 @@ const MODULES = [
 
 export default function TrialHome({ onNavigate, experience = "research" }) {
   const modules = experience === "administration" ? [...MODULES].sort((a,b)=>["contracts","regulatory","site-training","data-capture"].indexOf(a.key)-["contracts","regulatory","site-training","data-capture"].indexOf(b.key)) : [...MODULES].sort((a,b)=>["data-capture","site-training","regulatory","contracts"].indexOf(a.key)-["data-capture","site-training","regulatory","contracts"].indexOf(b.key));
+  const visibleModules = experience === "research" ? modules.map(m => (["contracts","regulatory"].includes(m.key) ? {...m, description:"View document history (read-only)."} : m)) : modules.map(m => m.key === "data-capture" ? {...m, description:"Patient Data Review and annotations. Research processing is reserved for research users."} : m);
   return (
     <div>
       <div className={styles.topRow}>
@@ -37,14 +38,14 @@ export default function TrialHome({ onNavigate, experience = "research" }) {
       </div>
       <button type="button" onClick={() => onNavigate("project-management")} style={{display:"flex",alignItems:"center",gap:10,marginBottom:22,padding:"12px 18px",border:0,borderRadius:9,background:"#2373a7",color:"white",fontWeight:750,cursor:"pointer"}}><ClipboardList size={18}/> {experience === "administration" ? "Open Project Management" : "Open My Project Work"} <ArrowRight size={16}/></button>
       <section className={styles.grid} style={{ gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))" }}>
-        {modules.map(module => {
+        {visibleModules.map(module => {
           const Icon = module.icon;
           return (
             <article className={styles.card} key={module.key}>
               <div className={styles.icon}><Icon size={29} strokeWidth={1.8} /></div>
               <h2>{module.title}</h2>
               <p>{module.description}</p>
-              <button type="button" onClick={() => onNavigate(module.key)}>
+              <button type="button" onClick={() => onNavigate(experience !== "research" && module.key === "data-capture" ? "patient-review" : module.key)}>
                 <span>Open {module.title}</span><ArrowRight size={17} />
               </button>
             </article>
