@@ -2,6 +2,16 @@ import React from "react";
 import { ArrowRight, ClipboardList, FileSignature, ShieldCheck, GraduationCap, Database } from "lucide-react";
 
 const THEMES = {
+  project_manager: {
+    eyebrow: "PROJECT MANAGER · STUDY OVERSIGHT",
+    title: "Project management & oversight",
+    description: "Create and assign tasks, move work through the five stages, review the complete local task history, and coordinate contracts and regulatory approvals.",
+    sections: [
+      {title:"Contracts & regulatory",description:"Coordinate uploads, annotation, assignments, review, and authorized signing.",items:[["Contracts","contracts",FileSignature],["Regulatory","regulatory",ShieldCheck]]},
+      {title:"Site readiness & patient review",description:"Access training and patient data review annotations.",items:[["Site Initiation & Training","site-training",GraduationCap],["Patient Data Review","patient-review",Database]]},
+    ],
+    attention:"Follow up on study deadlines, reviews, and assigned actions in Needs Attention.",
+  },
   administration: {
     eyebrow: "ADMINISTRATION & OVERSIGHT",
     title: "Project management",
