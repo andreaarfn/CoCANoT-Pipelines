@@ -10,6 +10,7 @@ import NeedsAttention from "./NeedsAttention";
 import styles from "./HomeDashboard.module.css";
 
 export default function HomeDashboard({
+  experience = "research",
   onNavigate,
   attentionItems = [],
   attentionLoading = false,
@@ -46,6 +47,9 @@ export default function HomeDashboard({
     },
   ];
 
+  if (experience !== "research") {
+    return <section style={{padding:24}}><h1>Patient Data Review</h1><p>Review and annotate patient-linked data. Imaging, electrophysiology and metadata processing are available only in the Research workspace.</p><button type="button" onClick={() => onNavigate("patient-review")}>Open Patient Data Review</button></section>;
+  }
   return (
     <div>
       <div className={styles.topRow}>
