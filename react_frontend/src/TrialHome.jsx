@@ -44,8 +44,8 @@ export default function TrialHome({ onNavigate, experience = "research" }) {
               <div className={styles.icon}><Icon size={29} strokeWidth={1.8} /></div>
               <h2>{module.title}</h2>
               <p>{module.description}</p>
-              <button type="button" onClick={() => onNavigate(module.key)}>
-                <span>Open {module.title}</span><ArrowRight size={17} />
+              <button type="button" onClick={() => onNavigate(experience === "project_manager" && module.key === "data-capture" ? "patient-review" : module.key)}>
+                <span>{experience === "project_manager" && module.key === "data-capture" ? "Open Patient Data Review" : `Open ${module.title}`}</span><ArrowRight size={17} />
               </button>
             </article>
           );
