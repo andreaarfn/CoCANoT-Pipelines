@@ -305,6 +305,10 @@ export default function App() {
 
 
   function navigate(nextPage, context = {}) {
+    if (nextPage === "data-capture" || ["imaging","imaging-processing","ephys","ephys-processing","metadata-home","metadata-patients","metadata-bulk"].includes(nextPage)) {
+      navigate("patient-review", {});
+      return;
+    }
 
 
 
@@ -971,20 +975,22 @@ export default function App() {
 
 
   if (page === "contracts" || page === "regulatory") {
-    content = <TrialDocuments key={`${siteId}:${page}`} section={page} siteId={siteId} />;
+    content = <TrialDocuments key={`${siteId}:${page}`} section={page} siteId={siteId} experience="administration" />;
   } else if (page === "site-training") {
-    content = <SiteTraining onNavigate={navigate} />;
+    content = <SiteTraining onNavigate={navigate} experience="administration" />;
   } else if (page === "training-demo") {
     content = navigationContext.tutorial === "metadata"
       ? <MetadataTutorial onBack={() => navigate("data-capture")} />
       : <SiteTraining
           key={navigationContext.tutorial || "training"}
+          experience="administration"
           initialTutorial={navigationContext.tutorial}
           onExit={() => navigate("data-capture")}
         />;
   } else if (page === "data-capture") {
     content = (
       <HomeDashboard
+        experience="administration"
         onNavigate={navigate}
         attentionItems={attentionItems}
         attentionLoading={attentionLoading}
@@ -995,7 +1001,7 @@ export default function App() {
   } else if (page === "home") {
     content = <TrialHome experience="administration" onNavigate={navigate} />;
   } else if (page === "project-management") {
-    content = <ProjectManagement experience="administration" siteId={siteId} onNavigate={navigate} />;
+    content = <ProjectManagement userId={userId} experience="administration" siteId={siteId} onNavigate={navigate} />;
   } else if (page === "needs-attention") {
 
 
