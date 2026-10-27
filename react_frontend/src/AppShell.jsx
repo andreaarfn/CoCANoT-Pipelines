@@ -61,7 +61,7 @@ export default function AppShell({
     : page;
 
   function go(key) {
-    onNavigate(key === "data-capture" ? "data-capture" : key);
+    onNavigate(key === "data-capture" && projectManager ? "patient-review" : key);
   }
 
   return (
