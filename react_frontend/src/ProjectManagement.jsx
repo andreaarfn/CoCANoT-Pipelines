@@ -68,7 +68,9 @@ function AgileBoard({experience,siteId}){
  const [assignee,setAssignee]=React.useState("");
  const [due,setDue]=React.useState("");
  const [filter,setFilter]=React.useState("All categories");
- const [range,setRange]=React.useState("active");
+ const [statusFilter,setStatusFilter]=React.useState("all");
+ const [deadlineFilter,setDeadlineFilter]=React.useState("any");
+ const [customDeadline,setCustomDeadline]=React.useState("");
  const [selectedId,setSelectedId]=React.useState(null);
  const [requestedDate,setRequestedDate]=React.useState("");
  const [reason,setReason]=React.useState("");
@@ -79,15 +81,25 @@ function AgileBoard({experience,siteId}){
  const selected=tasks.find(t=>t.id===selectedId);
  const filtered=tasks.filter(t=>!t.archived&&(filter==="All categories"||t.category===filter));
  const today=new Date().toISOString().slice(0,10);
- const daysLater=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
- const shown=filtered.filter(t=>range==="all"||(range==="active"?t.stage!=="done"&&(t.stage!=="backlog"||!t.due||t.due<=daysLater):range==="upcoming"?Boolean(t.due&&t.due>daysLater):t.stage==="done"));
+ const cutoff=days=>{const date=new Date();date.setHours(12,0,0,0);date.setDate(date.getDate()+days);return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-")};
+ const nextWeek=cutoff(7),nextMonth=cutoff(30);
+ const shown=filtered.filter(t=>{
+  if(statusFilter==="open"&&t.stage==="done")return false;
+  if(statusFilter==="done"&&t.stage!=="done")return false;
+  if(deadlineFilter==="any")return true;
+  if(!t.due)return false;
+  if(deadlineFilter==="week")return t.due>=today&&t.due<=nextWeek;
+  if(deadlineFilter==="month")return t.due>=today&&t.due<=nextMonth;
+  if(deadlineFilter==="custom")return Boolean(customDeadline)&&t.due===customDeadline;
+  return true;
+ });
  const ordered=[...shown].sort((a,b)=>sort==="name"?a.title.localeCompare(b.title):sort==="updated"?(b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""):(a.due||"9999").localeCompare(b.due||"9999"));
  const requestExtension=e=>{e.preventDefault();if(!selected||!requestedDate||!reason.trim())return;const extension={id:Math.random().toString(36).slice(2),oldDue:selected.due||"",newDue:requestedDate,reason:reason.trim(),status:"requested",requestedAt:stamp()};update(selected.id,{extensions:[...(selected.extensions||[]),extension]},"extension_requested","Requested "+(selected.due||"unset")+" → "+requestedDate+"; reason: "+reason.trim());setRequestedDate("");setReason("")};
  const decide=(t,x,approve)=>{const next=(t.extensions||[]).map(ext=>ext.id===x.id?{...ext,status:approve?"approved":"rejected",resolvedAt:stamp()}:ext);update(t.id,{extensions:next,...(approve?{due:x.newDue}:{})},approve?"extension_approved":"extension_rejected",(approve?"Approved":"Declined")+" deadline request "+(x.oldDue||"unset")+" → "+x.newDue+(approve?"; current due date changed":"; current due date retained"))};
  return <section style={{marginTop:25,padding:20,background:"#fff",border:"1px solid #d6e2eb",borderRadius:13}}>
   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12,marginBottom:13}}>
    <div><h2 style={{fontSize:20,margin:"0 0 5px"}}>Project tasks</h2><p style={{margin:0,fontSize:12,color:"#637d90"}}>Plan a year of deliverables in the register; keep the board focused on actionable work.</p></div>
-   <div style={{display:"flex",gap:7}}>{[["board","Agile board"],["register","Task register"]].map(([key,label])=><button type="button" key={key} onClick={()=>{setView(key);setRange(key==="board"?"active":"all")}} style={{...buttonStyle,background:view===key?"#226e9e":"white",color:view===key?"white":"#215b80"}}>{label}</button>)}</div>
+   <div style={{display:"flex",gap:7}}>{[["board","Agile board"],["register","Task register"]].map(([key,label])=><button type="button" key={key} onClick={()=>setView(key)} style={{...buttonStyle,background:view===key?"#226e9e":"white",color:view===key?"white":"#215b80"}}>{label}</button>)}</div>
   </div>
   <form onSubmit={add} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(155px,1fr))",gap:10,alignItems:"end",padding:13,background:"#f6f9fc",borderRadius:9,marginBottom:17}}>
    <label style={{fontSize:11,fontWeight:750}}>Task title<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="New task" style={inputStyle}/></label>
@@ -98,7 +110,9 @@ function AgileBoard({experience,siteId}){
   </form>
   <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16,alignItems:"center"}}>
    <label style={{fontSize:12}}>Category <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...inputStyle,width:"auto"}}>{["All categories",...TYPES].map(x=><option key={x}>{x}</option>)}</select></label>
-   <label style={{fontSize:12}}>Show <select value={range} onChange={e=>setRange(e.target.value)} style={{...inputStyle,width:"auto"}}><option value="active">Active / next 30 days</option><option value="all">All tasks</option><option value="upcoming">Long-term backlog</option><option value="done">Completed</option></select></label>
+   <label style={{fontSize:12}}>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{...inputStyle,width:"auto"}}><option value="all">All statuses</option><option value="open">Not completed</option><option value="done">Completed</option></select></label>
+   <label style={{fontSize:12}}>Deadline <select value={deadlineFilter} onChange={e=>setDeadlineFilter(e.target.value)} style={{...inputStyle,width:"auto"}}><option value="any">Any date</option><option value="week">Next week</option><option value="month">Next month</option><option value="custom">Custom date</option></select></label>
+   {deadlineFilter==="custom"&&<label style={{fontSize:12}}>Select date <input type="date" aria-label="Custom deadline date" value={customDeadline} onChange={e=>setCustomDeadline(e.target.value)} style={{...inputStyle,width:"auto"}}/></label>}
    {view==="register"&&<label style={{fontSize:12}}>Sort <select value={sort} onChange={e=>setSort(e.target.value)} style={{...inputStyle,width:"auto"}}><option value="due">Deadline</option><option value="name">Task name</option><option value="updated">Last updated</option></select></label>}
    <span style={{marginLeft:"auto",fontSize:12,color:"#61798c"}}>{shown.length} of {filtered.length} tasks</span>
   </div>
