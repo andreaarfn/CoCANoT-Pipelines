@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   GraduationCap,
   Database,
+  ClipboardList,
 } from "lucide-react";
 import styles from "./AppShell.module.css";
 
@@ -29,11 +30,13 @@ const NAV = [
   { key: "regulatory", label: "Regulatory", icon: ShieldCheck },
   { key: "site-training", label: "Site Initiation & Training", icon: GraduationCap },
   { key: "data-capture", label: "Data Capture & Monitoring", icon: Database },
+  { key: "project-management", label: "Project Management", icon: ClipboardList },
   { key: "needs-attention", label: "Needs Attention", icon: AlertTriangle },
 ];
 
 export default function AppShell({
   siteId,
+  experience = "research",
   page,
   attentionCount = 0,
   onNavigate,
@@ -209,7 +212,7 @@ export default function AppShell({
       <div className={styles.main}>
         <header className={styles.topbar}>
           <div className={styles.site}>
-            <span>ACTIVE SITE</span>
+            <span>{experience === "administration" ? "ADMINISTRATION & OVERSIGHT" : "CLINICAL & RESEARCH"} · ACTIVE SITE</span>
             <strong>{siteId}</strong>
           </div>
           <button
