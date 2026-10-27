@@ -33,8 +33,9 @@ async function database(operation, store, value) {
   });
 }
 
-export default function TrialDocuments({ section, siteId }) {
+export default function TrialDocuments({ section, siteId, experience = "research" }) {
   const regulatory = section === "regulatory";
+  const canEdit = experience !== "research";
   const [records, setRecords] = useState([]);
   const [events, setEvents] = useState([]);
   const [title, setTitle] = useState("");
@@ -75,7 +76,7 @@ export default function TrialDocuments({ section, siteId }) {
   }
 
   async function upload(file) {
-    if (!file) return;
+    if (!canEdit || !file) return;
     const documentTitle = title.trim() || file.name;
     const previousVersions = records.filter(item =>
       item.title.trim().toLowerCase() === documentTitle.toLowerCase()
@@ -126,7 +127,7 @@ export default function TrialDocuments({ section, siteId }) {
           ? "All regulatory document versions remain visible. The current version is marked."
           : "Current contract versions appear first. Show previous versions when needed."}</p>
       </div>
-      <div className={styles.card}>
+      {canEdit && <div className={styles.card}>
         <h2>Upload document</h2>
         <div className={styles.form}>
           <label>Document title <input value={title} onChange={e => setTitle(e.target.value)}
@@ -139,7 +140,8 @@ export default function TrialDocuments({ section, siteId }) {
           </label>
         </div>
         <p className={styles.hint}>To add a new version, upload a document with the same title.</p>
-      </div>
+      </div>}
+      {!canEdit && <p>Document history is read-only for Research users.</p>}
       {error && <p className={styles.error} role="alert">{error}</p>}
       <div className={styles.sectionTitle}>
         <h2>Document library <span>({grouped.length})</span></h2>
