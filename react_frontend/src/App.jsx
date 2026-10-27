@@ -977,11 +977,11 @@ export default function App() {
     content = <SiteTraining onNavigate={navigate} />;
   } else if (page === "training-demo") {
     content = navigationContext.tutorial === "metadata"
-      ? <MetadataTutorial onBack={() => navigate("data-capture")} />
+      ? <MetadataTutorial onBack={() => navigate("home")} />
       : <SiteTraining
           key={navigationContext.tutorial || "training"}
           initialTutorial={navigationContext.tutorial}
-          onExit={() => navigate("data-capture")}
+          onExit={() => navigate("home")}
         />;
   } else if (page === "data-capture") {
     content = (
@@ -994,9 +994,9 @@ export default function App() {
       />
     );
   } else if (page === "home") {
-    content = <TrialHome experience="administration" onNavigate={navigate} />;
+    content = <TrialHome experience="project_manager" onNavigate={navigate} />;
   } else if (page === "project-management") {
-    content = <ProjectManagement experience="administration" siteId={siteId} onNavigate={navigate} />;
+    content = <ProjectManagement experience="project_manager" siteId={siteId} onNavigate={navigate} />;
   } else if (page === "needs-attention") {
 
 
@@ -1502,7 +1502,7 @@ export default function App() {
 
 
       siteId={siteId}
-      experience="administration"
+      experience="project_manager"
 
 
 
