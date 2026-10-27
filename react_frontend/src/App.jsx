@@ -304,6 +304,12 @@ export default function App() {
 
 
   function navigate(nextPage, context = {}) {
+    // Project Manager branch: data pipeline operations belong to Research.
+    const researchOnly = ["imaging", "imaging-processing", "ephys", "ephys-processing", "metadata-home", "metadata-patients", "metadata-bulk"];
+    if (nextPage === "data-capture" || researchOnly.includes(nextPage)) {
+      nextPage = "patient-review";
+      context = {};
+    }
 
 
 
