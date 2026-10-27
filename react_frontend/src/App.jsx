@@ -306,8 +306,8 @@ export default function App() {
 
   function navigate(nextPage, context = {}) {
     if (nextPage === "data-capture" || ["imaging","imaging-processing","ephys","ephys-processing","metadata-home","metadata-patients","metadata-bulk"].includes(nextPage)) {
-      navigate("patient-review", {});
-      return;
+      nextPage = "patient-review";
+      context = {};
     }
 
 
