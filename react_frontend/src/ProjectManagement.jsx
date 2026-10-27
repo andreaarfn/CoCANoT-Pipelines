@@ -34,7 +34,7 @@ const THEMES = {
   },
 };
 
-export default function ProjectManagement({ experience = "research", siteId, onNavigate }) {
+export default function ProjectManagement({ experience = "research", siteId, userId = "", onNavigate }) {
   const view = THEMES[experience] || THEMES.research;
   return <div style={{maxWidth:1180,margin:"0 auto",color:"#213f56"}}>
     <header style={{marginBottom:24}}>
@@ -43,7 +43,7 @@ export default function ProjectManagement({ experience = "research", siteId, onN
       <p style={{fontSize:14,color:"#62798c",maxWidth:730}}>{view.description}</p>
 
     </header>
-    <AgileBoard experience={experience} siteId={siteId}/>
+    <AgileBoard experience={experience} siteId={siteId} userId={userId}/>
     {view.sections.map(section=><section key={section.title} style={{marginBottom:22,padding:20,border:"1px solid #d6e2eb",borderRadius:13,background:"#fff"}}>
       <h2 style={{margin:"0 0 4px",fontSize:18}}>{section.title}</h2>
       <p style={{margin:"0 0 17px",fontSize:13,color:"#6c8292"}}>{section.description}</p>
@@ -70,7 +70,7 @@ const event=(type,details)=>({id:Math.random().toString(36).slice(2),type,detail
 const buttonStyle={padding:"8px 12px",border:"1px solid #c8d9e6",borderRadius:7,background:"#fff",color:"#215b80",fontWeight:700,cursor:"pointer"};
 const inputStyle={padding:"9px 10px",border:"1px solid #cbdbe5",borderRadius:7,width:"100%",boxSizing:"border-box"};
 function loadTasks(){try{const rows=JSON.parse(localStorage.getItem(STORE)||"[]");return Array.isArray(rows)?rows.map(x=>({...x,originalDue:x.originalDue??x.due??"",history:Array.isArray(x.history)?x.history:[],extensions:Array.isArray(x.extensions)?x.extensions:[]})):[]}catch{return []}}
-function AgileBoard({experience,siteId}){
+function AgileBoard({experience,siteId,userId}){
  const [tasks,setTasks]=React.useState(loadTasks);
  const [view,setView]=React.useState("board");
  const [title,setTitle]=React.useState("");
@@ -89,7 +89,7 @@ function AgileBoard({experience,siteId}){
  const update=(id,patch,type,details)=>setTasks(prev=>prev.map(t=>t.id===id?{...t,...patch,updatedAt:stamp(),history:[...(t.history||[]),event(type,details)]}:t));
  const add=e=>{e.preventDefault();if(!title.trim())return;const created=stamp();setTasks(prev=>[...prev,{id:Math.random().toString(36).slice(2)+Date.now(),title:title.trim(),category,assignee:assignee.trim(),due,originalDue:due,siteId,stage:"backlog",createdAt:created,updatedAt:created,history:[event("created","Task created; original deadline: "+(due||"not set"))],extensions:[]}]);setTitle("");setAssignee("");setDue("")};
  const selected=tasks.find(t=>t.id===selectedId);
- const filtered=tasks.filter(t=>!t.archived&&(filter==="All categories"||t.category===filter));
+ const filtered=tasks.filter(t=>!t.archived && (experience==="project_manager" || (userId && String(t.assignee||"").trim().toUpperCase()===userId.toUpperCase())) && (filter==="All categories"||t.category===filter));
  const today=new Date().toISOString().slice(0,10);
  const cutoff=days=>{const date=new Date();date.setHours(12,0,0,0);date.setDate(date.getDate()+days);return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-")};
  const nextWeek=cutoff(7),nextMonth=cutoff(30);
@@ -111,13 +111,13 @@ function AgileBoard({experience,siteId}){
    <div><h2 style={{fontSize:20,margin:"0 0 5px"}}>Project tasks</h2><p style={{margin:0,fontSize:12,color:"#637d90"}}>Plan a year of deliverables in the register; keep the board focused on actionable work.</p></div>
    <div style={{display:"flex",gap:7}}>{[["board","Agile board"],["register","Task register"]].map(([key,label])=><button type="button" key={key} onClick={()=>setView(key)} style={{...buttonStyle,background:view===key?"#226e9e":"white",color:view===key?"white":"#215b80"}}>{label}</button>)}</div>
   </div>
-  <form onSubmit={add} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(155px,1fr))",gap:10,alignItems:"end",padding:13,background:"#f6f9fc",borderRadius:9,marginBottom:17}}>
+  {experience==="project_manager" && <form onSubmit={add} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(155px,1fr))",gap:10,alignItems:"end",padding:13,background:"#f6f9fc",borderRadius:9,marginBottom:17}}>
    <label style={{fontSize:11,fontWeight:750}}>Task title<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="New task" style={inputStyle}/></label>
    <label style={{fontSize:11,fontWeight:750}}>Category<select value={category} onChange={e=>setCategory(e.target.value)} style={inputStyle}>{TYPES.map(t=><option key={t}>{t}</option>)}</select></label>
    <label style={{fontSize:11,fontWeight:750}}>Assigned user<input value={assignee} onChange={e=>setAssignee(e.target.value)} placeholder="User ID or name" style={inputStyle}/></label>
    <label style={{fontSize:11,fontWeight:750}}>Original deadline<input type="date" value={due} onChange={e=>setDue(e.target.value)} style={inputStyle}/></label>
    <button type="submit" style={{...buttonStyle,background:"#246fa2",color:"white",height:39}}>Create task</button>
-  </form>
+  </form>}
   <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16,alignItems:"center"}}>
    <label style={{fontSize:12}}>Category <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...inputStyle,width:"auto"}}>{["All categories",...TYPES].map(x=><option key={x}>{x}</option>)}</select></label>
    <label style={{fontSize:12}}>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{...inputStyle,width:"auto"}}><option value="all">All statuses</option><option value="open">Not completed</option><option value="done">Completed</option></select></label>
@@ -150,13 +150,13 @@ function AgileBoard({experience,siteId}){
     </form>
     {(selected.extensions||[]).length>0&&<div style={{marginTop:13}}>{selected.extensions.map(x=><div key={x.id} style={{padding:10,border:"1px solid #dce8ef",borderRadius:7,marginBottom:6,background:"white",fontSize:12}}>
       <b>{x.oldDue||"Unscheduled"} → {x.newDue}</b> · {x.status}<div style={{color:"#577388"}}>{x.reason}</div>
-      {x.status==="requested"&&<div style={{display:"flex",gap:6,marginTop:9}}><button type="button" onClick={()=>decide(selected,x,true)} style={buttonStyle}>Approve new date</button><button type="button" onClick={()=>decide(selected,x,false)} style={buttonStyle}>Decline</button></div>}
+      {experience==="project_manager"&&x.status==="requested"&&<div style={{display:"flex",gap:6,marginTop:9}}><button type="button" onClick={()=>decide(selected,x,true)} style={buttonStyle}>Approve new date</button><button type="button" onClick={()=>decide(selected,x,false)} style={buttonStyle}>Decline</button></div>}
     </div>)}</div>}
     <h3 style={{fontSize:15,margin:"18px 0 8px"}}>Task audit history</h3>
     <div style={{display:"grid",gap:6}}>{[...(selected.history||[])].reverse().map((h,i)=><div key={h.id||i} style={{padding:"9px 11px",background:"white",border:"1px solid #e0e9ef",borderRadius:7,fontSize:12}}>
       <strong>{h.type.replaceAll("_"," ")}</strong> · {new Date(h.at).toLocaleString()} <span style={{color:"#698093"}}>· {h.actor}</span><div style={{marginTop:4,color:"#4f697c"}}>{h.details}</div>
     </div>)}</div>
-    <button type="button" style={{...buttonStyle,marginTop:16}} onClick={()=>{if(window.confirm("Archive this task? Its audit history will be retained locally.")){update(selected.id,{archived:true},"archived","Task archived");setSelectedId(null)}}}>Archive task</button>
+    {experience==="project_manager" && <button type="button" style={{...buttonStyle,marginTop:16}} onClick={()=>{if(window.confirm("Archive this task? Its audit history will be retained locally.")){update(selected.id,{archived:true},"archived","Task archived");setSelectedId(null)}}}>Archive task</button>}
   </div>}
   <p style={{fontSize:11,color:"#71889a",marginTop:18}}>Prototype audit history is stored locally and can be altered or lost with browser data. Extension decisions are simulated and do not represent verified approvals. A centralized append-only server audit trail and authenticated reviewers are required for production.</p>
  </section>;
