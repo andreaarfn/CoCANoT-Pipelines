@@ -695,7 +695,9 @@ class CoCANoTAPI:
     def get_site_id(self) -> str:
         return self.authenticated_site_id
 
-    REPORTING_ENDPOINT = "https://script.google.com/macros/s/AKfycbzSRMdCIybLtilIdpETNNeoOd6vRPSoiu5fCm0GJWblC7EZwpNXIbguCwOr5jFFIsa0/exec"
+    USER_ACCESS_ENDPOINT = "https://script.google.com/macros/s/AKfycbw346FcycSFJkwql3iZryXWA3ycAf79-6crp8n21K9R84KifmWkNtgy7D9VD-CDKD6f/exec"
+    REPORTING_ENDPOINT = "https://script.google.com/macros/s/AKfycbyYIVBalehK0uh2AIawBCsarLqBJW6yM6i57XmvWzlEO4syhMkNEi45uL7On75r-99d-g/exec"
+    EXPECTED_DEMO_ROLE = "project_manager"
 
     def _reporting_request(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -744,7 +746,7 @@ class CoCANoTAPI:
         return result
 
     def submit_bug_report(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if not self.authenticated_site_id or not self._reporting_session_token:
+        if not self.authenticated_site_id or not getattr(self, "authenticated_user_id", ""):
             return {"ok": False, "message": "Sign in again before submitting a report."}
         summary = str((payload or {}).get("summary") or "").strip()
         description = str((payload or {}).get("description") or "").strip()
@@ -759,11 +761,12 @@ class CoCANoTAPI:
         try:
             result = self._reporting_request({
                 "action": "report",
-                "requestId": request_id,
-                "sessionToken": self._reporting_session_token,
-                "summary": summary,
-                "description": description,
-                "steps": steps,
+                "siteId": self.authenticated_site_id,
+                "userId": self.authenticated_user_id,
+                "title": summary,
+                "description": description + ("\\n\\nSteps to reproduce:\\n" + steps if steps else ""),
+                "component": "General",
+                "appVersion": "clinical-platform",
             })
         except RuntimeError as exc:
             return {"ok": False, "message": str(exc)}
@@ -797,66 +800,55 @@ class CoCANoTAPI:
             "message": "" if opened else "The system browser could not be opened.",
         }
 
-    def authenticate_site(
-        self,
-        site_id: str,
-        access_code: str,
-    ) -> dict[str, Any]:
+    def authenticate_site(self, site_id: str, user_id: str) -> dict[str, Any]:
         normalized = normalize_site_id(site_id)
-        if not normalized or not str(access_code or "").strip():
-            return {"ok": False, "site_id": "", "message": "Enter both Site ID and Access Code."}
+        user_id = str(user_id or "").strip().upper()
+        if not normalized or not user_id:
+            return {"ok": False, "message": "Enter Site ID and User ID."}
         self.authenticated_site_id = ""
+        self.authenticated_user_id = ""
         self._reporting_session_token = ""
-        # The authentication endpoint is a Google Apps Script web app.
-        # Use urllib's POST/redirect handling, matching the verified desktop
-        # diagnostic and avoiding HTTP-client-specific HTML redirect pages.
-        payload = json.dumps({
-            "action": "login",
-            "siteId": normalized,
-            "accessCode": str(access_code).strip(),
-        }).encode("utf-8")
-        login_request = urllib_request.Request(
-            self.REPORTING_ENDPOINT,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "CoCANoT-Desktop/1.0",
-            },
+        payload = json.dumps({"action": "login", "siteId": normalized, "userId": user_id}).encode("utf-8")
+        request = urllib_request.Request(
+            self.USER_ACCESS_ENDPOINT, data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "CoCANoT-Desktop/1.0"},
             method="POST",
         )
         try:
-            with urllib_request.urlopen(login_request, timeout=25) as response:
-                response_body = response.read()
-            result = json.loads(response_body)
+            with urllib_request.urlopen(request, timeout=25) as response:
+                result = json.loads(response.read())
         except HTTPError as exc:
-            return {"ok": False, "site_id": "", "message": f"Authentication service returned HTTP {exc.code}."}
+            return {"ok": False, "message": f"User Access returned HTTP {exc.code}."}
         except (URLError, TimeoutError, OSError) as exc:
-            return {"ok": False, "site_id": "", "message": f"Authentication connection failed ({type(exc).__name__})."}
+            return {"ok": False, "message": f"User Access connection failed ({type(exc).__name__})."}
         except (ValueError, UnicodeDecodeError):
-            return {"ok": False, "site_id": "", "message": "Authentication service returned non-JSON data. Check the desktop HTTP connection."}
-        if not isinstance(result, dict):
-            return {"ok": False, "site_id": "", "message": "Invalid authentication service response."}
-        if result.get("ok") is not True:
-            return {"ok": False, "site_id": "", "message": str(result.get("error") or "Site authentication failed.")}
-        returned_site = normalize_site_id(result.get("site_id"))
-        token = str(result.get("sessionToken") or "")
-        if returned_site != normalized or not token:
-            return {"ok": False, "site_id": "", "message": "Invalid authentication service response."}
+            return {"ok": False, "message": "User Access returned non-JSON data. Check web-app deployment."}
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            return {"ok": False, "message": str(result.get("error") or "User lookup failed.") if isinstance(result, dict) else "Invalid User Access response."}
+        user = result.get("user")
+        if not isinstance(user, dict):
+            return {"ok": False, "message": "Invalid user record."}
+        returned_site = normalize_site_id(user.get("site_id"))
+        returned_id = str(user.get("user_id") or "").strip().upper()
+        role = str(user.get("role") or "").strip().lower()
+        if returned_site != normalized or returned_id != user_id or user.get("active") is not True:
+            return {"ok": False, "message": "User Access returned an invalid or inactive account."}
+        if role != self.EXPECTED_DEMO_ROLE:
+            return {"ok": False, "message": "This account belongs to the " + role + " experience. Open the matching clinical platform build."}
         saved = self.store.set_site_id(returned_site)
         self.authenticated_site_id = saved
-        self._reporting_session_token = token
-        return {"ok": True, "site_id": saved, "message": ""}
+        self.authenticated_user_id = returned_id
+        self._reporting_session_token = str(result.get("sessionToken") or "")
+        return {"ok": True, "site_id": saved, "user_id": returned_id, "role": role, "organization_id": user.get("organization_id", ""), "message": ""}
 
     def sign_out(self) -> dict[str, bool]:
         self.authenticated_site_id = ""
+        self.authenticated_user_id = ""
         self._reporting_session_token = ""
         return {"ok": True}
 
     def set_site_id(self, site_id: str) -> str:
-        raise PermissionError(
-            "Site access requires a valid Site ID and Access Code."
-        )
+        raise PermissionError("Site access requires a valid Site ID and User ID.")
 
     def choose_folder(self) -> str:
         if self.window is None:
