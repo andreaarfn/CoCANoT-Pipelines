@@ -52,6 +52,7 @@ export default function App() {
 
 
   const [siteId, setSiteId] = useState("");
+  const [userId, setUserId] = useState("");
 
 
 
@@ -59,7 +60,7 @@ export default function App() {
 
 
 
-  const [accessCode, setAccessCode] = useState("");
+  const [loginUserId, setLoginUserId] = useState("");
 
 
 
@@ -391,11 +392,11 @@ export default function App() {
 
 
 
-    const code = accessCode.trim();
+    const userId = loginUserId.trim().toUpperCase();
 
 
 
-    if (!value || !code || authenticating) {
+    if (!value || !userId || authenticating) {
 
 
 
@@ -451,7 +452,7 @@ export default function App() {
 
 
 
-        code
+        userId
 
 
 
@@ -463,7 +464,7 @@ export default function App() {
 
 
 
-        setAccessCode("");
+        setLoginUserId("");
 
 
 
@@ -475,7 +476,7 @@ export default function App() {
 
 
 
-            "The Site ID and Access Code did not match."
+            "The Site ID and User ID were not found or are inactive."
 
 
 
@@ -492,6 +493,7 @@ export default function App() {
 
 
       setSiteId(result.site_id || value);
+      setUserId(result.user_id || userId);
 
 
 
@@ -499,7 +501,7 @@ export default function App() {
 
 
 
-      setAccessCode("");
+      setLoginUserId("");
 
 
 
@@ -511,7 +513,7 @@ export default function App() {
 
 
 
-      setAccessCode("");
+      setLoginUserId("");
 
 
 
@@ -568,6 +570,7 @@ export default function App() {
 
 
       setSiteId("");
+      setUserId("");
 
 
 
@@ -575,7 +578,7 @@ export default function App() {
 
 
 
-      setAccessCode("");
+      setLoginUserId("");
 
 
 
@@ -679,7 +682,7 @@ export default function App() {
 
 
 
-          <p>Enter your Site ID and Access Code.</p>
+          <p>Enter your Site ID and User ID.</p>
 
 
 
@@ -771,7 +774,7 @@ export default function App() {
 
 
 
-              Access Code
+              User ID
 
 
 
@@ -783,15 +786,11 @@ export default function App() {
 
 
 
-              className={styles.passwordInput}
+              type="text"
 
 
 
-              type="password"
-
-
-
-              value={accessCode}
+              value={loginUserId}
 
 
 
@@ -799,7 +798,7 @@ export default function App() {
 
 
 
-                setAccessCode(event.target.value);
+                setLoginUserId(event.target.value.toUpperCase());
 
 
 
@@ -835,11 +834,11 @@ export default function App() {
 
 
 
-              placeholder="Access Code"
+              placeholder="User ID"
 
 
 
-              aria-label="Access Code"
+              aria-label="User ID"
 
 
 
@@ -919,7 +918,7 @@ export default function App() {
 
 
 
-              !accessCode.trim() ||
+              !loginUserId.trim() ||
 
 
 
@@ -1049,7 +1048,7 @@ export default function App() {
 
 
 
-      <HelpSupport siteId={siteId} />
+      <HelpSupport siteId={siteId} userId={userId} />
 
 
 
