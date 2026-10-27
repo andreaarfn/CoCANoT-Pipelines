@@ -20,7 +20,7 @@ const TUTORIALS = [
   ["patient", "Patient data review tutorial", "Explore linked synthetic clinical, surgical, imaging, and recording data.", Users, PatientDemo],
 ];
 
-export default function SiteTraining({ initialTutorial = null, onExit = null, experience = "research" }) {
+export default function SiteTraining({ initialTutorial = null, onExit = null, experience = "research", onNavigate = null }) {
   const [done, setDone] = useState({});
   const [active, setActive] = useState(initialTutorial);
   const [guided, setGuided] = useState(true);
@@ -49,6 +49,14 @@ export default function SiteTraining({ initialTutorial = null, onExit = null, ex
       <span className={styles.eyebrow}>CLINICAL TRIAL OPERATIONS</span>
       <h1>Site Initiation & Training</h1>
       <p>Site onboarding and guided CoCANoT workflow training.</p>
+    </div>
+    <div className={styles.card}>
+      <h2>{experience === "research" ? "Research orientation" : "Study operations tutorials"}</h2>
+      <p>{experience === "research" ? "Review document-history guidance and open the pipeline tutorials below." : "These guides cover the study operations pages available to your role."}</p>
+      <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
+        {(experience === "research" ? [["Contracts information","contracts"],["Regulatory information","regulatory"],["Metadata tutorial","training-demo"],["How to report bugs","help-support"]] : [["Contracts tutorial","contracts"],["Regulatory tutorial","regulatory"],["Project management tutorial","project-management"],["Patient data review tutorial","patient-review"],["How to report bugs","help-support"]]).map(([label,page]) => <button type="button" key={label} className={styles.historyButton} onClick={() => onNavigate?.(page, page==="training-demo"?{tutorial:"metadata"}:{})}>{label}</button>)}
+      </div>
+      <p style={{fontSize:12}}>Page links are orientation shortcuts. Detailed guided tutorials for contracts, regulatory, project management and bug reporting are not yet implemented.</p>
     </div>
     {MODULES.map(([title, description, Icon], index) => (
       <div className={styles.card} key={title}>
