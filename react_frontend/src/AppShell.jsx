@@ -54,6 +54,7 @@ export default function AppShell({
     );
   }, [collapsed]);
 
+  const projectManager = experience !== "research";
   const dataPages = ["imaging", "ephys", "metadata", "patient-review"];
   const activeMain = page === "training-demo" || dataPages.some(item => page === item || page.startsWith(item + "-"))
     ? "data-capture"
@@ -162,12 +163,12 @@ export default function AppShell({
 
                 {!collapsed && item.key === "data-capture" && active && (
                   <>
-                    {[
+                    {(projectManager ? [["patient-review", "Patient Data Review"]] : [
                       ["imaging", "Imaging"],
                       ["ephys", "Electrophysiology"],
                       ["metadata-home", "Metadata"],
                       ["patient-review", "Patient Data Review"],
-                    ].map(([target, label]) => (
+                    ]).map(([target, label]) => (
                       <button
                         key={target}
                         className={`${styles.subItem} ${
@@ -212,7 +213,7 @@ export default function AppShell({
       <div className={styles.main}>
         <header className={styles.topbar}>
           <div className={styles.site}>
-            <span>{experience === "administration" ? "ADMINISTRATION & OVERSIGHT" : "CLINICAL & RESEARCH"} · ACTIVE SITE</span>
+            <span>{experience === "project_manager" ? "PROJECT MANAGER & OVERSIGHT" : experience === "administration" ? "ADMINISTRATION & OVERSIGHT" : "CLINICAL & RESEARCH"} · ACTIVE SITE</span>
             <strong>{siteId}</strong>
           </div>
           <button
