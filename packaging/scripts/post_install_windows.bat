@@ -14,12 +14,13 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 "%PREFIX%\python.exe" -c "import webview, numpy, nibabel, pyedflib, fitz, openpyxl, clr_loader, cffi, pythonnet"
 if errorlevel 1 exit /b 1
+if not exist "%PREFIX%\Library\bin\dcm2niix.exe" (echo Bundled dcm2niix.exe missing from Windows Conda runtime & exit /b 1)
 if not exist "%APPROOT%\react_frontend\dist\index.html" (echo React frontend missing & exit /b 1)
 if not exist "%APPROOT%\MetadataPipeline\dictionaries\CoCANoT_Metadata_Phase1.0.xlsx" (echo Dictionary missing & exit /b 1)
 > "%PREFIX%\CoCANoT.bat" echo @echo off
 >> "%PREFIX%\CoCANoT.bat" echo set "PYTHONNOUSERSITE=1"
 >> "%PREFIX%\CoCANoT.bat" echo set "PYTHONPATH=%APPROOT%"
->> "%PREFIX%\CoCANoT.bat" echo set "PATH=%PREFIX%;%PREFIX%\Scripts;%%PATH%%"
+>> "%PREFIX%\CoCANoT.bat" echo set "PATH=%PREFIX%;%PREFIX%\Scripts;%PREFIX%\Library\bin;%%PATH%%"
 >> "%PREFIX%\CoCANoT.bat" echo cd /d "%APPROOT%"
 >> "%PREFIX%\CoCANoT.bat" echo "%PREFIX%\python.exe" "%APPROOT%\react_dashboard.py" %%*
 echo CoCANoT installed. Launch via "%PREFIX%\CoCANoT.bat".
