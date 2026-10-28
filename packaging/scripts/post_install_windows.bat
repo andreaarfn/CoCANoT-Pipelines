@@ -12,7 +12,7 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 "%PREFIX%\python.exe" -m pip install --no-index --no-deps --only-binary=:all: --find-links "%PREFIX%\payload\pip_packages" -r "%APPROOT%\packaging_requirements_pip.txt"
 if errorlevel 1 exit /b 1
-"%PREFIX%\python.exe" -c "import webview, numpy, nibabel, pyedflib, fitz, openpyxl"
+"%PREFIX%\python.exe" -c "import webview, numpy, nibabel, pyedflib, fitz, openpyxl, clr_loader, cffi, pythonnet"
 if errorlevel 1 exit /b 1
 if not exist "%APPROOT%\react_frontend\dist\index.html" (echo React frontend missing & exit /b 1)
 if not exist "%APPROOT%\MetadataPipeline\dictionaries\CoCANoT_Metadata_Phase1.0.xlsx" (echo Dictionary missing & exit /b 1)
