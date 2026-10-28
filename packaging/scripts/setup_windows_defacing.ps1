@@ -39,9 +39,10 @@ $agree = Read-Host 'Install Linux FSL (if missing) and PyDeface (if missing)? (t
 if ($agree -cne 'YES') { Write-Host 'Setup incomplete: FSL and PyDeface are required for Step 3C.'; exit 1 }
 $install = @'
 set -e
-if ! command -v curl >/dev/null || ! command -v python3 >/dev/null || ! python3 -m venv --help >/dev/null 2>&1; then
+if ! command -v curl >/dev/null || ! command -v bzip2 >/dev/null || ! command -v python3 >/dev/null || ! python3 -m venv --help >/dev/null 2>&1; then
+  echo "Installing Linux prerequisites (including bzip2 required by FSL)."
   sudo apt-get update
-  sudo apt-get install -y curl ca-certificates python3 python3-venv
+  sudo apt-get install -y curl ca-certificates bzip2 python3 python3-venv
 fi
 if [ ! -x "$HOME/fsl/share/fsl/bin/flirt" ] && ! command -v flirt >/dev/null 2>&1; then
   echo "Installing FSL from official FSL installer. Follow any on-screen prompts."
