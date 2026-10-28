@@ -664,7 +664,11 @@ def main() -> None:
                 }
             )
 
-    print("\nPyDeface defacing complete.")
+    failed_count = sum(result["status"] == "failed" for result in results)
+    if failed_count:
+        print("\nPyDeface defacing FAILED.")
+    else:
+        print("\nPyDeface defacing complete.")
     print("Defaced outputs saved in:", output_dir)
     print("Logs saved in:", log_dir)
     print_processing_summary(results)
