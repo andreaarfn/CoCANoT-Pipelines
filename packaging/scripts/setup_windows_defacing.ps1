@@ -6,41 +6,54 @@ Write-Host 'Setup downloads only minimal FSL FLIRT packages (not full FSL); WSL 
 Write-Host 'This utility will NEVER restart Windows for you.'
 $consent = Read-Host 'Step 3C cannot run until these prerequisites are installed. Continue? (type YES)'
 if ($consent -cne 'YES') { Write-Host 'Setup incomplete: Step 3C will remain unavailable.'; exit 1 }
-# A fresh Windows installation may not expose wsl.exe until Windows features are enabled.
-# Provision Windows features with UAC consent and require the user to resume after reboot.
-if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
-  Write-Host 'WSL is not installed or wsl.exe is unavailable. CoCANoT can enable the Windows prerequisites.' -ForegroundColor Yellow
-  $enable = Read-Host 'Enable WSL and Virtual Machine Platform with an Administrator prompt? (type YES)'
-  if ($enable -cne 'YES') { Write-Host 'WSL installation deferred. Step 3C remains unavailable.'; exit 1 }
-  $featureCommand = 'dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart; if ($LASTEXITCODE -notin @(0,3010)) { exit $LASTEXITCODE }; dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart; exit $LASTEXITCODE'
+# A clean Windows installation may have no WSL distribution or may need Windows features.
+# Never disable features, replace a distribution, or reboot the computer automatically.
+function Invoke-CoCANoTElevatedCommand([string]$command) {
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
   try {
-    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($featureCommand))
-    $admin = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCommand"
+    $process = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -Verb RunAs -Wait -PassThru -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
   } catch {
-    Write-Warning "Administrator approval was cancelled or unavailable: $_"
-    exit 1
+    throw "Administrator approval is required for WSL installation: $_"
   }
-  if ($admin.ExitCode -notin @(0,3010)) { throw "Windows WSL feature installation failed (exit code $($admin.ExitCode))." }
-  Write-Host 'Windows WSL prerequisites were enabled. Restart Windows manually, then use Start Menu > CoCANoT > Complete MRI defacing setup.' -ForegroundColor Yellow
-  Write-Host 'CoCANoT will not restart your computer automatically.'
+  return $process.ExitCode
+}
+$wslPath = Join-Path $env:WINDIR 'System32\wsl.exe'
+if (-not (Test-Path -LiteralPath $wslPath)) {
+  $wslPath = (Get-Command wsl.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source)
+}
+if (-not $wslPath) {
+  Write-Host 'WSL executable is missing. CoCANoT can enable the Windows prerequisites.' -ForegroundColor Yellow
+  $answer = Read-Host 'Enable WSL and Virtual Machine Platform with Administrator approval? (type YES)'
+  if ($answer -cne 'YES') { Write-Host 'WSL installation deferred; Step 3C remains unavailable.'; exit 1 }
+  $featureCommand = 'dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart; if ($LASTEXITCODE -notin @(0,3010)) { exit $LASTEXITCODE }; dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart; exit $LASTEXITCODE'
+  $code = Invoke-CoCANoTElevatedCommand $featureCommand
+  if ($code -notin @(0,3010)) { throw "Windows WSL feature installation failed (exit code $code)." }
+  Write-Host 'Windows features enabled. Restart Windows manually if prompted, then reopen Start Menu > CoCANoT > Complete MRI defacing setup.' -ForegroundColor Yellow
   exit 0
 }
-$distros = (& wsl.exe --list --quiet 2>&1 | Out-String) -replace [char]0, ''
-$names = @($distros -split "`r?`n" | Where-Object { $_.Trim() -and $_ -notmatch 'Windows Subsystem|no installed|install|Error|Default' })
-if ($LASTEXITCODE -ne 0 -or $names.Count -eq 0) {
-  Write-Host 'No WSL distribution is installed. Ubuntu installation may enable Windows features and require a restart.' -ForegroundColor Yellow
-  $answer = Read-Host 'Install Ubuntu through Windows WSL now? (type YES)'
-  if ($answer -cne 'YES') { Write-Host 'Setup incomplete: Ubuntu is required for Step 3C.'; exit 1 }
-  & wsl.exe --install -d Ubuntu
-  if ($LASTEXITCODE -ne 0) { throw 'Ubuntu setup failed. Check messages above and run this utility again.' }
-  Write-Host 'Ubuntu installation finished. Checking whether first-run setup is complete...' -ForegroundColor Cyan
-  $ready = & wsl.exe --exec bash -lc 'id -u; test -d "$HOME"' 2>&1
-  if ($LASTEXITCODE -ne 0) {
-    Write-Host 'Ubuntu needs a restart or its first-run username/password setup before FSL and PyDeface can be installed.' -ForegroundColor Yellow
-    Write-Host 'Complete that Windows/Ubuntu setup, then reopen Start Menu > CoCANoT > Complete MRI defacing setup.'
-    exit 1
+# Do not conflate a failed WSL status check with an installed distribution.
+$listOutput = & $wslPath --list --quiet 2>&1 | Out-String
+$listCode = $LASTEXITCODE
+$names = @()
+if ($listCode -eq 0) {
+  $names = @((($listOutput -replace [char]0, '') -split "`r?`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch 'Windows Subsystem|no installed|install|Error|Default' })
+}
+if ($names.Count -eq 0) {
+  Write-Host 'Ubuntu is not ready. CoCANoT can request its installation with Administrator approval.' -ForegroundColor Yellow
+  $answer = Read-Host 'Install WSL2 and Ubuntu for MRI defacing? (type YES)'
+  if ($answer -cne 'YES') { Write-Host 'Ubuntu installation deferred; Step 3C remains unavailable.'; exit 1 }
+  $quotedWsl = '"' + $wslPath.Replace('"','') + '"'
+  $installCommand = "& $quotedWsl --install -d Ubuntu; exit `$LASTEXITCODE"
+  $code = Invoke-CoCANoTElevatedCommand $installCommand
+  if ($code -notin @(0,3010)) {
+    throw "WSL/Ubuntu installation failed (exit code $code). Check administrator console output and Windows virtualization settings."
   }
-  Write-Host 'Ubuntu is ready. Continuing to minimal FLIRT and PyDeface installation...' -ForegroundColor Green
+  Write-Host 'Windows may require a manual restart or Ubuntu first-run username/password setup.' -ForegroundColor Yellow
+  Write-Host 'Once Ubuntu is ready, reopen Start Menu > CoCANoT > Complete MRI defacing setup.'
+  # Check only the named Ubuntu distro. Do not assume WSL --install completed initialization.
+  & $wslPath -d Ubuntu --exec bash -lc 'id -u; test -d "$HOME"' 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) { exit 0 }
+  Write-Host 'Ubuntu is initialized; proceeding with minimal FLIRT and PyDeface setup.' -ForegroundColor Green
 }
 Write-Host "Available WSL distribution(s): $($names -join ', ')"
 Write-Host 'FSL and PyDeface must run inside the default WSL distribution used by CoCANoT.'
