@@ -60,8 +60,20 @@ command -v flirt
 echo "CoCANoT Step 3C Linux dependencies are available."
 '@
 # Use standard input to transmit the script safely; avoid interpolating shell commands in Windows.
-$install | & wsl.exe --exec bash -s
-if ($LASTEXITCODE -ne 0) { throw 'One or more Linux dependencies could not be installed. See the output above.' }
+# PowerShell pipes text using Windows line endings; Bash expects LF.
+# Pass a UTF-8/LF shell script as a temporary file through WSL's /mnt drive.
+$temporaryScript = Join-Path $env:TEMP 'cocanot-install-linux-deps.sh'
+try {
+  $lfScript = ($install -replace "`r`n", "`n" -replace "`r", "`n").TrimEnd() + "`n"
+  [System.IO.File]::WriteAllText($temporaryScript, $lfScript, (New-Object System.Text.UTF8Encoding($false)))
+  $linuxScript = (& wsl.exe --exec wslpath -a -u $temporaryScript | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $linuxScript) { throw 'Could not translate Linux installer path into WSL.' }
+  & wsl.exe --exec bash $linuxScript
+  $installExitCode = $LASTEXITCODE
+} finally {
+  Remove-Item -LiteralPath $temporaryScript -Force -ErrorAction SilentlyContinue
+}
+if ($installExitCode -ne 0) { throw 'One or more Linux dependencies could not be installed. See the output above.' }
 & wsl.exe --exec bash -lc $check
 if ($LASTEXITCODE -ne 0) { throw 'FSL/PyDeface setup returned success but the required Linux tools are not accessible. Step 3C is NOT ready.' }
 Write-Host 'All Step 3C prerequisites detected. Restart CoCANoT and retry Step 3C.' -ForegroundColor Green
