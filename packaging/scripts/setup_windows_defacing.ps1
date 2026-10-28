@@ -39,11 +39,17 @@ $agree = Read-Host 'Install Linux FSL (if missing) and PyDeface (if missing)? (t
 if ($agree -cne 'YES') { Write-Host 'Setup incomplete: FSL and PyDeface are required for Step 3C.'; exit 1 }
 $install = @'
 set -e
-if ! command -v curl >/dev/null || ! command -v bzip2 >/dev/null || ! command -v python3 >/dev/null || ! python3 -m venv --help >/dev/null 2>&1; then
-  echo "Installing Linux prerequisites (including bzip2 required by FSL)."
-  sudo apt-get update
-  sudo apt-get install -y curl ca-certificates bzip2 python3 python3-venv
+# Always verify/install the required Ubuntu packages. A PATH check alone can
+# resolve Windows executables exposed through WSL, not usable Linux packages.
+echo "Checking Ubuntu packages required by FSL and PyDeface (including bzip2)."
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates bzip2 python3 python3-venv
+if [ ! -x /usr/bin/bzip2 ]; then
+  echo "ERROR: Ubuntu bzip2 is still missing after apt installation." >&2
+  exit 1
 fi
+export PATH="/usr/bin:/bin:$PATH"
+echo "Verified Linux bzip2: $(/usr/bin/bzip2 --help 2>&1 | head -n 1)"
 if [ ! -x "$HOME/fsl/share/fsl/bin/flirt" ] && ! command -v flirt >/dev/null 2>&1; then
   echo "Installing FSL from official FSL installer. Follow any on-screen prompts."
   curl -fLsS https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/releases/getfsl.sh -o /tmp/cocanot-getfsl.sh
