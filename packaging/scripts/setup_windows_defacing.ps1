@@ -18,8 +18,14 @@ if ($LASTEXITCODE -ne 0 -or $names.Count -eq 0) {
   if ($answer -cne 'YES') { Write-Host 'Setup incomplete: Ubuntu is required for Step 3C.'; exit 1 }
   & wsl.exe --install -d Ubuntu
   if ($LASTEXITCODE -ne 0) { throw 'Ubuntu setup failed. Check messages above and run this utility again.' }
-  Write-Host 'Complete any required Windows restart and Ubuntu first-run username/password setup. Then run this utility again.'
-  exit 0
+  Write-Host 'Ubuntu installation finished. Checking whether first-run setup is complete...' -ForegroundColor Cyan
+  $ready = & wsl.exe --exec bash -lc 'id -u; test -d "$HOME"' 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host 'Ubuntu needs a restart or its first-run username/password setup before FSL and PyDeface can be installed.' -ForegroundColor Yellow
+    Write-Host 'Complete that Windows/Ubuntu setup, then reopen Start Menu > CoCANoT > Complete MRI defacing setup.'
+    exit 1
+  }
+  Write-Host 'Ubuntu is ready. Continuing to FSL and PyDeface installation...' -ForegroundColor Green
 }
 Write-Host "Available WSL distribution(s): $($names -join ', ')"
 Write-Host 'FSL and PyDeface must run inside the default WSL distribution used by CoCANoT.'
@@ -56,4 +62,6 @@ echo "CoCANoT Step 3C Linux dependencies are available."
 # Use standard input to transmit the script safely; avoid interpolating shell commands in Windows.
 $install | & wsl.exe --exec bash -s
 if ($LASTEXITCODE -ne 0) { throw 'One or more Linux dependencies could not be installed. See the output above.' }
-Write-Host 'Setup completed. Restart CoCANoT and retry Step 3C.' -ForegroundColor Green
+& wsl.exe --exec bash -lc $check
+if ($LASTEXITCODE -ne 0) { throw 'FSL/PyDeface setup returned success but the required Linux tools are not accessible. Step 3C is NOT ready.' }
+Write-Host 'All Step 3C prerequisites detected. Restart CoCANoT and retry Step 3C.' -ForegroundColor Green
