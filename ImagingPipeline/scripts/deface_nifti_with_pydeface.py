@@ -175,24 +175,9 @@ def windows_wsl_pydeface(command: list[str]) -> list[str]:
             "FSL and PyDeface. Steps 3A and 3B do not require WSL."
         )
 
-    try:
-        distros = subprocess.run(
-            [wsl, "--list", "--quiet"], capture_output=True,
-            text=True, timeout=20,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError(f"Could not query WSL distributions: {exc}") from exc
-    # wsl.exe may emit UTF-16 or UTF-8 depending on its host and code page.
-    names = [name.strip().strip("\ufeff") for name in distros.stdout.replace("\x00", "").splitlines()
-             if name.strip().strip("\ufeff").strip("\x00")]
-    if distros.returncode or not names:
-        raise RuntimeError(
-            "Step 3C requires a configured WSL2 Linux distribution with "
-            "FSL and PyDeface. No usable distribution was found. "
-            "Install Ubuntu using 'wsl --install -d Ubuntu', then install "
-            "FSL and PyDeface inside Ubuntu. Steps 3A and 3B work without WSL."
-        )
-
+    # Do not enumerate WSL distributions before a run. On freshly enabled WSL,
+    # 'wsl --list --quiet' can hang while first-run initialization is pending.
+    # The actual Linux command below is the authoritative readiness check.
     # Respect the default WSL distribution, which is what --exec uses below.
     # FSL may be installed under ~/fsl/share/fsl/bin, not just ~/fsl/bin.
     # A dedicated virtualenv may put pydeface in ~/cocanot-pydeface/bin.
@@ -208,12 +193,14 @@ def windows_wsl_pydeface(command: list[str]) -> list[str]:
     try:
         probe = subprocess.run(
             [wsl, "--exec", "bash", "-lc", probe_script],
-            capture_output=True, text=True, timeout=45,
+            capture_output=True, text=True, timeout=120,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(
-            "Could not start the WSL Linux environment for Step 3C. "
-            f"Check 'wsl --status' and your Ubuntu installation: {exc}"
+            "WSL did not become ready for MRI defacing. If WSL was just enabled, "
+            "restart Windows and complete Ubuntu's first-run setup. "
+            "No defacing was attempted. "
+            f"Details: {exc}"
         ) from exc
     if probe.returncode:
         raise RuntimeError(
@@ -266,7 +253,11 @@ def run_and_log(
         log.write(f"Start time: {start_datetime.isoformat(timespec='seconds')}\n\n")
         log.write("=" * 80 + "\nPyDeface output\n" + "=" * 80 + "\n")
 
-        command = windows_wsl_pydeface(command)
+        try:
+            command = windows_wsl_pydeface(command)
+        except Exception as exc:
+            log.write(f"PRE-FLIGHT FAILED: {type(exc).__name__}: {exc}\\n")
+            raise
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
