@@ -35,8 +35,12 @@ if not exist "%APPROOT%\setup_windows_defacing.ps1" (echo Required MRI defacing 
 rem Required Step 3C dependency setup, with explicit consent for system changes.
 "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder 'Complete MRI defacing setup.lnk')); $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'; $shortcut.Arguments='-NoProfile -ExecutionPolicy Bypass -NoExit -File ""%APPROOT%\setup_windows_defacing.ps1""'; $shortcut.WorkingDirectory='%APPROOT%'; $shortcut.Description='Required Step 3C WSL2, FSL and PyDeface setup; may require restart'; $shortcut.Save()"
 if errorlevel 1 exit /b 1
-rem Show a clear setup notice during installation, not only in terminal output.
-"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('CoCANoT is installed, but Imaging Step 3C is NOT ready until MRI defacing setup is completed.' + [Environment]::NewLine + [Environment]::NewLine + 'NEXT: Open Start Menu > CoCANoT > Complete MRI defacing setup.' + [Environment]::NewLine + [Environment]::NewLine + 'The setup will guide you through WSL2, Ubuntu, FSL and PyDeface. Windows may require a restart; save your work before starting. CoCANoT will not restart Windows automatically.' + [Environment]::NewLine + [Environment]::NewLine + 'Steps 3A/3B, metadata and electrophysiology do not require this setup.', 'CoCANoT - Required imaging setup', 'OK', 'Information') | Out-Null"
+rem Launch the optional Step 3C provisioning assistant automatically after app installation.
+rem It runs in its own visible PowerShell window so user prompts and sudo are interactive.
+rem Do not block or fail the main Windows app installation if WSL setup is deferred.
+rem The Start Menu shortcut above remains available to resume after a restart.
+start "CoCANoT MRI Defacing Setup" "%POWERSHELL_EXE%" -NoProfile -NoExit -ExecutionPolicy Bypass -File "%APPROOT%\setup_windows_defacing.ps1"
+if errorlevel 1 echo WARNING: Could not auto-launch MRI defacing setup. Use Start Menu ^> CoCANoT ^> Complete MRI defacing setup.
 echo CoCANoT installed. Launch from Start Menu CoCANoT or "%PREFIX%\CoCANoT.vbs".
 echo For diagnostics run "%PREFIX%\CoCANoT-Diagnostics.bat" to see console output.
 echo IMPORTANT: Complete MRI defacing setup from Start Menu before running Imaging Step 3C.
