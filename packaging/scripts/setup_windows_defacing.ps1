@@ -1,11 +1,11 @@
-# Optional, user-initiated Step 3C dependency setup. Never run during CoCANoT installation.
+# Required Step 3C provisioning. Runs only with explicit user consent; never reboots Windows automatically.
 $ErrorActionPreference = 'Stop'
-Write-Host 'CoCANoT MRI defacing setup (optional)' -ForegroundColor Cyan
+Write-Host 'CoCANoT MRI defacing required setup' -ForegroundColor Cyan
 Write-Host 'Steps 3A and 3B work without Linux. Step 3C needs WSL2, Ubuntu, FSL and PyDeface.'
 Write-Host 'Setup can download several GB, require administrator approval, and require a Windows restart.'
 Write-Host 'This utility will NEVER restart Windows for you.'
-$consent = Read-Host 'Proceed with checking/installing Step 3C prerequisites? (type YES)'
-if ($consent -cne 'YES') { Write-Host 'No changes made.'; exit 0 }
+$consent = Read-Host 'Step 3C cannot run until these prerequisites are installed. Continue? (type YES)'
+if ($consent -cne 'YES') { Write-Host 'Setup incomplete: Step 3C will remain unavailable.'; exit 1 }
 if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
   Write-Host 'WSL is not available. Run PowerShell as Administrator and install WSL2.'
   exit 1
@@ -15,7 +15,7 @@ $names = @($distros -split "`r?`n" | Where-Object { $_.Trim() -and $_ -notmatch 
 if ($LASTEXITCODE -ne 0 -or $names.Count -eq 0) {
   Write-Host 'No WSL distribution is installed. Ubuntu installation may enable Windows features and require a restart.' -ForegroundColor Yellow
   $answer = Read-Host 'Install Ubuntu through Windows WSL now? (type YES)'
-  if ($answer -cne 'YES') { Write-Host 'No Ubuntu installation attempted.'; exit 0 }
+  if ($answer -cne 'YES') { Write-Host 'Setup incomplete: Ubuntu is required for Step 3C.'; exit 1 }
   & wsl.exe --install -d Ubuntu
   if ($LASTEXITCODE -ne 0) { throw 'Ubuntu setup failed. Check messages above and run this utility again.' }
   Write-Host 'Complete any required Windows restart and Ubuntu first-run username/password setup. Then run this utility again.'
@@ -30,7 +30,7 @@ Write-Host 'Linux FSL or PyDeface is missing.' -ForegroundColor Yellow
 Write-Host 'FSL will be downloaded from its official installation site and can take substantial disk space.'
 Write-Host 'PyDeface will be installed in ~/cocanot-pydeface (a Linux Python virtual environment).'
 $agree = Read-Host 'Install Linux FSL (if missing) and PyDeface (if missing)? (type YES)'
-if ($agree -cne 'YES') { Write-Host 'No Linux packages installed.'; exit 0 }
+if ($agree -cne 'YES') { Write-Host 'Setup incomplete: FSL and PyDeface are required for Step 3C.'; exit 1 }
 $install = @'
 set -e
 if ! command -v curl >/dev/null || ! command -v python3 >/dev/null || ! python3 -m venv --help >/dev/null 2>&1; then
