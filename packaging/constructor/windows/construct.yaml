@@ -14,4 +14,4 @@ extra_files:
   - ../../stage-windows/pip_packages.zip: payload/pip_packages.zip
   - ../../scripts/post_install_windows.bat: payload/post_install_windows.bat
 post_install: ../../scripts/post_install_windows.bat
-welcome_text: CoCANoT desktop setup for Windows x64. MRI PyDeface requires a separately configured WSL2 Linux FSL environment.
+welcome_text: "CoCANoT-Pipelines installs and runs on Windows without WSL for metadata, electrophysiology, and imaging Steps 3A/3B. MRI defacing (Step 3C) requires separately configured WSL2, Ubuntu, FSL, and PyDeface. Enabling or installing WSL2 may require a Windows restart. Save your work before WSL setup. This installer does not enable WSL, install these Linux tools, or restart Windows automatically."
