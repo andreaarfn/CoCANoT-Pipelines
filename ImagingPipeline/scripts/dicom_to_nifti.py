@@ -200,7 +200,7 @@ def run_dcm2niix(
         str(dicom_dir),
     ]
 
-    print("\\n--------------------")
+    print("\n--------------------")
     print("Converting:", dicom_dir)
     print("Saving to:", output_dir)
     print("Command:", " ".join(command))
@@ -211,7 +211,7 @@ def run_dcm2niix(
     )
     log = result.stdout or ""
     if log:
-        print(log, end="" if log.endswith("\\n") else "\\n")
+        print(log, end="" if log.endswith("\n") else "\n")
     if result.returncode == 0:
         print("Done.")
         return "processed"
@@ -221,7 +221,7 @@ def run_dcm2niix(
     # conversion errors or partially completed multi-series input folders.
     import re
     skipped_names = re.findall(r"^Warning: Skipping existing file named (.+)$", log, re.MULTILINE)
-    found = re.search(r"^Found (\\d+) DICOM file\\(s\\)", log, re.MULTILINE)
+    found = re.search(r"^Found (\d+) DICOM file\(s\)", log, re.MULTILINE)
     if not overwrite and found and int(found.group(1)) == 1 and len(skipped_names) == 1:
         reported = Path(skipped_names[0].strip().strip('"'))
         try:
@@ -232,7 +232,7 @@ def run_dcm2niix(
             print("Skipping verified existing DICOM conversion:", reported.name)
             return "skipped"
 
-    print(f"ERROR: dcm2niix failed for:\\n{dicom_dir}\\nExit code: {result.returncode}")
+    print(f"ERROR: dcm2niix failed for:\n{dicom_dir}\nExit code: {result.returncode}")
     return "failed"
 
 
