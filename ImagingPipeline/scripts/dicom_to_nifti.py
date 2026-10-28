@@ -155,13 +155,39 @@ def build_output_subdir(
     return source_root if relative == Path(".") else source_root / relative
 
 
+def _valid_existing_nifti_pair(output_dir: Path, reported_stem: str) -> bool:
+    """Validate an existing NIfTI and JSON pair before treating a no-overwrite retry as skipped."""
+    import json
+    import nibabel as nib
+
+    for suffix in (".nii.gz", ".nii"):
+        image_path = output_dir / (reported_stem + suffix)
+        json_path = output_dir / (reported_stem + ".json")
+        if not (image_path.is_file() and json_path.is_file()):
+            continue
+        if not image_path.stat().st_size or not json_path.stat().st_size:
+            continue
+        try:
+            with json_path.open("r", encoding="utf-8") as handle:
+                sidecar = json.load(handle)
+            if not isinstance(sidecar, dict):
+                continue
+            image = nib.load(str(image_path))
+            if not image.shape or any(int(size) <= 0 for size in image.shape):
+                continue
+            return True
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+    return False
+
+
 def run_dcm2niix(
     dicom_dir: Path,
     output_dir: Path,
     filename_pattern: str,
     overwrite: bool,
     converter: str,
-) -> bool:
+) -> str:
     output_dir.mkdir(parents=True, exist_ok=True)
     command = [
         converter,
@@ -174,23 +200,41 @@ def run_dcm2niix(
         str(dicom_dir),
     ]
 
-    print("\n--------------------")
+    print("\\n--------------------")
     print("Converting:", dicom_dir)
     print("Saving to:", output_dir)
     print("Command:", " ".join(command))
 
-    try:
-        subprocess.run(command, check=True)
-    except subprocess.CalledProcessError as exc:
-        print(
-            "ERROR: dcm2niix failed for:\n"
-            f"{dicom_dir}\n"
-            f"Exit code: {exc.returncode}"
-        )
-        return False
+    result = subprocess.run(
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, errors="replace",
+    )
+    log = result.stdout or ""
+    if log:
+        print(log, end="" if log.endswith("\\n") else "\\n")
+    if result.returncode == 0:
+        print("Done.")
+        return "processed"
 
-    print("Done.")
-    return True
+    # dcm2niix exits non-zero for '-w 0' when a valid conversion is already
+    # present. Only accept a clean, all-skipped result: never hide unrelated
+    # conversion errors or partially completed multi-series input folders.
+    import re
+    skipped_names = re.findall(r"^Warning: Skipping existing file named (.+)$", log, re.MULTILINE)
+    found = re.search(r"^Found (\\d+) DICOM file\\(s\\)", log, re.MULTILINE)
+    if not overwrite and found and int(found.group(1)) == 1 and len(skipped_names) == 1:
+        reported = Path(skipped_names[0].strip().strip('"'))
+        try:
+            same_folder = reported.parent.resolve() == output_dir.resolve()
+        except OSError:
+            same_folder = False
+        if same_folder and _valid_existing_nifti_pair(output_dir, reported.name):
+            print("Skipping verified existing DICOM conversion:", reported.name)
+            return "skipped"
+
+    print(f"ERROR: dcm2niix failed for:\\n{dicom_dir}\\nExit code: {result.returncode}")
+    return "failed"
+
 
 
 def parse_args() -> argparse.Namespace:
@@ -295,14 +339,17 @@ def main() -> None:
             source_index=source_index,
             multiple_sources=multiple_sources,
         )
-        if run_dcm2niix(
+        status = run_dcm2niix(
             dicom_dir=dicom_dir,
             output_dir=out_subdir,
             filename_pattern=args.filename_pattern,
             overwrite=args.overwrite,
             converter=converter,
-        ):
+        )
+        if status == "processed":
             processed += 1
+        elif status == "skipped":
+            skipped += 1
         else:
             failed += 1
 
