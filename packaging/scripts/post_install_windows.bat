@@ -30,6 +30,10 @@ if errorlevel 1 exit /b 1
 rem Create a normal Start Menu shortcut which launches without showing a console.
 "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; New-Item -ItemType Directory -Force -Path $folder | Out-Null; $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder 'CoCANoT.lnk')); $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\wscript.exe'; $shortcut.Arguments='"%PREFIX%\CoCANoT.vbs"'; $shortcut.WorkingDirectory='%PREFIX%'; $shortcut.Description='Launch CoCANoT without a console'; $shortcut.Save()"
 if errorlevel 1 exit /b 1
+if not exist "%APPROOT%\setup_windows_defacing.ps1" (echo Optional MRI defacing setup utility missing & exit /b 1)
+rem Optional Start Menu shortcut. No WSL changes are performed during installation.
+"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder 'Set up MRI defacing (optional).lnk')); $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'; $shortcut.Arguments='-NoProfile -ExecutionPolicy Bypass -NoExit -File ""%APPROOT%\setup_windows_defacing.ps1""'; $shortcut.WorkingDirectory='%APPROOT%'; $shortcut.Description='Optional guided WSL2, FSL and PyDeface setup; may require restart'; $shortcut.Save()"
+if errorlevel 1 exit /b 1
 echo CoCANoT installed. Launch from Start Menu CoCANoT or "%PREFIX%\CoCANoT.vbs".
 echo For diagnostics run "%PREFIX%\CoCANoT.bat" to see console output.
 echo Defacing requires WSL2 with Linux FSL and PyDeface; native Windows FSL is not bundled.
