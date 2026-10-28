@@ -14,7 +14,8 @@ if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
   if ($enable -cne 'YES') { Write-Host 'WSL installation deferred. Step 3C remains unavailable.'; exit 1 }
   $featureCommand = 'dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart; if ($LASTEXITCODE -notin @(0,3010)) { exit $LASTEXITCODE }; dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart; exit $LASTEXITCODE'
   try {
-    $admin = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $featureCommand)
+    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($featureCommand))
+    $admin = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCommand"
   } catch {
     Write-Warning "Administrator approval was cancelled or unavailable: $_"
     exit 1
