@@ -6,9 +6,23 @@ Write-Host 'Setup downloads only minimal FSL FLIRT packages (not full FSL); WSL 
 Write-Host 'This utility will NEVER restart Windows for you.'
 $consent = Read-Host 'Step 3C cannot run until these prerequisites are installed. Continue? (type YES)'
 if ($consent -cne 'YES') { Write-Host 'Setup incomplete: Step 3C will remain unavailable.'; exit 1 }
+# A fresh Windows installation may not expose wsl.exe until Windows features are enabled.
+# Provision Windows features with UAC consent and require the user to resume after reboot.
 if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
-  Write-Host 'WSL is not available. Run PowerShell as Administrator and install WSL2.'
-  exit 1
+  Write-Host 'WSL is not installed or wsl.exe is unavailable. CoCANoT can enable the Windows prerequisites.' -ForegroundColor Yellow
+  $enable = Read-Host 'Enable WSL and Virtual Machine Platform with an Administrator prompt? (type YES)'
+  if ($enable -cne 'YES') { Write-Host 'WSL installation deferred. Step 3C remains unavailable.'; exit 1 }
+  $featureCommand = 'dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart; if ($LASTEXITCODE -notin @(0,3010)) { exit $LASTEXITCODE }; dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart; exit $LASTEXITCODE'
+  try {
+    $admin = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $featureCommand)
+  } catch {
+    Write-Warning "Administrator approval was cancelled or unavailable: $_"
+    exit 1
+  }
+  if ($admin.ExitCode -notin @(0,3010)) { throw "Windows WSL feature installation failed (exit code $($admin.ExitCode))." }
+  Write-Host 'Windows WSL prerequisites were enabled. Restart Windows manually, then use Start Menu > CoCANoT > Complete MRI defacing setup.' -ForegroundColor Yellow
+  Write-Host 'CoCANoT will not restart your computer automatically.'
+  exit 0
 }
 $distros = (& wsl.exe --list --quiet 2>&1 | Out-String) -replace [char]0, ''
 $names = @($distros -split "`r?`n" | Where-Object { $_.Trim() -and $_ -notmatch 'Windows Subsystem|no installed|install|Error|Default' })
