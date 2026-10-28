@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 Write-Host 'CoCANoT MRI defacing required setup' -ForegroundColor Cyan
 Write-Host 'Steps 3A and 3B work without Linux. Step 3C needs WSL2, Ubuntu, FSL and PyDeface.'
-Write-Host 'Setup can download several GB, require administrator approval, and require a Windows restart.'
+Write-Host 'Setup downloads only minimal FSL FLIRT packages (not full FSL); WSL may require administrator approval and a restart.'
 Write-Host 'This utility will NEVER restart Windows for you.'
 $consent = Read-Host 'Step 3C cannot run until these prerequisites are installed. Continue? (type YES)'
 if ($consent -cne 'YES') { Write-Host 'Setup incomplete: Step 3C will remain unavailable.'; exit 1 }
@@ -25,15 +25,15 @@ if ($LASTEXITCODE -ne 0 -or $names.Count -eq 0) {
     Write-Host 'Complete that Windows/Ubuntu setup, then reopen Start Menu > CoCANoT > Complete MRI defacing setup.'
     exit 1
   }
-  Write-Host 'Ubuntu is ready. Continuing to FSL and PyDeface installation...' -ForegroundColor Green
+  Write-Host 'Ubuntu is ready. Continuing to minimal FLIRT and PyDeface installation...' -ForegroundColor Green
 }
 Write-Host "Available WSL distribution(s): $($names -join ', ')"
 Write-Host 'FSL and PyDeface must run inside the default WSL distribution used by CoCANoT.'
-$check = 'export FSLDIR="${FSLDIR:-$HOME/fsl}"; export PATH="$HOME/cocanot-pydeface/bin:$HOME/.local/bin:$FSLDIR/share/fsl/bin:$FSLDIR/bin:$PATH"; command -v pydeface && command -v flirt'
+$check = 'export FSLDIR="${FSLDIR:-$HOME/fsl}"; export PATH="$HOME/cocanot-pydeface/bin:$HOME/.local/bin:$FSLDIR/share/fsl/bin:$FSLDIR/bin:$PATH"; command -v pydeface && command -v flirt && pydeface --help >/dev/null && flirt -version >/dev/null'
 & wsl.exe --exec bash -lc $check
 if ($LASTEXITCODE -eq 0) { Write-Host 'Step 3C prerequisites detected. Restart CoCANoT and retry Step 3C.' -ForegroundColor Green; exit 0 }
 Write-Host 'Linux FSL or PyDeface is missing.' -ForegroundColor Yellow
-Write-Host 'FSL will be downloaded from its official installation site and can take substantial disk space.'
+Write-Host 'Only FSL FLIRT and its required runtime packages will be installed through micromamba.'
 Write-Host 'PyDeface will be installed in ~/cocanot-pydeface (a Linux Python virtual environment).'
 $agree = Read-Host 'Install Linux FSL (if missing) and PyDeface (if missing)? (type YES)'
 if ($agree -cne 'YES') { Write-Host 'Setup incomplete: FSL and PyDeface are required for Step 3C.'; exit 1 }
@@ -50,10 +50,22 @@ if [ ! -x /usr/bin/bzip2 ]; then
 fi
 export PATH="/usr/bin:/bin:$PATH"
 echo "Verified Linux bzip2: $(/usr/bin/bzip2 --help 2>&1 | head -n 1)"
-if [ ! -x "$HOME/fsl/share/fsl/bin/flirt" ] && ! command -v flirt >/dev/null 2>&1; then
-  echo "Installing FSL from official FSL installer. Follow any on-screen prompts."
-  curl -fLsS https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/releases/getfsl.sh -o /tmp/cocanot-getfsl.sh
-  sh /tmp/cocanot-getfsl.sh
+# Reuse an existing usable Linux FLIRT install; never accept Windows .exe on WSL PATH.
+if [ ! -x "$HOME/fsl/share/fsl/bin/flirt" ] && [ ! -x "$HOME/fsl/bin/flirt" ] && ! command -v flirt >/dev/null 2>&1; then
+  echo "Installing minimal FSL FLIRT and required libraries (NOT the full FSL suite)."
+  mkdir -p "$HOME/.local/bin"
+  if [ ! -x "$HOME/.local/bin/micromamba" ]; then
+    curl -fLsS https://micro.mamba.pm/api/micromamba/linux-64/latest -o /tmp/cocanot-micromamba.tar.bz2
+    tar -xjf /tmp/cocanot-micromamba.tar.bz2 -C "$HOME/.local" bin/micromamba
+    rm -f /tmp/cocanot-micromamba.tar.bz2
+  fi
+  export MAMBA_ROOT_PREFIX="$HOME/.local/share/cocanot-mamba"
+  "$HOME/.local/bin/micromamba" create -y -p "$HOME/fsl" \
+    --strict-channel-priority \
+    -c https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/public \
+    -c conda-forge fsl-flirt
+  # Minimize persistent disk usage without deleting installed environment.
+  "$HOME/.local/bin/micromamba" clean --all --yes
 fi
 if [ ! -x "$HOME/cocanot-pydeface/bin/pydeface" ] && ! command -v pydeface >/dev/null 2>&1; then
   python3 -m venv "$HOME/cocanot-pydeface"
