@@ -256,7 +256,7 @@ def run_and_log(
         try:
             command = windows_wsl_pydeface(command)
         except Exception as exc:
-            log.write(f"PRE-FLIGHT FAILED: {type(exc).__name__}: {exc}\\n")
+            log.write(f"PRE-FLIGHT FAILED: {type(exc).__name__}: {exc}\n")
             raise
         process = subprocess.Popen(
             command,
