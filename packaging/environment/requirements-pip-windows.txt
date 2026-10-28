@@ -3,6 +3,8 @@ bottle
 certifi
 charset-normalizer
 ci-info
+cffi
+clr-loader
 etelemetry
 filelock
 idna
@@ -11,6 +13,7 @@ lxml
 networkx
 nipype
 prov
+pycparser
 proxy-tools==0.1.0
 puremagic
 pydot
