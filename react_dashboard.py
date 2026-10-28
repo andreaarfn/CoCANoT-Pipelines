@@ -598,7 +598,7 @@ class CoCANoTAPI:
     """Methods exposed to React through PyWebView."""
 
     def __init__(self) -> None:
-        self.window = None
+        self._window = None
         self.authenticated_site_id = ""
         self._reporting_session_token = ""
         self._pending_metadata_documents: dict[str, dict[str, Any]] = {}
@@ -859,10 +859,10 @@ class CoCANoTAPI:
         )
 
     def choose_folder(self) -> str:
-        if self.window is None:
+        if self._window is None:
             return ""
 
-        result = self.window.create_file_dialog(
+        result = self._window.create_file_dialog(
             webview.FileDialog.FOLDER,
         )
 
@@ -979,10 +979,10 @@ class CoCANoTAPI:
         }
 
     def ephys_choose_files(self) -> dict[str, Any]:
-        if self.window is None:
+        if self._window is None:
             return self.ephys_get_state()
 
-        selected = self.window.create_file_dialog(
+        selected = self._window.create_file_dialog(
             webview.FileDialog.OPEN,
             allow_multiple=True,
             file_types=("EDF files (*.edf)",),
@@ -1005,10 +1005,10 @@ class CoCANoTAPI:
         return self.ephys_get_state()
 
     def ephys_choose_folders(self) -> dict[str, Any]:
-        if self.window is None:
+        if self._window is None:
             return self.ephys_get_state()
 
-        selected = self.window.create_file_dialog(
+        selected = self._window.create_file_dialog(
             webview.FileDialog.FOLDER,
         )
 
@@ -3101,7 +3101,7 @@ class CoCANoTAPI:
         *,
         kind: str,
     ) -> list[str]:
-        if self.window is None:
+        if self._window is None:
             return []
 
         file_types = (
@@ -3110,7 +3110,7 @@ class CoCANoTAPI:
             else ("DICOM files (*.dcm)", "All files (*.*)")
         )
 
-        selected = self.window.create_file_dialog(
+        selected = self._window.create_file_dialog(
             webview.FileDialog.OPEN,
             allow_multiple=True,
             file_types=file_types,
@@ -3134,10 +3134,10 @@ class CoCANoTAPI:
         return values
 
     def _select_folder(self) -> list[str]:
-        if self.window is None:
+        if self._window is None:
             return []
 
-        selected = self.window.create_file_dialog(
+        selected = self._window.create_file_dialog(
             webview.FileDialog.FOLDER,
         )
 
@@ -8923,10 +8923,10 @@ class CoCANoTAPI:
         if index < 0 or index >= len(items):
             raise ValueError("Imaging review item not found.")
 
-        if self.window is None:
+        if self._window is None:
             return {"ok": False}
 
-        selected = self.window.create_file_dialog(
+        selected = self._window.create_file_dialog(
             webview.FileDialog.OPEN,
             allow_multiple=False,
             file_types=(
@@ -10102,10 +10102,10 @@ class CoCANoTAPI:
                 "Select at least one supporting document type."
             )
 
-        if self.window is None:
+        if self._window is None:
             return None
 
-        selected = self.window.create_file_dialog(
+        selected = self._window.create_file_dialog(
             webview.FileDialog.OPEN,
             allow_multiple=False,
             file_types=(
@@ -13234,10 +13234,10 @@ class CoCANoTAPI:
                 "Batch import is supported for Clinical and Surgical metadata."
             )
 
-        if self.window is None:
+        if self._window is None:
             return {"ok": False, "cancelled": True}
 
-        selected = self.window.create_file_dialog(
+        selected = self._window.create_file_dialog(
             webview.FileDialog.OPEN,
             allow_multiple=False,
             file_types=(
@@ -13728,13 +13728,13 @@ class CoCANoTAPI:
                 "Clinical and Surgical metadata."
             )
 
-        if self.window is None:
+        if self._window is None:
             return {
                 "ok": False,
                 "imported": 0,
             }
 
-        selected = self.window.create_file_dialog(
+        selected = self._window.create_file_dialog(
             webview.FileDialog.OPEN,
             allow_multiple=False,
             file_types=(
@@ -15188,7 +15188,7 @@ def main() -> None:
         min_size=(980, 720),
     )
 
-    api.window = window
+    api._window = window
 
     try:
         webview.start(debug=False)
