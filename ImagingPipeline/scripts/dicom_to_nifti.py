@@ -9,6 +9,7 @@ pipeline_config.py. There are no machine-specific fallback directories.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -35,6 +36,30 @@ except ImportError as exc:
     ) from exc
 
 DICOM_EXTENSIONS = {".dcm", ".ima", ""}
+
+
+def resolve_dcm2niix() -> str:
+    """Locate dcm2niix in PATH or the bundled Windows Conda runtime."""
+    found = shutil.which("dcm2niix")
+    if found:
+        return found
+
+    executable = "dcm2niix.exe" if os.name == "nt" else "dcm2niix"
+    # For packaged CoCANoT, sys.executable points to <runtime>/python.exe.
+    runtime = Path(sys.executable).resolve().parent
+    candidates = [
+        runtime / "Library" / "bin" / executable,
+        runtime / "Scripts" / executable,
+        runtime / executable,
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    raise SystemExit(
+        "dcm2niix was not found in the CoCANoT runtime or on PATH. "
+        "The Windows installer should bundle dcm2niix; verify the installed "
+        "runtime contains Library\\\\bin\\\\dcm2niix.exe."
+    )
 
 
 def is_possible_dicom_file(path: Path) -> bool:
@@ -135,10 +160,11 @@ def run_dcm2niix(
     output_dir: Path,
     filename_pattern: str,
     overwrite: bool,
+    converter: str,
 ) -> bool:
     output_dir.mkdir(parents=True, exist_ok=True)
     command = [
-        "dcm2niix",
+        converter,
         "-z", "y",
         "-b", "y",
         "-ba", "y",
@@ -212,10 +238,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    if shutil.which("dcm2niix") is None:
-        raise SystemExit(
-            "dcm2niix was not found on PATH. Install it before running conversion."
-        )
+    converter = resolve_dcm2niix()
 
     input_dirs, output_dir = load_configured_paths(
         input_overrides=args.input_dirs,
@@ -277,6 +300,7 @@ def main() -> None:
             output_dir=out_subdir,
             filename_pattern=args.filename_pattern,
             overwrite=args.overwrite,
+            converter=converter,
         ):
             processed += 1
         else:
