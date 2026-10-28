@@ -23,6 +23,14 @@ if not exist "%APPROOT%\MetadataPipeline\dictionaries\CoCANoT_Metadata_Phase1.0.
 >> "%PREFIX%\CoCANoT.bat" echo set "PATH=%PREFIX%;%PREFIX%\Scripts;%PREFIX%\Library\bin;%%PATH%%"
 >> "%PREFIX%\CoCANoT.bat" echo cd /d "%APPROOT%"
 >> "%PREFIX%\CoCANoT.bat" echo "%PREFIX%\python.exe" "%APPROOT%\react_dashboard.py" %%*
-echo CoCANoT installed. Launch via "%PREFIX%\CoCANoT.bat".
+rem Hidden launcher for normal use; keep CoCANoT.bat for troubleshooting.
+> "%PREFIX%\CoCANoT.vbs" echo Set cocanotShell = CreateObject("WScript.Shell")
+>> "%PREFIX%\CoCANoT.vbs" echo cocanotShell.Run Chr(34) ^& "%PREFIX%\CoCANoT.bat" ^& Chr(34), 0, False
+if errorlevel 1 exit /b 1
+rem Create a normal Start Menu shortcut which launches without showing a console.
+"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; New-Item -ItemType Directory -Force -Path $folder | Out-Null; $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder 'CoCANoT.lnk')); $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\wscript.exe'; $shortcut.Arguments='""%PREFIX%\CoCANoT.vbs""'; $shortcut.WorkingDirectory='%PREFIX%'; $shortcut.Description='Launch CoCANoT without a console'; $shortcut.Save()"
+if errorlevel 1 exit /b 1
+echo CoCANoT installed. Launch from Start Menu CoCANoT or "%PREFIX%\CoCANoT.vbs".
+echo For diagnostics run "%PREFIX%\CoCANoT.bat" to see console output.
 echo Defacing requires WSL2 with Linux FSL and PyDeface; native Windows FSL is not bundled.
 exit /b 0
