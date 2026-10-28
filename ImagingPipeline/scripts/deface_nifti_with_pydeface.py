@@ -163,31 +163,67 @@ def copy_and_update_json(
 
 
 def windows_wsl_pydeface(command: list[str]) -> list[str]:
-    """Run PyDeface in WSL2; never imply native Windows FSL compatibility.
-
-    Paths are translated with WSL's wslpath. The same Windows-mounted output
-    paths remain visible to the native CoCANoT Python verification routines.
-    """
+    """Dispatch PyDeface through WSL on Windows while keeping output on Windows."""
     if sys.platform != "win32" or not command or command[0] != "pydeface":
         return command
-    if shutil.which("wsl.exe") is None:
+
+    wsl = shutil.which("wsl.exe") or shutil.which("wsl")
+    if not wsl:
         raise RuntimeError(
-            "MRI defacing requires WSL2 with Linux FSL and PyDeface. "
-            "Install and verify WSL2 before using Step 3 defacing."
+            "Step 3C requires WSL2, a Linux distribution, FSL, and PyDeface. "
+            "WSL is unavailable. Install WSL2 and Ubuntu, then configure Linux "
+            "FSL and PyDeface. Steps 3A and 3B do not require WSL."
         )
-    probe = subprocess.run(
-        ["wsl.exe", "--exec", "bash", "-lc",
-         'export FSLDIR="${FSLDIR:-$HOME/fsl}"; '
-         'export PATH="$HOME/.local/bin:$FSLDIR/bin:$PATH"; '
-         'command -v pydeface >/dev/null && command -v flirt >/dev/null'],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30,
+
+    try:
+        distros = subprocess.run(
+            [wsl, "--list", "--quiet"], capture_output=True,
+            text=True, timeout=20,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"Could not query WSL distributions: {exc}") from exc
+    # wsl.exe may emit UTF-16 or UTF-8 depending on its host and code page.
+    names = [name.strip().strip("\ufeff") for name in distros.stdout.replace("\x00", "").splitlines()
+             if name.strip().strip("\ufeff").strip("\x00")]
+    if distros.returncode or not names:
+        raise RuntimeError(
+            "Step 3C requires a configured WSL2 Linux distribution with "
+            "FSL and PyDeface. No usable distribution was found. "
+            "Install Ubuntu using 'wsl --install -d Ubuntu', then install "
+            "FSL and PyDeface inside Ubuntu. Steps 3A and 3B work without WSL."
+        )
+
+    # Respect the default WSL distribution, which is what --exec uses below.
+    # FSL may be installed under ~/fsl/share/fsl/bin, not just ~/fsl/bin.
+    # A dedicated virtualenv may put pydeface in ~/cocanot-pydeface/bin.
+    setup = (
+        'export FSLDIR="${FSLDIR:-$HOME/fsl}"; '
+        'export PATH="$HOME/cocanot-pydeface/bin:$HOME/.local/bin:'
+        '$FSLDIR/share/fsl/bin:$FSLDIR/bin:$PATH"; '
     )
+    probe_script = (
+        setup
+        + 'command -v pydeface >/dev/null && command -v flirt >/dev/null'
+    )
+    try:
+        probe = subprocess.run(
+            [wsl, "--exec", "bash", "-lc", probe_script],
+            capture_output=True, text=True, timeout=45,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(
+            "Could not start the WSL Linux environment for Step 3C. "
+            f"Check 'wsl --status' and your Ubuntu installation: {exc}"
+        ) from exc
     if probe.returncode:
         raise RuntimeError(
-            "WSL2 is available but Linux PyDeface or FSL flirt is missing. "
-            "Install FSL inside WSL and install pydeface in that same WSL distribution. "
-            "Defacing was not attempted. " + probe.stderr.strip()[:300]
+            "Step 3C requires Linux PyDeface and FSL flirt in the default "
+            "WSL distribution. Install them inside WSL (PyDeface in "
+            "~/cocanot-pydeface or on PATH; FSL in ~/fsl or on PATH). "
+            "No defacing was attempted. "
+            + probe.stderr.strip()[:400]
         )
+
     translated = []
     for value in command[1:]:
         if value.startswith("-"):
@@ -198,19 +234,18 @@ def windows_wsl_pydeface(command: list[str]) -> list[str]:
             translated.append(value)
             continue
         result = subprocess.run(
-            ["wsl.exe", "--exec", "wslpath", "-a", "-u", str(candidate)],
+            [wsl, "--exec", "wslpath", "-a", "-u", str(candidate)],
             capture_output=True, text=True, timeout=30,
         )
-        if result.returncode:
+        if result.returncode or not result.stdout.strip():
             raise RuntimeError(
                 f"Cannot translate defacing path into WSL: {candidate}: "
-                + result.stderr.strip()
+                + result.stderr.strip()[:400]
             )
         translated.append(result.stdout.strip())
-    script = ('export FSLDIR="${FSLDIR:-$HOME/fsl}"; '
-              'export PATH="$HOME/.local/bin:$FSLDIR/bin:$PATH"; '
-              'exec pydeface "$@"')
-    return ["wsl.exe", "--exec", "bash", "-lc", script, "cocanot-pydeface", *translated]
+
+    script = setup + 'exec pydeface "$@"'
+    return [wsl, "--exec", "bash", "-lc", script, "cocanot-pydeface", *translated]
 
 
 def run_and_log(
@@ -438,7 +473,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    if shutil.which("pydeface") is None:
+    if sys.platform != "win32" and shutil.which("pydeface") is None:
         raise SystemExit(
             "pydeface was not found on PATH. Activate the correct environment "
             "and install pydeface before running this script."
