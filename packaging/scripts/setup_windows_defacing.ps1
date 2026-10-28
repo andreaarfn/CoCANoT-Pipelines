@@ -76,6 +76,10 @@ export FSLDIR="${FSLDIR:-$HOME/fsl}"
 export PATH="$HOME/cocanot-pydeface/bin:$HOME/.local/bin:$FSLDIR/share/fsl/bin:$FSLDIR/bin:$PATH"
 command -v pydeface
 command -v flirt
+pydeface --help >/dev/null
+flirt -version
+echo "Defacing dependency disk usage (MiB):"
+du -sm "$HOME/fsl" "$HOME/cocanot-pydeface" 2>/dev/null || true
 echo "CoCANoT Step 3C Linux dependencies are available."
 '@
 # Use standard input to transmit the script safely; avoid interpolating shell commands in Windows.
