@@ -127,6 +127,10 @@ grep -v '^proxy-tools==' "${PIP_REQ}" > "${PIP_BINARY_REQ}"
   --only-binary=:all: \
   --requirement "${PIP_BINARY_REQ}"
 
+# Bundle the full native PyFaceWipe dependency closure for offline installation.
+"${CONDA_PREFIX}/bin/python" -m pip download \
+  --dest "${PIP_STAGE}" --only-binary=:all: pyfacewipe
+
 # Confirm the required runtime packages are actually present in the bundle.
 ls "${PIP_STAGE}"/proxy_tools-0.1.0-*.whl >/dev/null 2>&1 || {
   echo "ERROR: proxy-tools wheel was not built."
