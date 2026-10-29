@@ -5,7 +5,7 @@ STAGE="$ROOT/packaging/stage-linux"
 CONSTRUCT="$ROOT/packaging/constructor/linux"
 case "$(uname -s)" in Linux) ;; *) echo "Build on Linux, not macOS." >&2; exit 1;; esac
 ARCH="$(uname -m)"
-case "$ARCH" in x86_64) SUBDIR=linux-64;; aarch64) SUBDIR=linux-aarch64;; *) echo "Unsupported architecture: $ARCH" >&2; exit 1;; esac
+case "$ARCH" in x86_64) SUBDIR=linux-64;; aarch64) echo "PyFaceWipe has no verified Linux ARM64 wheel; this build target is not yet supported." >&2; exit 1;; *) echo "Unsupported architecture: $ARCH" >&2; exit 1;; esac
 : "${CONDA_PREFIX:?Activate an architecture-matching Conda build environment first}"
 test "$("$CONDA_PREFIX/bin/python" -c 'import platform; print(platform.machine())')" = "$ARCH"
 command -v constructor >/dev/null || { echo "Install conda constructor in build environment." >&2; exit 1; }
@@ -30,9 +30,9 @@ find "$STAGE/payload" -name '*.pyc' -delete
 find "$STAGE/payload" -name '.DS_Store' -delete
 tar -czf "$STAGE/app_payload.tar.gz" -C "$STAGE/payload" .
 "$CONDA_PREFIX/bin/python" -m pip wheel --wheel-dir "$STAGE/pip_packages" --no-deps 'proxy-tools==0.1.0'
-grep -v '^proxy-tools==' "$ROOT/packaging/environment/requirements-pip-linux.txt" > "$STAGE/requirements-binary.txt"
+grep -v -E '^(proxy-tools==|pyfacewipe([[:space:]]|$))' "$ROOT/packaging/environment/requirements-pip-linux.txt" > "$STAGE/requirements-binary.txt"
 "$CONDA_PREFIX/bin/python" -m pip download --dest "$STAGE/pip_packages" --only-binary=:all: --no-deps -r "$STAGE/requirements-binary.txt"
-"$CONDA_PREFIX/bin/python" -m pip download --dest "$STAGE/pip_packages" --only-binary=:all: --no-deps pyfacewipe
+"$CONDA_PREFIX/bin/python" -m pip download --dest "$STAGE/pip_packages" --only-binary=:all: --no-deps "https://github.com/olinickalls/PyFaceWipe/releases/download/v0.1.3/pyfacewipe-0.1.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl"
 "$CONDA_PREFIX/bin/python" -m pip download --dest "$STAGE/pip_packages" --only-binary=:all: medio scipy scikit-image pylibjpeg pylibjpeg-libjpeg xxhash numpy nibabel Pillow
 # Bundle CPU-only Torch rather than the large default Linux CUDA distribution.
 "$CONDA_PREFIX/bin/python" -m pip download --dest "$STAGE/pip_packages" --only-binary=:all: torch --index-url https://download.pytorch.org/whl/cpu
