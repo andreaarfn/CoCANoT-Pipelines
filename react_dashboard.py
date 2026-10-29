@@ -7895,10 +7895,8 @@ class CoCANoTAPI:
             }
 
         if operation == "review":
-            if self.imaging_stage_state.get("deface") != "complete":
-                raise ValueError(
-                    "Complete Deface before opening Imaging review."
-                )
+            if self.imaging_stage_state.get("scrub") != "complete":
+                raise ValueError("Complete NIfTI header scrubbing before Imaging review.")
 
             try:
                 has_converted = (
@@ -7917,23 +7915,12 @@ class CoCANoTAPI:
                         if path.is_file()
                     )
                 )
-                has_defaced = (
-                    stages["defaced"].is_dir()
-                    and any(
-                        _is_nifti(path)
-                        for path in stages["defaced"].rglob("*")
-                        if path.is_file()
-                    )
-                )
-
                 if not (
                     has_converted
                     and has_scrubbed
-                    and has_defaced
                 ):
                     raise ValueError(
-                        "Run preparation, header scrubbing, and defacing "
-                        "before opening Imaging review."
+                        "Prepare and scrub NIfTI files before opening Imaging review."
                     )
 
                 self.imaging_stage_state["review"] = "running"
