@@ -44,8 +44,7 @@ readme_text: |
   - Clinical and surgical metadata management
   - Python runtime and required Python packages
   - dcm2niix
-  - FSL / FLIRT components required by PyDeface
-  - PyDeface
+  - Native PyFaceWipe and its Python dependencies
 
   The installed runtime is private to the current macOS user and is stored
   under that user's Library folder. It does not modify Homebrew, system
