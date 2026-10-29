@@ -14,4 +14,4 @@ dependencies:
   - dcm2niix
   - flask
   - pip
-# PyDeface + FSL/flirt intentionally run in Linux under WSL2, NOT here.
+# Imaging Step 3C uses native PyFaceWipe and PyTorch, provisioned from wheel packages.
