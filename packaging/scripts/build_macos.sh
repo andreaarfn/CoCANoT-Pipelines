@@ -136,8 +136,8 @@ ls "${PIP_STAGE}"/pywebview-6.2.1-*.whl >/dev/null 2>&1 || {
   echo "ERROR: pywebview wheel was not downloaded."
   exit 1
 }
-ls "${PIP_STAGE}"/pydeface-2.1.0-*.whl >/dev/null 2>&1 || {
-  echo "ERROR: pydeface wheel was not downloaded."
+ls "${PIP_STAGE}"/pyfacewipe-*.whl >/dev/null 2>&1 || {
+  echo "ERROR: PyFaceWipe wheel was not downloaded."
   exit 1
 }
 
