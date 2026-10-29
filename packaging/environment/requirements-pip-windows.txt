@@ -24,4 +24,5 @@ requests
 simplejson
 traits
 urllib3
-# FSL + PyDeface are installed inside WSL2, not native Windows Python.
+pyfacewipe
+# Native PyFaceWipe/PyTorch replaces the WSL2+FSL defacing dependency.
