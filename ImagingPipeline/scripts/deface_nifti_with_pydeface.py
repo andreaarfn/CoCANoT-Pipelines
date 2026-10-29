@@ -380,7 +380,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-        input_dir, output_dir, log_dir = load_configured_paths(
+    input_dir, output_dir, log_dir = load_configured_paths(
         input_override=args.input_dir,
         output_override=args.output_dir,
         log_override=args.log_dir,
