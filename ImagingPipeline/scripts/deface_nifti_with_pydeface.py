@@ -182,11 +182,6 @@ def run_and_log(
         log.write(f"Start time: {start_datetime.isoformat(timespec='seconds')}\n\n")
         log.write("=" * 80 + "\nPyFaceWipe output\n" + "=" * 80 + "\n")
 
-        try:
-            command = windows_wsl_pyfacewipe(command)
-        except Exception as exc:
-            log.write(f"PRE-FLIGHT FAILED: {type(exc).__name__}: {exc}\n")
-            raise
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
