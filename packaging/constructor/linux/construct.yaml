@@ -3,9 +3,6 @@ version: "0.2.0"
 installer_type: sh
 installer_filename: CoCANoT-Linux.sh
 environment_file: ../../environment/environment-linux.yaml
-channels:
-  - https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/public/
-  - conda-forge
 company: CoCANoT
 initialize_conda: false
 register_envs: false
