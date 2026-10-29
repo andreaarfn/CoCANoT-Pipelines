@@ -7863,7 +7863,7 @@ class CoCANoTAPI:
                 "--output-dir",
                 str(stages["defaced"]),
                 "--log-dir",
-                str(stages["logs"] / "pyfacewipe"),
+                str(stages["logs"] / "pydeface"),
             ]
 
             if overwrite:
