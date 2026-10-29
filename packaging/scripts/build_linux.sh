@@ -32,7 +32,8 @@ tar -czf "$STAGE/app_payload.tar.gz" -C "$STAGE/payload" .
 "$CONDA_PREFIX/bin/python" -m pip wheel --wheel-dir "$STAGE/pip_packages" --no-deps 'proxy-tools==0.1.0'
 grep -v '^proxy-tools==' "$ROOT/packaging/environment/requirements-pip-linux.txt" > "$STAGE/requirements-binary.txt"
 "$CONDA_PREFIX/bin/python" -m pip download --dest "$STAGE/pip_packages" --only-binary=:all: --no-deps -r "$STAGE/requirements-binary.txt"
-"$CONDA_PREFIX/bin/python" -m pip download --dest "$STAGE/pip_packages" --only-binary=:all: pyfacewipe
+"$CONDA_PREFIX/bin/python" -m pip download --dest "$STAGE/pip_packages" --only-binary=:all: --no-deps pyfacewipe
+"$CONDA_PREFIX/bin/python" -m pip download --dest "$STAGE/pip_packages" --only-binary=:all: medio scipy scikit-image pylibjpeg pylibjpeg-libjpeg xxhash numpy nibabel Pillow
 # Bundle CPU-only Torch rather than the large default Linux CUDA distribution.
 "$CONDA_PREFIX/bin/python" -m pip download --dest "$STAGE/pip_packages" --only-binary=:all: torch --index-url https://download.pytorch.org/whl/cpu
 tar -czf "$STAGE/pip_packages.tar.gz" -C "$STAGE/pip_packages" .
