@@ -3008,9 +3008,8 @@ class CoCANoTAPI:
         return rows
 
     def _refresh_imaging_review_stage(self) -> None:
-        if self.imaging_stage_state.get("deface") != "complete":
-            return
-
+        # Missing automated defacing is a Step 4 pending-upload condition.
+        # Review must remain available after partial Step 3C processing.
         try:
             items, _ = self._imaging_review_items()
         except Exception:
