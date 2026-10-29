@@ -373,6 +373,17 @@ def append_json_log(log_path: Path, message: str) -> None:
         log.write(message + "\n")
 
 
+def defacing_not_applicable_reason(path: Path, shape: tuple[int, ...]) -> str | None:
+    """Only anatomical full-head volumes should be sent to SynthStrip/PyFaceWipe."""
+    if "b1map" in path.name.lower() or "b1_map" in path.name.lower():
+        return "B1 field-map/calibration scan; facial defacing is not applicable automatically."
+    if len(shape) >= 3 and sum(dim < 64 for dim in shape[:3]) >= 2:
+        return (
+            f"Two spatial dimensions are very small ({shape[:3]}); "
+            "not a suitable full-head volume for automated PyFaceWipe."
+        )
+    return None
+
 def print_processing_summary(results: list[dict[str, Any]]) -> None:
     print("\n==============================")
     print("PyFaceWipe Processing Summary")
@@ -384,6 +395,7 @@ def print_processing_summary(results: list[dict[str, Any]]) -> None:
 
     processed = sum(result["status"] == "processed" for result in results)
     skipped = sum(result["status"] == "skipped" for result in results)
+    not_applicable = sum(result["status"] == "not_applicable" for result in results)
     failed = sum(result["status"] == "failed" for result in results)
     total_time = sum(
         float(result["elapsed"])
@@ -400,6 +412,7 @@ def print_processing_summary(results: list[dict[str, Any]]) -> None:
 
     print(f"Processed: {processed}")
     print(f"Skipped:   {skipped}")
+    print(f"Not applicable (manual review): {not_applicable}")
     print(f"Failed:    {failed}")
     print(f"Total processing time: {format_seconds(total_time)}")
 
@@ -588,6 +601,23 @@ def main() -> None:
             nifti_shape = get_nifti_shape(nifti_path)
             print("Dimensions:", nifti_shape)
 
+            not_applicable = defacing_not_applicable_reason(nifti_path, nifti_shape)
+            if not_applicable:
+                print(f"Not applicable: {not_applicable}")
+                print("No PyFaceWipe output was created; review this scan separately.")
+                with log_path.open("w", encoding="utf-8") as log:
+                    log.write(log_header)
+                    log.write(f"Input dimensions: {nifti_shape}\n")
+                    log.write(f"Defacing status: not applicable\nReason: {not_applicable}\n")
+                    log.write("No output created; manual privacy review is required.\n")
+                results.append({
+                    "input": str(relative_path),
+                    "size": input_size_text,
+                    "status": "not_applicable",
+                    "elapsed": None,
+                })
+                continue
+
             if len(nifti_shape) == 4:
                 exit_code, elapsed = run_4d_pyfacewipe(
                     input_nifti=nifti_path,
@@ -617,6 +647,12 @@ def main() -> None:
                 )
 
             if exit_code != 0:
+                if exit_code == -9:
+                    raise RuntimeError(
+                        "PyFaceWipe worker was killed by SIGKILL (-9), possibly due to "
+                        "memory pressure or an unsupported image. No successful defacing "
+                        "output was confirmed; inspect the processing log and scan type."
+                    )
                 raise RuntimeError(f"PyFaceWipe exited with code {exit_code}.")
 
             validate_output(nifti_path, output_nifti)
