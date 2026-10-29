@@ -437,7 +437,10 @@ def main() -> None:
     if not nifti_files:
         raise SystemExit(f"No .nii or .nii.gz files were found under:\n{input_dir}")
 
-    # Import-check before any defacing attempt; avoid per-file stack traces.\n    ensure_native_pyfacewipe_available()\n\n    results: list[dict[str, Any]] = []
+    # Import-check before any defacing attempt; avoid per-file stack traces.
+    ensure_native_pyfacewipe_available()
+
+    results: list[dict[str, Any]] = []
 
     # Identify repeated scrubbed inputs regardless of which staging folder
     # contains them. Include outputs made by earlier runs when their original
@@ -519,15 +522,31 @@ def main() -> None:
             continue
 
         if output_nifti.exists() and not args.overwrite:
-            print("Existing output is invalid OR lacks matching PyFaceWipe provenance. "
-                  "Refusing to overwrite. Back up the old result and rerun with "
-                  "--overwrite to regenerate with PyFaceWipe.")
-            results.append({
-                "input": str(relative_path),
-                "size": input_size_text,
-                "status": "failed",
-                "elapsed": None,
-            })
+            if verified_existing_output(nifti_path, output_nifti):
+                print(
+                    "Skipping legacy defaced output: its PyFaceWipe provenance "
+                    "is unverified. Existing data was preserved. To migrate "
+                    "to PyFaceWipe, back up outputs and explicitly rerun with "
+                    "--overwrite."
+                )
+                results.append({
+                    "input": str(relative_path),
+                    "size": input_size_text,
+                    "status": "skipped",
+                    "elapsed": None,
+                })
+            else:
+                print(
+                    "Existing output failed validation. Refusing to overwrite "
+                    "automatically; inspect/backup this file before using "
+                    "--overwrite."
+                )
+                results.append({
+                    "input": str(relative_path),
+                    "size": input_size_text,
+                    "status": "failed",
+                    "elapsed": None,
+                })
             continue
 
         if args.overwrite:
