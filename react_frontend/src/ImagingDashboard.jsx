@@ -939,7 +939,7 @@ export default function ImagingDashboard({
           <div />
           <button
             className={styles.ctaButton}
-            disabled={busy || processStages.deface !== "complete"}
+            disabled={busy || processStages.scrub !== "complete"}
             onClick={() => setOpenSection(4)}
           >
             Continue to Review <ArrowRight size={16} />
@@ -951,7 +951,7 @@ export default function ImagingDashboard({
         number={4}
         complete={workflowCompletion[4]}
         title="Review de-identification"
-        subtitle="Compare the original and defaced images, then accept, replace, hold, or reject each image."
+        subtitle="Review defaced images and upload replacements for scans that could not be defaced automatically."
         open={openSection === 4}
         onToggle={() => setOpenSection(4)}
       >
@@ -971,7 +971,7 @@ export default function ImagingDashboard({
 
           <button
             className={styles.ctaButton}
-            disabled={busy || processStages.deface !== "complete"}
+            disabled={busy || processStages.scrub !== "complete"}
             onClick={() => runOperation("review")}
           >
             Open Imaging Review <ArrowRight size={16} />
