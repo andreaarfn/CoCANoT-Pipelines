@@ -8889,7 +8889,7 @@ class CoCANoTAPI:
                 if not automatic_path or not Path(automatic_path).is_file():
                     raise ValueError("No valid automated defaced NIfTI exists. Upload a replacement.")
                 accepted_path = str(Path(automatic_path).resolve())
-                defacing_source = "pyfacewipe"
+                defacing_source = "mede"
 
         state[item["key"]] = {
             "status": status,
