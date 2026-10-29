@@ -12,6 +12,7 @@ import argparse
 import hashlib
 from datetime import datetime
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -120,24 +121,42 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def ensure_native_pyfacewipe_available() -> None:
-    """Fail once with the exact interpreter's install command, before touching files."""
-    check = subprocess.run(
-        [sys.executable, "-c", "import pyfacewipe, torch, medio"],
-        capture_output=True, text=True,
-    )
-    if check.returncode:
-        details = (check.stderr or check.stdout).strip()
-        raise SystemExit(
-            "Imaging Step 3C needs native PyFaceWipe in the SAME Python "
-            "environment running CoCANoT.\n"
-            f"Interpreter: {sys.executable}\n"
-            "Install PyFaceWipe 0.1.3 from its GitHub Releases wheel for your OS, architecture, and Python version.\n"
-            "On Apple Silicon + Python 3.12:\n"
-            f"{sys.executable} -m pip install https://github.com/olinickalls/PyFaceWipe/releases/download/v0.1.3/pyfacewipe-0.1.3-cp312-cp312-macosx_11_0_arm64.whl\n"
-            "Restart CoCANoT after installation. No input or output files were changed.\n"
-            f"Import error: {details[-1200:]}"
+def ensure_native_pyfacewipe_available() -> str:
+    """Find a worker Python that imports PyFaceWipe without native library conflicts."""
+    override = os.environ.get("COCANOT_PYFACEWIPE_PYTHON", "").strip()
+    standalone = (Path.home() / ".cocanot" / "pyfacewipe-venv"
+                  / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
+    candidates = [override] if override else [sys.executable, str(standalone)]
+    failures = []
+    for executable in candidates:
+        if not Path(executable).is_file():
+            failures.append(f"{executable}: interpreter not found")
+            continue
+        check = subprocess.run(
+            [executable, "-c", "from pyfacewipe import PyFaceWipe; import nibabel, numpy"],
+            capture_output=True, text=True,
         )
+        if check.returncode == 0:
+            print(f"Using native PyFaceWipe interpreter: {executable}")
+            return executable
+        failures.append(
+            f"{executable}: {(check.stderr or check.stdout).strip()[-1600:]}"
+        )
+
+    diagnostic = "\n\n".join(failures)
+    if "OMP: Error #15" in diagnostic or "libomp.dylib already initialized" in diagnostic:
+        reason = ("OpenMP native library conflict. Do not use the unsafe "
+                  "KMP_DUPLICATE_LIB_OK workaround.")
+    else:
+        reason = "PyFaceWipe could not start in an available Python environment."
+    raise SystemExit(
+        f"{reason}\n"
+        f"Standalone worker location: {standalone}\n"
+        "Create an isolated Python 3.12 venv there and install the native "
+        "PyFaceWipe wheel, or set COCANOT_PYFACEWIPE_PYTHON to an existing "
+        "working interpreter.\n"
+        f"Diagnostics:\n{diagnostic}"
+    )
 
 
 def has_pyfacewipe_provenance(sidecar: Path, source_hash: str) -> bool:
@@ -264,6 +283,7 @@ def run_4d_pyfacewipe(
     output_nifti: Path,
     log_path: Path,
     log_header: str,
+    worker_python: str,
 ) -> tuple[int, float]:
     start_time = time.perf_counter()
 
@@ -289,7 +309,7 @@ def run_4d_pyfacewipe(
             )
 
             command = [
-                sys.executable, str(SCRIPT_DIR / "run_pyfacewipe_native.py"),
+                worker_python, str(SCRIPT_DIR / "run_pyfacewipe_native.py"),
                 "--input", str(mean_input),
                 "--output", str(mean_defaced),
                 "--mask", str(temp_dir / "keep_mask.npy"),
@@ -438,7 +458,7 @@ def main() -> None:
         raise SystemExit(f"No .nii or .nii.gz files were found under:\n{input_dir}")
 
     # Import-check before any defacing attempt; avoid per-file stack traces.
-    ensure_native_pyfacewipe_available()
+    worker_python = ensure_native_pyfacewipe_available()
 
     results: list[dict[str, Any]] = []
 
@@ -574,10 +594,11 @@ def main() -> None:
                     output_nifti=output_nifti,
                     log_path=log_path,
                     log_header=log_header,
+                    worker_python=worker_python,
                 )
             elif len(nifti_shape) == 3:
                 command = [
-                    sys.executable, str(SCRIPT_DIR / "run_pyfacewipe_native.py"),
+                    worker_python, str(SCRIPT_DIR / "run_pyfacewipe_native.py"),
                     "--input", str(nifti_path),
                     "--output", str(output_nifti),
                 ]
