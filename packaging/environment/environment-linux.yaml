@@ -13,7 +13,5 @@ dependencies:
   - pyedflib
   - pyyaml
   - dcm2niix
-  - fsl-flirt
-  - fslpy
   - flask
   - pip
