@@ -24,7 +24,7 @@ if [ ! -x "${COCANOT_PREFIX}/bin/python" ]; then
     exit 1
 fi
 
-for TOOL in dcm2niix flirt; do
+for TOOL in dcm2niix; do
     if [ ! -x "${COCANOT_PREFIX}/bin/${TOOL}" ]; then
         echo "ERROR: bundled dependency is missing: ${TOOL}"
         exit 1
@@ -55,13 +55,12 @@ mkdir -p "${PIP_DIR}"
 echo "Installing bundled Python-only dependencies..."
 "${COCANOT_PREFIX}/bin/python" -m pip install \
     --no-index \
-    --no-deps \
     --only-binary=:all: \
     --find-links "${PIP_DIR}" \
     -r "${COCANOT_PREFIX}/app/packaging_requirements_pip.txt"
 
-if [ ! -x "${COCANOT_PREFIX}/bin/pydeface" ]; then
-    echo "ERROR: bundled dependency is missing after offline install: pydeface"
+if ! "${COCANOT_PREFIX}/bin/python" -c "import pyfacewipe, torch"; then
+    echo "ERROR: native PyFaceWipe/PyTorch dependency is missing after offline install."
     exit 1
 fi
 
@@ -135,7 +134,6 @@ APP_ROOT="\${PREFIX}/app"
 export PATH="\${PREFIX}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export PYTHONPATH="\${APP_ROOT}"
 export PYTHONNOUSERSITE=1
-export FSLDIR="\${PREFIX}"
 
 cd "\${APP_ROOT}"
 
