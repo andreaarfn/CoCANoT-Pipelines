@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deface configured NIfTI files using PyDeface.
+Deface configured NIfTI files using PyFaceWipe.
 
 Paths come from the shared parent-level pipeline_settings.json through
 pipeline_config.py. There are no machine-specific fallback directories.
@@ -149,7 +149,7 @@ def copy_and_update_json(
     if not isinstance(metadata, dict):
         return "JSON sidecar was not copied because it is not a JSON object."
 
-    metadata["DefacingSoftware"] = "pydeface"
+    metadata["DefacingSoftware"] = "pyfacewipe"
     metadata["Defaced"] = True
     metadata["SourceFile"] = str(source_nifti.relative_to(input_dir))
     metadata["SourceSHA256"] = source_hash
@@ -162,77 +162,6 @@ def copy_and_update_json(
     return "JSON sidecar copied and updated."
 
 
-def windows_wsl_pydeface(command: list[str]) -> list[str]:
-    """Dispatch PyDeface through WSL on Windows while keeping output on Windows."""
-    if sys.platform != "win32" or not command or command[0] != "pydeface":
-        return command
-
-    wsl = shutil.which("wsl.exe") or shutil.which("wsl")
-    if not wsl:
-        raise RuntimeError(
-            "Step 3C requires WSL2, a Linux distribution, FSL, and PyDeface. "
-            "WSL is unavailable. Install WSL2 and Ubuntu, then configure Linux "
-            "FSL and PyDeface. Steps 3A and 3B do not require WSL."
-        )
-
-    # Do not enumerate WSL distributions before a run. On freshly enabled WSL,
-    # 'wsl --list --quiet' can hang while first-run initialization is pending.
-    # The actual Linux command below is the authoritative readiness check.
-    # Respect the default WSL distribution, which is what --exec uses below.
-    # FSL may be installed under ~/fsl/share/fsl/bin, not just ~/fsl/bin.
-    # A dedicated virtualenv may put pydeface in ~/cocanot-pydeface/bin.
-    setup = (
-        'export FSLDIR="${FSLDIR:-$HOME/fsl}"; '
-        'export PATH="$HOME/cocanot-pydeface/bin:$HOME/.local/bin:'
-        '$FSLDIR/share/fsl/bin:$FSLDIR/bin:$PATH"; '
-    )
-    probe_script = (
-        setup
-        + 'command -v pydeface >/dev/null && command -v flirt >/dev/null'
-    )
-    try:
-        probe = subprocess.run(
-            [wsl, "--exec", "bash", "-lc", probe_script],
-            capture_output=True, text=True, timeout=120,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError(
-            "WSL did not become ready for MRI defacing. If WSL was just enabled, "
-            "restart Windows and complete Ubuntu's first-run setup. "
-            "No defacing was attempted. "
-            f"Details: {exc}"
-        ) from exc
-    if probe.returncode:
-        raise RuntimeError(
-            "Step 3C requires Linux PyDeface and FSL flirt in the default "
-            "WSL distribution. Install them inside WSL (PyDeface in "
-            "~/cocanot-pydeface or on PATH; FSL in ~/fsl or on PATH). "
-            "No defacing was attempted. "
-            + probe.stderr.strip()[:400]
-        )
-
-    translated = []
-    for value in command[1:]:
-        if value.startswith("-"):
-            translated.append(value)
-            continue
-        candidate = Path(value)
-        if not candidate.is_absolute():
-            translated.append(value)
-            continue
-        result = subprocess.run(
-            [wsl, "--exec", "wslpath", "-a", "-u", str(candidate)],
-            capture_output=True, text=True, timeout=30,
-        )
-        if result.returncode or not result.stdout.strip():
-            raise RuntimeError(
-                f"Cannot translate defacing path into WSL: {candidate}: "
-                + result.stderr.strip()[:400]
-            )
-        translated.append(result.stdout.strip())
-
-    script = setup + 'exec pydeface "$@"'
-    return [wsl, "--exec", "bash", "-lc", script, "cocanot-pydeface", *translated]
 
 
 def run_and_log(
@@ -251,10 +180,10 @@ def run_and_log(
         log.write(" ".join(command) + "\n\n")
         log.write("=" * 80 + "\nTiming\n" + "=" * 80 + "\n")
         log.write(f"Start time: {start_datetime.isoformat(timespec='seconds')}\n\n")
-        log.write("=" * 80 + "\nPyDeface output\n" + "=" * 80 + "\n")
+        log.write("=" * 80 + "\nPyFaceWipe output\n" + "=" * 80 + "\n")
 
         try:
-            command = windows_wsl_pydeface(command)
+            command = windows_wsl_pyfacewipe(command)
         except Exception as exc:
             log.write(f"PRE-FLIGHT FAILED: {type(exc).__name__}: {exc}\n")
             raise
@@ -288,7 +217,7 @@ def get_nifti_shape(nifti_path: Path) -> tuple[int, ...]:
 
 def validate_output(input_nifti: Path, output_nifti: Path) -> None:
     if not output_nifti.exists():
-        raise RuntimeError("PyDeface reported success but created no output file.")
+        raise RuntimeError("PyFaceWipe reported success but created no output file.")
 
     input_img = nib.load(str(input_nifti))
     output_img = nib.load(str(output_nifti))
@@ -301,7 +230,7 @@ def validate_output(input_nifti: Path, output_nifti: Path) -> None:
         raise RuntimeError("Defaced output affine differs from input.")
 
 
-def run_4d_pydeface(
+def run_4d_pyfacewipe(
     input_nifti: Path,
     output_nifti: Path,
     log_path: Path,
@@ -317,7 +246,7 @@ def run_4d_pydeface(
         data = np.asanyarray(img.dataobj)
         mean_data = np.mean(data, axis=3, dtype=np.float32)
 
-        with tempfile.TemporaryDirectory(prefix="pydeface_4d_") as temp_dir_name:
+        with tempfile.TemporaryDirectory(prefix="pyfacewipe_4d_") as temp_dir_name:
             temp_dir = Path(temp_dir_name)
             mean_input = temp_dir / "temporal_mean.nii.gz"
             mean_defaced = temp_dir / "temporal_mean_defaced.nii.gz"
@@ -331,10 +260,10 @@ def run_4d_pydeface(
             )
 
             command = [
-                "pydeface",
-                str(mean_input),
-                "--outfile",
-                str(mean_defaced),
+                sys.executable, str(SCRIPT_DIR / "run_pyfacewipe_native.py"),
+                "--input", str(mean_input),
+                "--output", str(mean_defaced),
+                "--mask", str(temp_dir / "keep_mask.npy"),
             ]
             exit_code, _ = run_and_log(
                 command=command,
@@ -348,23 +277,15 @@ def run_4d_pydeface(
             if exit_code != 0:
                 return exit_code, time.perf_counter() - start_time
 
-            defaced_mean = np.asanyarray(
-                nib.load(str(mean_defaced)).dataobj
-            ).astype(np.float32, copy=False)
-            if defaced_mean.shape != mean_data.shape:
+            keep_mask = np.load(str(temp_dir / "keep_mask.npy"), allow_pickle=False)
+            if keep_mask.shape != mean_data.shape:
                 raise RuntimeError(
-                    "Defaced reference shape does not match the temporal mean: "
-                    f"{defaced_mean.shape} versus {mean_data.shape}"
+                    f"PyFaceWipe mask shape {keep_mask.shape} != reference {mean_data.shape}"
                 )
-
-            removed_mask = (
-                ~np.isclose(mean_data, 0.0, atol=1e-6)
-                & np.isclose(defaced_mean, 0.0, atol=1e-6)
-            )
+            removed_mask = ~keep_mask
             if not np.any(removed_mask):
-                raise RuntimeError("No removed voxels were detected in the defaced reference.")
+                raise RuntimeError("No removed voxels were detected in the PyFaceWipe mask.")
 
-            keep_mask = ~removed_mask
             output_data = data * keep_mask[..., np.newaxis]
 
             output_header = img.header.copy()
@@ -405,7 +326,7 @@ def append_json_log(log_path: Path, message: str) -> None:
 
 def print_processing_summary(results: list[dict[str, Any]]) -> None:
     print("\n==============================")
-    print("PyDeface Processing Summary")
+    print("PyFaceWipe Processing Summary")
     print("==============================")
 
     if not results:
@@ -436,7 +357,7 @@ def print_processing_summary(results: list[dict[str, Any]]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Deface configured 3D and 4D NIfTI files using PyDeface."
+        description="Deface configured 3D and 4D NIfTI files using PyFaceWipe."
     )
     parser.add_argument(
         "--input-dir",
@@ -464,13 +385,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    if sys.platform != "win32" and shutil.which("pydeface") is None:
-        raise SystemExit(
-            "pydeface was not found on PATH. Activate the correct environment "
-            "and install pydeface before running this script."
-        )
-
-    input_dir, output_dir, log_dir = load_configured_paths(
+        input_dir, output_dir, log_dir = load_configured_paths(
         input_override=args.input_dir,
         output_override=args.output_dir,
         log_override=args.log_dir,
@@ -533,7 +448,7 @@ def main() -> None:
         input_size_text = format_file_size(nifti_path.stat().st_size)
 
         # Preserve the input folder structure in both output locations.
-        # PyDeface and the log writer cannot create missing parent folders.
+        # PyFaceWipe and the log writer cannot create missing parent folders.
         output_subdir.mkdir(parents=True, exist_ok=True)
         log_subdir.mkdir(parents=True, exist_ok=True)
 
@@ -586,7 +501,7 @@ def main() -> None:
             log_path.unlink(missing_ok=True)
 
         log_header = (
-            "=" * 80 + "\nPyDeface defacing log\n" + "=" * 80 + "\n"
+            "=" * 80 + "\nPyFaceWipe defacing log\n" + "=" * 80 + "\n"
             f"Input: {relative_path}\n"
             f"Input size: {input_size_text}\n"
             f"Output: {output_nifti.relative_to(output_dir)}\n"
@@ -600,7 +515,7 @@ def main() -> None:
             print("Dimensions:", nifti_shape)
 
             if len(nifti_shape) == 4:
-                exit_code, elapsed = run_4d_pydeface(
+                exit_code, elapsed = run_4d_pyfacewipe(
                     input_nifti=nifti_path,
                     output_nifti=output_nifti,
                     log_path=log_path,
@@ -608,10 +523,9 @@ def main() -> None:
                 )
             elif len(nifti_shape) == 3:
                 command = [
-                    "pydeface",
-                    str(nifti_path),
-                    "--outfile",
-                    str(output_nifti),
+                    sys.executable, str(SCRIPT_DIR / "run_pyfacewipe_native.py"),
+                    "--input", str(nifti_path),
+                    "--output", str(output_nifti),
                 ]
                 exit_code, elapsed = run_and_log(
                     command=command,
@@ -619,7 +533,7 @@ def main() -> None:
                     log_header=(
                         log_header
                         + f"Input dimensions: {nifti_shape}\n"
-                        + "Processing mode: standard 3D pydeface\n"
+                        + "Processing mode: standard 3D pyfacewipe\n"
                     ),
                 )
             else:
@@ -628,7 +542,7 @@ def main() -> None:
                 )
 
             if exit_code != 0:
-                raise RuntimeError(f"PyDeface exited with code {exit_code}.")
+                raise RuntimeError(f"PyFaceWipe exited with code {exit_code}.")
 
             validate_output(nifti_path, output_nifti)
             json_message = copy_and_update_json(
@@ -666,9 +580,9 @@ def main() -> None:
 
     failed_count = sum(result["status"] == "failed" for result in results)
     if failed_count:
-        print("\nPyDeface defacing FAILED.")
+        print("\nPyFaceWipe defacing FAILED.")
     else:
-        print("\nPyDeface defacing complete.")
+        print("\nPyFaceWipe defacing complete.")
     print("Defaced outputs saved in:", output_dir)
     print("Logs saved in:", log_dir)
     print_processing_summary(results)
