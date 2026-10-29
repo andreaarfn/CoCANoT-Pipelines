@@ -594,7 +594,7 @@ class ImagingReviewWindow(ttk.Frame):
                     "status": value,
                     "accepted_defaced_path": "",
                     "defacing_source": (
-                        "pydeface"
+                        "pyfacewipe"
                         if value == "Accepted"
                         else ""
                     ),
@@ -2469,7 +2469,7 @@ class ImagingReviewWindow(ttk.Frame):
                 visible_status = "Accepted"
                 item[
                     "defacing_source"
-                ] = "pydeface"
+                ] = "pyfacewipe"
                 item[
                     "accepted_defaced_path"
                 ] = str(
@@ -5132,7 +5132,7 @@ class BIDSMetadataWindow(ttk.Frame):
                         if "external_defaced" in Path(
                             record["nifti_path"]
                         ).parts
-                        else "pydeface"
+                        else "pyfacewipe"
                     ),
                 }
                 for record in included
@@ -6717,7 +6717,7 @@ class ImagingDashboard(ttk.Frame):
 
     def _run_defacer(self) -> None:
         config = self._require_config()
-        if config is None or not self._verify_script(DEFACER_SCRIPT, "PyDeface script"):
+        if config is None or not self._verify_script(DEFACER_SCRIPT, "PyFaceWipe script"):
             return
         stages = self._stage_paths(config)
         command = [
