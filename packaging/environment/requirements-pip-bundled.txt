@@ -17,7 +17,8 @@ openpyxl==3.1.5
 prov==3.1.0
 proxy-tools==0.1.0
 puremagic==2.2.0
-pydeface==2.1.0
+pyfacewipe
+# PyFaceWipe requires torch>=2.6; native wheels are platform-specific.
 pydot==4.0.1
 pyobjc-core==12.2.2
 pyobjc-framework-cocoa==12.2.2
