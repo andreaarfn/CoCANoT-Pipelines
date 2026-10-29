@@ -2656,6 +2656,15 @@ function ImagingReview({
             <div className={styles.placeholder}>{loading ? "Loading…" : "No reviewable images were found."}</div>
           ) : (
             <>
+              {review.needs_external_defaced && (
+                <section className={styles.card} role="alert">
+                  <h3>Pending — defaced NIfTI required</h3>
+                  <p>CoCANoT could not confirm a defaced output for this scan. The image remains pending; the scrubbed image shown below is <strong>not defaced</strong> and must not be exported as de-identified.</p>
+                  <p>Upload an externally defaced .nii or .nii.gz image for this scan. CoCANoT validates its dimensions, affine, and voxel sizes, then places the replacement in Step 4 for visual review.</p>
+                  <button type="button" className={styles.primaryButton} onClick={chooseExternalReplacement}>Upload Defaced NIfTI</button>
+                  <button type="button" className={styles.secondaryButton} onClick={() => setStatus("On Hold - Needs Defaced Replacement")}>Put on Hold</button>
+                </section>
+              )}
               <section className={styles.card}>
                 <h3>Raw header versus scrubbed header</h3>
                 <p role="alert" className={styles.headerEditNotice}><strong>NIfTI Header Editing — Caution.</strong> Editing NIfTI header values can affect image integrity. Only modify values you understand and have verified are appropriate. Incorrect changes may corrupt the image or alter its scientific interpretation.</p>
@@ -2724,7 +2733,7 @@ function ImagingReview({
               </section>
 
               <section className={styles.card}>
-                <h3>Interactive raw versus defaced image review</h3>
+                <h3>{review.needs_external_defaced ? "Raw versus scrubbed preview — not defaced" : "Interactive raw versus defaced image review"}</h3>
                 {review.spatial_warnings?.some(warning => !warning.includes("oblique acquisition")) && (
                   <div role="alert" className={styles.orientationWarning}>
                     <strong>Spatial orientation needs review</strong>
@@ -2781,7 +2790,7 @@ function ImagingReview({
                 <span>{review.key} | Review status: {review.status}</span>
                 <div>
                   <button className={styles.secondaryButton} onClick={() => setRejectOpen(true)}>Reject</button>
-                  <button className={styles.primaryButton} onClick={() => setStatus("Accepted")}>Accept</button>
+                  <button className={styles.primaryButton} disabled={Boolean(review.needs_external_defaced)} title={review.needs_external_defaced ? "Upload a defaced replacement before accepting" : "Accept reviewed defacing"} onClick={() => setStatus("Accepted")}>Accept</button>
                   <button
                     className={styles.primaryButton}
                     disabled={!allReviewDecisionsSaved}
