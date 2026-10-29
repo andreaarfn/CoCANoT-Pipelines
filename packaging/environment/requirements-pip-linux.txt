@@ -13,7 +13,8 @@ nipype==1.11.0
 prov==3.1.0
 proxy-tools==0.1.0
 puremagic==2.2.0
-pydeface==2.1.0
+pyfacewipe
+# Install CPU-only torch separately when packaging Linux to avoid CUDA downloads.
 pydot==4.0.1
 pywebview==6.2.1
 rdflib==7.6.0
