@@ -130,10 +130,10 @@ def ensure_native_pyfacewipe_available() -> None:
         details = (check.stderr or check.stdout).strip()
         raise SystemExit(
             "Imaging Step 3C needs native PyFaceWipe in the SAME Python "
-            "environment running CoCANoT.\\n"
-            f"Interpreter: {sys.executable}\\n"
-            f"Install with: \\"{sys.executable}\\" -m pip install pyfacewipe\\n"
-            "Restart CoCANoT after installation. No input or output files were changed.\\n"
+            "environment running CoCANoT.\n"
+            f"Interpreter: {sys.executable}\n"
+            f"Install with: {sys.executable} -m pip install pyfacewipe\n"
+            "Restart CoCANoT after installation. No input or output files were changed.\n"
             f"Import error: {details[-1200:]}"
         )
 
