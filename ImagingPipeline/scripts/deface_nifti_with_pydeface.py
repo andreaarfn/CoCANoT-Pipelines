@@ -360,7 +360,7 @@ def append_json_log(log_path: Path, message: str) -> None:
 
 
 def defacing_not_applicable_reason(path: Path, shape: tuple[int, ...]) -> str | None:
-    """Only anatomical full-head volumes should be sent to SynthStrip/MEDE."""
+    """Conservatively exclude scans unsuitable for automatic facial defacing."""
     if "b1map" in path.name.lower() or "b1_map" in path.name.lower():
         return "B1 field-map/calibration scan; facial defacing is not applicable automatically."
     if len(shape) >= 3 and sum(dim < 64 for dim in shape[:3]) >= 2:
@@ -405,7 +405,7 @@ def print_processing_summary(results: list[dict[str, Any]]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Deface configured 3D and 4D NIfTI files using MEDE."
+        description="Experimental MEDE defacing for 3D NIfTI images."
     )
     parser.add_argument(
         "--input-dir",
@@ -568,10 +568,9 @@ def main() -> None:
                 })
             continue
 
-        if args.overwrite:
-            output_nifti.unlink(missing_ok=True)
-            output_json.unlink(missing_ok=True)
-            log_path.unlink(missing_ok=True)
+        # Preserve existing derivatives until MEDE output passes validation.
+        staging_output = output_subdir / f".{base}_mede_staging.nii.gz"
+        staging_output.unlink(missing_ok=True)
 
         log_header = (
             "=" * 80 + "\nMEDE defacing log\n" + "=" * 80 + "\n"
@@ -620,7 +619,7 @@ def main() -> None:
             command = [
                 worker_python, str(SCRIPT_DIR / "run_mede_native.py"),
                 "--input", str(nifti_path),
-                "--output", str(output_nifti),
+                "--output", str(staging_output),
             ]
             exit_code, elapsed = run_and_log(
                 command=command,
@@ -637,7 +636,9 @@ def main() -> None:
                     )
                 raise RuntimeError(f"MEDE exited with code {exit_code}.")
 
-            validate_output(nifti_path, output_nifti)
+            validate_output(nifti_path, staging_output)
+            staging_output.replace(output_nifti)
+            output_json.unlink(missing_ok=True)
             json_message = copy_and_update_json(
                 input_json=input_json,
                 output_json=output_json,
@@ -658,7 +659,7 @@ def main() -> None:
                 }
             )
         except Exception as exc:
-            output_nifti.unlink(missing_ok=True)
+            staging_output.unlink(missing_ok=True)
             print(f"ERROR: Defacing failed for {relative_path}")
             print(exc)
             print(f"See log: {log_path}")
