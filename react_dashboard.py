@@ -8877,8 +8877,19 @@ class CoCANoTAPI:
         if status == "Accepted":
             if item["needs_external_defaced"]:
                 raise ValueError("No defaced image exists. Upload a validated external defaced NIfTI before accepting.")
-            accepted_path = str(Path(item["automated_defaced_path"]).resolve())
-            defacing_source = "pyfacewipe"
+            if item["defacing_source"] == "external":
+                selected_external = Path(item["review_defaced_path"])
+                if not selected_external.is_file():
+                    raise ValueError("Uploaded external defaced NIfTI is missing. Upload it again.")
+                accepted_path = str(selected_external.resolve())
+                defacing_source = "external"
+                status = "Accepted - External"
+            else:
+                automatic_path = str(item["automated_defaced_path"] or "")
+                if not automatic_path or not Path(automatic_path).is_file():
+                    raise ValueError("No valid automated defaced NIfTI exists. Upload a replacement.")
+                accepted_path = str(Path(automatic_path).resolve())
+                defacing_source = "pyfacewipe"
 
         state[item["key"]] = {
             "status": status,
