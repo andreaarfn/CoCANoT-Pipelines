@@ -22,7 +22,6 @@ $Wheels = Join-Path $Stage "wheels"
 New-Item -ItemType Directory -Force $Payload,$Wheels | Out-Null
 Copy-Item (Join-Path $ProjectRoot "react_dashboard.py") $Payload
 Copy-Item (Join-Path $ProjectRoot "pipeline_config.py") $Payload
-Copy-Item (Join-Path $ProjectRoot "packaging/scripts/setup_windows_defacing.ps1") (Join-Path $Payload "setup_windows_defacing.ps1")
 Copy-Item (Join-Path $ProjectRoot "packaging/environment/requirements-pip-windows.txt") (Join-Path $Payload "packaging_requirements_pip.txt")
 foreach ($dir in @("app","config","MetadataPipeline")) {
   Copy-Item (Join-Path $ProjectRoot $dir) $Payload -Recurse
@@ -42,6 +41,8 @@ Get-Content (Join-Path $ProjectRoot "packaging/environment/requirements-pip-wind
 if ($LASTEXITCODE -ne 0) { throw "proxy-tools wheel build failed" }
 & $Py -m pip download --dest $Wheels --only-binary=:all: --no-deps -r $BinaryRequirements
 if ($LASTEXITCODE -ne 0) { throw "Windows wheel download failed" }
+& $Py -m pip download --dest $Wheels --only-binary=:all: pyfacewipe
+if ($LASTEXITCODE -ne 0) { throw "PyFaceWipe native dependency download failed" }
 # Explicitly verify Windows desktop bridge dependencies are bundled for offline installs.
 foreach ($package in @("pythonnet", "clr_loader", "cffi", "pycparser")) {
   $found = Get-ChildItem $Wheels -File -Filter "*.whl" | Where-Object {
