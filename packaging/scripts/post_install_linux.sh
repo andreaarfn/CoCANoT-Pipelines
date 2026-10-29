@@ -10,11 +10,11 @@ mkdir -p "$ROOT" "$HOME/.local/share/applications" "$HOME/.local/bin"
 tar -xzf "$PREFIX/payload/app_payload.tar.gz" -C "$ROOT"
 mkdir -p "$PREFIX/payload/pip_packages"
 tar -xzf "$PREFIX/payload/pip_packages.tar.gz" -C "$PREFIX/payload/pip_packages"
-"$PREFIX/bin/python" -m pip install --no-index --no-deps --only-binary=:all: \
+"$PREFIX/bin/python" -m pip install --no-index --only-binary=:all: \
   --find-links "$PREFIX/payload/pip_packages" \
   -r "$ROOT/packaging_requirements_pip.txt"
 "$PREFIX/bin/python" - <<'PY'
-import webview, numpy, nibabel, pyedflib, fitz, openpyxl
+import webview, numpy, nibabel, pyedflib, fitz, openpyxl, pyfacewipe, torch
 print("CoCANoT Python dependency imports OK")
 PY
 test -f "$ROOT/react_frontend/dist/index.html"
@@ -25,7 +25,6 @@ set -e
 export PATH="$PREFIX/bin:\$PATH"
 export PYTHONNOUSERSITE=1
 export PYTHONPATH="$ROOT"
-export FSLDIR="$PREFIX"
 cd "$ROOT"
 exec "$PREFIX/bin/python" "$ROOT/react_dashboard.py" "\$@"
 EOF
