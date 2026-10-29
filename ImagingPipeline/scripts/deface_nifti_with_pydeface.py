@@ -120,6 +120,38 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def ensure_native_pyfacewipe_available() -> None:
+    """Fail once with the exact interpreter's install command, before touching files."""
+    check = subprocess.run(
+        [sys.executable, "-c", "import pyfacewipe, torch, medio"],
+        capture_output=True, text=True,
+    )
+    if check.returncode:
+        details = (check.stderr or check.stdout).strip()
+        raise SystemExit(
+            "Imaging Step 3C needs native PyFaceWipe in the SAME Python "
+            "environment running CoCANoT.\\n"
+            f"Interpreter: {sys.executable}\\n"
+            f"Install with: \\"{sys.executable}\\" -m pip install pyfacewipe\\n"
+            "Restart CoCANoT after installation. No input or output files were changed.\\n"
+            f"Import error: {details[-1200:]}"
+        )
+
+
+def has_pyfacewipe_provenance(sidecar: Path, source_hash: str) -> bool:
+    """A legacy PyDeface output is not evidence of a PyFaceWipe run."""
+    try:
+        metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+        return (
+            isinstance(metadata, dict)
+            and str(metadata.get("DefacingSoftware", "")).lower() == "pyfacewipe"
+            and metadata.get("Defaced") is True
+            and metadata.get("SourceSHA256") == source_hash
+        )
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def verified_existing_output(source: Path, output: Path) -> bool:
     if not output.is_file() or output.stat().st_size == 0:
         return False
@@ -138,13 +170,13 @@ def copy_and_update_json(
     source_hash: str = "",
 ) -> str:
     if not input_json.exists():
-        return "No matching JSON sidecar found."
-
-    try:
-        with input_json.open("r", encoding="utf-8") as file:
-            metadata = json.load(file)
-    except (OSError, json.JSONDecodeError) as exc:
-        return f"JSON sidecar was not copied because it could not be read: {exc}"
+        metadata = {}
+    else:
+        try:
+            with input_json.open("r", encoding="utf-8") as file:
+                metadata = json.load(file)
+        except (OSError, json.JSONDecodeError) as exc:
+            return f"JSON sidecar was not copied because it could not be read: {exc}"
 
     if not isinstance(metadata, dict):
         return "JSON sidecar was not copied because it is not a JSON object."
@@ -403,7 +435,7 @@ def main() -> None:
     if not nifti_files:
         raise SystemExit(f"No .nii or .nii.gz files were found under:\n{input_dir}")
 
-    results: list[dict[str, Any]] = []
+    # Import-check before any defacing attempt; avoid per-file stack traces.\n    ensure_native_pyfacewipe_available()\n\n    results: list[dict[str, Any]] = []
 
     # Identify repeated scrubbed inputs regardless of which staging folder
     # contains them. Include outputs made by earlier runs when their original
@@ -415,6 +447,8 @@ def main() -> None:
                 prior_metadata = json.loads(prior_json.read_text(encoding="utf-8"))
                 if not isinstance(prior_metadata, dict):
                     continue
+                if str(prior_metadata.get("DefacingSoftware", "")).lower() != "pyfacewipe":
+                    continue
                 prior_output = prior_json.with_name(prior_json.name[:-5] + ".nii.gz")
                 if not prior_output.is_file() or prior_output.stat().st_size == 0:
                     continue
@@ -425,7 +459,8 @@ def main() -> None:
                     if source_candidate.is_relative_to(input_dir) and source_candidate.is_file():
                         if verified_existing_output(source_candidate, prior_output):
                             prior_hash = sha256_file(source_candidate)
-                if prior_hash and len(prior_hash) == 64:
+                if (prior_hash and len(prior_hash) == 64
+                    and has_pyfacewipe_provenance(prior_json, prior_hash)):
                     completed_hashes[prior_hash] = prior_output
             except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
                 continue
@@ -454,7 +489,8 @@ def main() -> None:
         print("Log:", log_path.relative_to(log_dir))
 
         source_hash = sha256_file(nifti_path) if not args.overwrite else ""
-        if not args.overwrite and verified_existing_output(nifti_path, output_nifti):
+        if (not args.overwrite and has_pyfacewipe_provenance(output_json, source_hash)
+                and verified_existing_output(nifti_path, output_nifti)):
             completed_hashes[source_hash] = output_nifti
             print("Skipping: matching defaced output already exists and passed validation.")
             results.append(
@@ -481,7 +517,9 @@ def main() -> None:
             continue
 
         if output_nifti.exists() and not args.overwrite:
-            print("Existing defaced output failed validation; refusing to overwrite it automatically.")
+            print("Existing output is invalid OR lacks matching PyFaceWipe provenance. "
+                  "Refusing to overwrite. Back up the old result and rerun with "
+                  "--overwrite to regenerate with PyFaceWipe.")
             results.append({
                 "input": str(relative_path),
                 "size": input_size_text,
