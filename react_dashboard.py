@@ -4726,7 +4726,7 @@ class CoCANoTAPI:
                 status = saved
                 accepted_path = ""
                 defacing_source = (
-                    "pydeface"
+                    "pyfacewipe"
                     if status == "Accepted"
                     else ""
                 )
@@ -4817,7 +4817,7 @@ class CoCANoTAPI:
                             "external"
                             if "external_defaced"
                             in selected_path.parts
-                            else "pydeface"
+                            else "pyfacewipe"
                         )
                     ),
                 }
@@ -7548,9 +7548,9 @@ class CoCANoTAPI:
                     "defacing_source": str(
                         record.get(
                             "defacing_source",
-                            "pydeface",
+                            "pyfacewipe",
                         )
-                        or "pydeface"
+                        or "pyfacewipe"
                     ),
                 }
                 for record in included
@@ -7843,7 +7843,7 @@ class CoCANoTAPI:
 
             if not IMAGING_DEFACER.is_file():
                 raise FileNotFoundError(
-                    f"PyDeface script not found: {IMAGING_DEFACER}"
+                    f"PyFaceWipe script not found: {IMAGING_DEFACER}"
                 )
 
             self._begin_imaging_stage(
@@ -7863,7 +7863,7 @@ class CoCANoTAPI:
                 "--output-dir",
                 str(stages["defaced"]),
                 "--log-dir",
-                str(stages["logs"] / "pydeface"),
+                str(stages["logs"] / "pyfacewipe"),
             ]
 
             if overwrite:
@@ -8333,7 +8333,7 @@ class CoCANoTAPI:
                 normalized[str(key)] = {
                     "status": value,
                     "accepted_defaced_path": "",
-                    "defacing_source": "pydeface" if value == "Accepted" else "",
+                    "defacing_source": "pyfacewipe" if value == "Accepted" else "",
                 }
             elif isinstance(value, dict):
                 normalized[str(key)] = {
@@ -8837,7 +8837,7 @@ class CoCANoTAPI:
             os.replace(temp_path, scrubbed_path)
         finally:
             temp_path.unlink(missing_ok=True)
-        # The accepted PyDeface output was created before this review edit.
+        # The accepted PyFaceWipe output was created before this review edit.
         # Mirror the safe header field into that derivative so Step 5 exports
         # the reviewed value, while leaving voxel geometry unchanged.
         defaced_path = Path(item["automated_defaced_path"])
@@ -8887,7 +8887,7 @@ class CoCANoTAPI:
         defacing_source = ""
         if status == "Accepted":
             accepted_path = str(Path(item["automated_defaced_path"]).resolve())
-            defacing_source = "pydeface"
+            defacing_source = "pyfacewipe"
 
         state[item["key"]] = {
             "status": status,
