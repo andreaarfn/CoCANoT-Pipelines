@@ -132,7 +132,9 @@ def ensure_native_pyfacewipe_available() -> None:
             "Imaging Step 3C needs native PyFaceWipe in the SAME Python "
             "environment running CoCANoT.\n"
             f"Interpreter: {sys.executable}\n"
-            "Install PyFaceWipe 0.1.3 from its GitHub Releases wheel for your OS, architecture, and Python version.\n"\n            "On Apple Silicon + Python 3.12:\n"\n            f"{sys.executable} -m pip install https://github.com/olinickalls/PyFaceWipe/releases/download/v0.1.3/pyfacewipe-0.1.3-cp312-cp312-macosx_11_0_arm64.whl\n"
+            "Install PyFaceWipe 0.1.3 from its GitHub Releases wheel for your OS, architecture, and Python version.\n"
+            "On Apple Silicon + Python 3.12:\n"
+            f"{sys.executable} -m pip install https://github.com/olinickalls/PyFaceWipe/releases/download/v0.1.3/pyfacewipe-0.1.3-cp312-cp312-macosx_11_0_arm64.whl\n"
             "Restart CoCANoT after installation. No input or output files were changed.\n"
             f"Import error: {details[-1200:]}"
         )
