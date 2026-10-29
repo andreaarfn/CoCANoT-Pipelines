@@ -119,7 +119,7 @@ mkdir -p "${PIP_STAGE}"
 
 # All remaining pip dependencies must already have binary wheels. If a future
 # package lacks one, fail the BUILD here instead of failing on a clinical site.
-grep -v '^proxy-tools==' "${PIP_REQ}" > "${PIP_BINARY_REQ}"
+grep -v -E '^(proxy-tools==|pyfacewipe([[:space:]]|$))' "${PIP_REQ}" > "${PIP_BINARY_REQ}"
 
 "${CONDA_PREFIX}/bin/python" -m pip download \
   --dest "${PIP_STAGE}" \
@@ -127,9 +127,19 @@ grep -v '^proxy-tools==' "${PIP_REQ}" > "${PIP_BINARY_REQ}"
   --only-binary=:all: \
   --requirement "${PIP_BINARY_REQ}"
 
-# Bundle the full native PyFaceWipe dependency closure for offline installation.
-"${CONDA_PREFIX}/bin/python" -m pip download \
-  --dest "${PIP_STAGE}" --only-binary=:all: pyfacewipe
+# PyFaceWipe release wheels are hosted on GitHub, not reliably indexed on PyPI.
+PYTHON_TAG="$("${CONDA_PREFIX}/bin/python" -c 'import sys; print(f"cp{sys.version_info.major}{sys.version_info.minor}")')"
+if [ "${COCANOT_ARCH}" = "arm64" ]; then
+  PFW_WHEEL="pyfacewipe-0.1.3-${PYTHON_TAG}-${PYTHON_TAG}-macosx_11_0_arm64.whl"
+  PFW_URL="https://github.com/olinickalls/PyFaceWipe/releases/download/v0.1.3/${PFW_WHEEL}"
+  "${CONDA_PREFIX}/bin/python" -m pip download --dest "${PIP_STAGE}" --only-binary=:all: "${PFW_URL}"
+else
+  # Build Intel wheel locally (release has no macOS Intel artifact).
+  "${CONDA_PREFIX}/bin/python" -m pip wheel --wheel-dir "${PIP_STAGE}" --no-deps \
+    "git+https://github.com/olinickalls/PyFaceWipe.git@v0.1.3"
+  "${CONDA_PREFIX}/bin/python" -m pip download --dest "${PIP_STAGE}" --only-binary=:all: \
+    torch scipy scikit-image medio pylibjpeg pylibjpeg-libjpeg xxhash
+fi
 
 # Confirm the required runtime packages are actually present in the bundle.
 ls "${PIP_STAGE}"/proxy_tools-0.1.0-*.whl >/dev/null 2>&1 || {
