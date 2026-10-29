@@ -8378,9 +8378,6 @@ class CoCANoTAPI:
                 defaced_dir / relative.parent / f"{scrubbed_base}_defaced.nii",
             ]
             automated_defaced = next((path for path in defaced_candidates if path.exists()), None)
-            if automated_defaced is None:
-                continue
-
             key = str(relative)
             saved = review_state.get(key, {})
             accepted_path = str(saved.get("accepted_defaced_path", "") or "")
@@ -8396,8 +8393,9 @@ class CoCANoTAPI:
                 "status": str(saved.get("status", "Pending")),
                 "prepared_path": str(prepared_path.resolve()),
                 "scrubbed_path": str(scrubbed_path.resolve()),
-                "automated_defaced_path": str(automated_defaced.resolve()),
-                "review_defaced_path": str(review_defaced.resolve()),
+                "automated_defaced_path": str(automated_defaced.resolve()) if automated_defaced else "",
+                "review_defaced_path": str(review_defaced.resolve()) if review_defaced else "",
+                "needs_external_defaced": review_defaced is None,
                 "accepted_defaced_path": accepted_path,
                 "defacing_source": str(saved.get("defacing_source", "") or ""),
             })
@@ -8459,6 +8457,7 @@ class CoCANoTAPI:
                 "key": item["key"],
                 "status": item["status"],
                 "defacing_source": item["defacing_source"],
+                "needs_external_defaced": item["needs_external_defaced"],
                 "exported": (
                     item["status"] in {"Accepted", "Accepted - External"}
                     and item["key"] in exported_keys
@@ -8531,8 +8530,11 @@ class CoCANoTAPI:
         item = items[index]
         prepared_path = Path(item["prepared_path"])
         scrubbed_path = Path(item["scrubbed_path"])
-        defaced_path = Path(item["review_defaced_path"])
+        missing_defaced = bool(item["needs_external_defaced"])
+        defaced_path = Path(item["review_defaced_path"]) if not missing_defaced else scrubbed_path
         raw_image = nib.load(str(prepared_path))
+        # For pending items, show the scrubbed image as a reference only.
+        # Never present this preview as a successfully defaced image.
         defaced_image = nib.load(str(defaced_path))
 
         if len(raw_image.shape) not in {3, 4} or len(defaced_image.shape) not in {3, 4}:
@@ -8687,6 +8689,7 @@ class CoCANoTAPI:
             "id": item["id"],
             "key": item["key"],
             "status": item["status"],
+            "needs_external_defaced": item["needs_external_defaced"],
             "defacing_source": item["defacing_source"],
             "direction_annotations": self._load_review_state(self._imaging_review_items()[1]).get(item["key"], {}).get("direction_annotations", {}),
             "orientation_labels": {
@@ -8886,6 +8889,8 @@ class CoCANoTAPI:
         accepted_path = ""
         defacing_source = ""
         if status == "Accepted":
+            if item["needs_external_defaced"]:
+                raise ValueError("No defaced image exists. Upload a validated external defaced NIfTI before accepting.")
             accepted_path = str(Path(item["automated_defaced_path"]).resolve())
             defacing_source = "pyfacewipe"
 
