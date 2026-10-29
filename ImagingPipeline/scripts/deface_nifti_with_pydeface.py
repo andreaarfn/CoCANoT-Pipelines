@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deface configured NIfTI files using PyFaceWipe.
+Deface configured NIfTI files using MEDE.
 
 Paths come from the shared parent-level pipeline_settings.json through
 pipeline_config.py. There are no machine-specific fallback directories.
@@ -121,51 +121,37 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def ensure_native_pyfacewipe_available() -> str:
-    """Find a worker Python that imports PyFaceWipe without native library conflicts."""
-    override = os.environ.get("COCANOT_PYFACEWIPE_PYTHON", "").strip()
-    standalone = (Path.home() / ".cocanot" / "pyfacewipe-venv"
-                  / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
-    candidates = [override] if override else [sys.executable, str(standalone)]
-    failures = []
-    for executable in candidates:
-        if not Path(executable).is_file():
-            failures.append(f"{executable}: interpreter not found")
-            continue
-        check = subprocess.run(
-            [executable, "-c", "from pyfacewipe import PyFaceWipe; import nibabel, numpy"],
-            capture_output=True, text=True,
+def ensure_native_mede_available() -> str:
+    """Find a separate MEDE environment without altering CoCANoT dependencies."""
+    override = os.environ.get("COCANOT_MEDE_PYTHON", "").strip()
+    default = Path.home() / ".cocanot" / "mede-venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    executable = override or str(default)
+    if not Path(executable).is_file():
+        raise SystemExit(
+            f"MEDE worker Python does not exist: {executable}\n"
+            "Create an isolated Python 3.11 environment and install mede==0.0.13. "
+            "Set COCANOT_MEDE_PYTHON to its Python executable if necessary."
         )
-        if check.returncode == 0:
-            print(f"Using native PyFaceWipe interpreter: {executable}")
-            return executable
-        failures.append(
-            f"{executable}: {(check.stderr or check.stdout).strip()[-1600:]}"
-        )
-
-    diagnostic = "\n\n".join(failures)
-    if "OMP: Error #15" in diagnostic or "libomp.dylib already initialized" in diagnostic:
-        reason = ("OpenMP native library conflict. Do not use the unsafe "
-                  "KMP_DUPLICATE_LIB_OK workaround.")
-    else:
-        reason = "PyFaceWipe could not start in an available Python environment."
-    raise SystemExit(
-        f"{reason}\n"
-        f"Standalone worker location: {standalone}\n"
-        "Create an isolated Python 3.12 venv there and install the native "
-        "PyFaceWipe wheel, or set COCANOT_PYFACEWIPE_PYTHON to an existing "
-        "working interpreter.\n"
-        f"Diagnostics:\n{diagnostic}"
+    check = subprocess.run(
+        [executable, "-c", "from mede.dicom_skullstrip_defacing import Inference; import torch; import nibabel"],
+        capture_output=True, text=True,
     )
+    if check.returncode:
+        raise SystemExit(
+            f"MEDE 0.0.13 import check failed in {executable}.\n"
+            f"{(check.stderr or check.stdout).strip()[-1800:]}"
+        )
+    print(f"Using isolated MEDE interpreter: {executable}")
+    return executable
 
 
-def has_pyfacewipe_provenance(sidecar: Path, source_hash: str) -> bool:
-    """A legacy PyDeface output is not evidence of a PyFaceWipe run."""
+def has_mede_provenance(sidecar: Path, source_hash: str) -> bool:
+    """A legacy PyDeface output is not evidence of a MEDE run."""
     try:
         metadata = json.loads(sidecar.read_text(encoding="utf-8"))
         return (
             isinstance(metadata, dict)
-            and str(metadata.get("DefacingSoftware", "")).lower() == "pyfacewipe"
+            and str(metadata.get("DefacingSoftware", "")).lower() == "mede"
             and metadata.get("Defaced") is True
             and metadata.get("SourceSHA256") == source_hash
         )
@@ -202,7 +188,7 @@ def copy_and_update_json(
     if not isinstance(metadata, dict):
         return "JSON sidecar was not copied because it is not a JSON object."
 
-    metadata["DefacingSoftware"] = "pyfacewipe"
+    metadata["DefacingSoftware"] = "mede"
     metadata["Defaced"] = True
     metadata["SourceFile"] = str(source_nifti.relative_to(input_dir))
     metadata["SourceSHA256"] = source_hash
@@ -233,7 +219,7 @@ def run_and_log(
         log.write(" ".join(command) + "\n\n")
         log.write("=" * 80 + "\nTiming\n" + "=" * 80 + "\n")
         log.write(f"Start time: {start_datetime.isoformat(timespec='seconds')}\n\n")
-        log.write("=" * 80 + "\nPyFaceWipe output\n" + "=" * 80 + "\n")
+        log.write("=" * 80 + "\nMEDE output\n" + "=" * 80 + "\n")
 
         process = subprocess.Popen(
             command,
@@ -265,7 +251,7 @@ def get_nifti_shape(nifti_path: Path) -> tuple[int, ...]:
 
 def validate_output(input_nifti: Path, output_nifti: Path) -> None:
     if not output_nifti.exists():
-        raise RuntimeError("PyFaceWipe reported success but created no output file.")
+        raise RuntimeError("MEDE reported success but created no output file.")
 
     input_img = nib.load(str(input_nifti))
     output_img = nib.load(str(output_nifti))
@@ -278,7 +264,7 @@ def validate_output(input_nifti: Path, output_nifti: Path) -> None:
         raise RuntimeError("Defaced output affine differs from input.")
 
 
-def run_4d_pyfacewipe(
+def run_4d_mede(
     input_nifti: Path,
     output_nifti: Path,
     log_path: Path,
@@ -295,7 +281,7 @@ def run_4d_pyfacewipe(
         data = np.asanyarray(img.dataobj)
         mean_data = np.mean(data, axis=3, dtype=np.float32)
 
-        with tempfile.TemporaryDirectory(prefix="pyfacewipe_4d_") as temp_dir_name:
+        with tempfile.TemporaryDirectory(prefix="mede_4d_") as temp_dir_name:
             temp_dir = Path(temp_dir_name)
             mean_input = temp_dir / "temporal_mean.nii.gz"
             mean_defaced = temp_dir / "temporal_mean_defaced.nii.gz"
@@ -309,7 +295,7 @@ def run_4d_pyfacewipe(
             )
 
             command = [
-                worker_python, str(SCRIPT_DIR / "run_pyfacewipe_native.py"),
+                worker_python, str(SCRIPT_DIR / "run_mede_native.py"),
                 "--input", str(mean_input),
                 "--output", str(mean_defaced),
                 "--mask", str(temp_dir / "keep_mask.npy"),
@@ -329,11 +315,11 @@ def run_4d_pyfacewipe(
             keep_mask = np.load(str(temp_dir / "keep_mask.npy"), allow_pickle=False)
             if keep_mask.shape != mean_data.shape:
                 raise RuntimeError(
-                    f"PyFaceWipe mask shape {keep_mask.shape} != reference {mean_data.shape}"
+                    f"MEDE mask shape {keep_mask.shape} != reference {mean_data.shape}"
                 )
             removed_mask = ~keep_mask
             if not np.any(removed_mask):
-                raise RuntimeError("No removed voxels were detected in the PyFaceWipe mask.")
+                raise RuntimeError("No removed voxels were detected in the MEDE mask.")
 
             output_data = data * keep_mask[..., np.newaxis]
 
@@ -374,19 +360,19 @@ def append_json_log(log_path: Path, message: str) -> None:
 
 
 def defacing_not_applicable_reason(path: Path, shape: tuple[int, ...]) -> str | None:
-    """Only anatomical full-head volumes should be sent to SynthStrip/PyFaceWipe."""
+    """Only anatomical full-head volumes should be sent to SynthStrip/MEDE."""
     if "b1map" in path.name.lower() or "b1_map" in path.name.lower():
         return "B1 field-map/calibration scan; facial defacing is not applicable automatically."
     if len(shape) >= 3 and sum(dim < 64 for dim in shape[:3]) >= 2:
         return (
             f"Two spatial dimensions are very small ({shape[:3]}); "
-            "not a suitable full-head volume for automated PyFaceWipe."
+            "not a suitable full-head volume for automated MEDE."
         )
     return None
 
 def print_processing_summary(results: list[dict[str, Any]]) -> None:
     print("\n==============================")
-    print("PyFaceWipe Processing Summary")
+    print("MEDE Processing Summary")
     print("==============================")
 
     if not results:
@@ -419,7 +405,7 @@ def print_processing_summary(results: list[dict[str, Any]]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Deface configured 3D and 4D NIfTI files using PyFaceWipe."
+        description="Deface configured 3D and 4D NIfTI files using MEDE."
     )
     parser.add_argument(
         "--input-dir",
@@ -471,7 +457,7 @@ def main() -> None:
         raise SystemExit(f"No .nii or .nii.gz files were found under:\n{input_dir}")
 
     # Import-check before any defacing attempt; avoid per-file stack traces.
-    worker_python = ensure_native_pyfacewipe_available()
+    worker_python = ensure_native_mede_available()
 
     results: list[dict[str, Any]] = []
 
@@ -485,7 +471,7 @@ def main() -> None:
                 prior_metadata = json.loads(prior_json.read_text(encoding="utf-8"))
                 if not isinstance(prior_metadata, dict):
                     continue
-                if str(prior_metadata.get("DefacingSoftware", "")).lower() != "pyfacewipe":
+                if str(prior_metadata.get("DefacingSoftware", "")).lower() != "mede":
                     continue
                 prior_output = prior_json.with_name(prior_json.name[:-5] + ".nii.gz")
                 if not prior_output.is_file() or prior_output.stat().st_size == 0:
@@ -498,7 +484,7 @@ def main() -> None:
                         if verified_existing_output(source_candidate, prior_output):
                             prior_hash = sha256_file(source_candidate)
                 if (prior_hash and len(prior_hash) == 64
-                    and has_pyfacewipe_provenance(prior_json, prior_hash)):
+                    and has_mede_provenance(prior_json, prior_hash)):
                     completed_hashes[prior_hash] = prior_output
             except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
                 continue
@@ -516,7 +502,7 @@ def main() -> None:
         input_size_text = format_file_size(nifti_path.stat().st_size)
 
         # Preserve the input folder structure in both output locations.
-        # PyFaceWipe and the log writer cannot create missing parent folders.
+        # MEDE and the log writer cannot create missing parent folders.
         output_subdir.mkdir(parents=True, exist_ok=True)
         log_subdir.mkdir(parents=True, exist_ok=True)
 
@@ -527,7 +513,7 @@ def main() -> None:
         print("Log:", log_path.relative_to(log_dir))
 
         source_hash = sha256_file(nifti_path) if not args.overwrite else ""
-        if (not args.overwrite and has_pyfacewipe_provenance(output_json, source_hash)
+        if (not args.overwrite and has_mede_provenance(output_json, source_hash)
                 and verified_existing_output(nifti_path, output_nifti)):
             completed_hashes[source_hash] = output_nifti
             print("Skipping: matching defaced output already exists and passed validation.")
@@ -557,9 +543,9 @@ def main() -> None:
         if output_nifti.exists() and not args.overwrite:
             if verified_existing_output(nifti_path, output_nifti):
                 print(
-                    "Skipping legacy defaced output: its PyFaceWipe provenance "
+                    "Skipping legacy defaced output: its MEDE provenance "
                     "is unverified. Existing data was preserved. To migrate "
-                    "to PyFaceWipe, back up outputs and explicitly rerun with "
+                    "to MEDE, back up outputs and explicitly rerun with "
                     "--overwrite."
                 )
                 results.append({
@@ -588,7 +574,7 @@ def main() -> None:
             log_path.unlink(missing_ok=True)
 
         log_header = (
-            "=" * 80 + "\nPyFaceWipe defacing log\n" + "=" * 80 + "\n"
+            "=" * 80 + "\nMEDE defacing log\n" + "=" * 80 + "\n"
             f"Input: {relative_path}\n"
             f"Input size: {input_size_text}\n"
             f"Output: {output_nifti.relative_to(output_dir)}\n"
@@ -604,7 +590,7 @@ def main() -> None:
             not_applicable = defacing_not_applicable_reason(nifti_path, nifti_shape)
             if not_applicable:
                 print(f"Not applicable: {not_applicable}")
-                print("No PyFaceWipe output was created; review this scan separately.")
+                print("No MEDE output was created; review this scan separately.")
                 with log_path.open("w", encoding="utf-8") as log:
                     log.write(log_header)
                     log.write(f"Input dimensions: {nifti_shape}\n")
@@ -618,42 +604,38 @@ def main() -> None:
                 })
                 continue
 
-            if len(nifti_shape) == 4:
-                exit_code, elapsed = run_4d_pyfacewipe(
-                    input_nifti=nifti_path,
-                    output_nifti=output_nifti,
-                    log_path=log_path,
-                    log_header=log_header,
-                    worker_python=worker_python,
-                )
-            elif len(nifti_shape) == 3:
-                command = [
-                    worker_python, str(SCRIPT_DIR / "run_pyfacewipe_native.py"),
-                    "--input", str(nifti_path),
-                    "--output", str(output_nifti),
-                ]
-                exit_code, elapsed = run_and_log(
-                    command=command,
-                    log_path=log_path,
-                    log_header=(
-                        log_header
-                        + f"Input dimensions: {nifti_shape}\n"
-                        + "Processing mode: standard 3D pyfacewipe\n"
-                    ),
-                )
-            else:
-                raise RuntimeError(
-                    f"Only 3D and 4D NIfTI images are supported; found shape {nifti_shape}."
-                )
+            if len(nifti_shape) != 3:
+                reason = ("MEDE standalone test currently supports only 3D NIfTI. "
+                          "This scan needs external defacing / Step 4 review.")
+                print(f"Not applicable: {reason}")
+                with log_path.open("w", encoding="utf-8") as log:
+                    log.write(log_header)
+                    log.write(f"Input dimensions: {nifti_shape}\nReason: {reason}\n")
+                results.append({
+                    "input": str(relative_path), "size": input_size_text,
+                    "status": "not_applicable", "elapsed": None
+                })
+                continue
+
+            command = [
+                worker_python, str(SCRIPT_DIR / "run_mede_native.py"),
+                "--input", str(nifti_path),
+                "--output", str(output_nifti),
+            ]
+            exit_code, elapsed = run_and_log(
+                command=command,
+                log_path=log_path,
+                log_header=log_header + f"Input dimensions: {nifti_shape}\nProcessing mode: MEDE 3D CPU\n",
+            )
 
             if exit_code != 0:
                 if exit_code == -9:
                     raise RuntimeError(
-                        "PyFaceWipe worker was killed by SIGKILL (-9), possibly due to "
+                        "MEDE worker was killed by SIGKILL (-9), possibly due to "
                         "memory pressure or an unsupported image. No successful defacing "
                         "output was confirmed; inspect the processing log and scan type."
                     )
-                raise RuntimeError(f"PyFaceWipe exited with code {exit_code}.")
+                raise RuntimeError(f"MEDE exited with code {exit_code}.")
 
             validate_output(nifti_path, output_nifti)
             json_message = copy_and_update_json(
@@ -691,9 +673,9 @@ def main() -> None:
 
     failed_count = sum(result["status"] == "failed" for result in results)
     if failed_count:
-        print("\nPyFaceWipe defacing FAILED.")
+        print("\nMEDE defacing FAILED.")
     else:
-        print("\nPyFaceWipe defacing complete.")
+        print("\nMEDE defacing complete.")
     print("Defaced outputs saved in:", output_dir)
     print("Logs saved in:", log_dir)
     print_processing_summary(results)
