@@ -20,8 +20,6 @@ dependencies:
 
   # Imaging runtime and native tools
   - dcm2niix=1.0.20260416
-  - fsl-flirt=2111.4
-  - fslpy=3.29.1
 
   # Retained for imported project modules
   - flask=3.1.3
