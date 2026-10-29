@@ -36,12 +36,12 @@ Get-ChildItem $Payload -Recurse -Directory -Filter __pycache__ | Remove-Item -Fo
 Get-ChildItem $Payload -Recurse -File -Filter *.pyc | Remove-Item -Force
 $BinaryRequirements = Join-Path $Stage "binary-requirements.txt"
 Get-Content (Join-Path $ProjectRoot "packaging/environment/requirements-pip-windows.txt") |
-  Where-Object { $_ -notmatch '^proxy-tools==' } | Set-Content $BinaryRequirements
+  Where-Object { $_ -notmatch '^(proxy-tools==|pyfacewipe($|\s))' } | Set-Content $BinaryRequirements
 & $Py -m pip wheel --wheel-dir $Wheels --no-deps "proxy-tools==0.1.0"
 if ($LASTEXITCODE -ne 0) { throw "proxy-tools wheel build failed" }
 & $Py -m pip download --dest $Wheels --only-binary=:all: --no-deps -r $BinaryRequirements
 if ($LASTEXITCODE -ne 0) { throw "Windows wheel download failed" }
-& $Py -m pip download --dest $Wheels --only-binary=:all: pyfacewipe
+& $Py -m pip download --dest $Wheels --only-binary=:all: "https://github.com/olinickalls/PyFaceWipe/releases/download/v0.1.3/pyfacewipe-0.1.3-cp312-cp312-win_amd64.whl"
 if ($LASTEXITCODE -ne 0) { throw "PyFaceWipe native dependency download failed" }
 # Explicitly verify Windows desktop bridge dependencies are bundled for offline installs.
 foreach ($package in @("pythonnet", "clr_loader", "cffi", "pycparser")) {
