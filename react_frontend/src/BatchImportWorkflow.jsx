@@ -3012,6 +3012,11 @@ export default function BatchImportWorkflow({
                     <span>LOCAL SURGERY FOLLOW-UP</span>
                     <h2>Actual Surgery Date and postoperative assessments</h2>
                     <p>Follow-up fields due at 12, 24, and later months appear immediately below when their milestones are reached. The actual date stays local.</p>
+                    {!savedDate && (
+                      <p role="alert" style={{ color: "#9f3636", fontWeight: 700 }}>
+                        Missing Actual Surgery Date — enter and save the date before this Surgical record can be imported.
+                      </p>
+                    )}
                   </div>
                   <div className={styles.surgeryDateRows}>
                     <label>
