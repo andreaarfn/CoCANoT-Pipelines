@@ -238,9 +238,10 @@ export default function BatchImportWorkflow({
 
     // Keep the scoped patient's missing Clinical Assessment warning visible
     // even when validation correctly deselects blocked rows.
-    rows.filter(row => row.include || (
-      scopedPatientId && rowPatientId(row) === normalizedPatientId(scopedPatientId)
-    )).forEach(row => {
+    rows.filter(row => scopedPatientId
+      ? rowPatientId(row) === normalizedPatientId(scopedPatientId)
+      : row.difference_status !== "Duplicate"
+    ).forEach(row => {
 
       const metadata = row?.metadata ?? {};
 
@@ -327,9 +328,10 @@ export default function BatchImportWorkflow({
     const unique = new Map();
     // Also flag the scoped patient's deselected rows. A missing date must
     // not disappear just because another field prevents row inclusion.
-    rows.filter(row => row.include || (
-      scopedPatientId && rowPatientId(row) === normalizedPatientId(scopedPatientId)
-    )).forEach(row => {
+    rows.filter(row => scopedPatientId
+      ? rowPatientId(row) === normalizedPatientId(scopedPatientId)
+      : row.difference_status !== "Duplicate"
+    ).forEach(row => {
       const patientId = rowPatientId(row);
       const surgeryId = String(row?.metadata?.["Surgery ID"] ?? "").trim();
       const savedDate = String(row?.actual_surgery_date ?? "").trim();
@@ -416,7 +418,9 @@ export default function BatchImportWorkflow({
 
     const identities = new Map();
 
-    (activeRows ?? []).filter(row => row.include).forEach(row => {
+    // In Bulk Upload, report dates for unselected, invalid, and new rows too.
+    // Never apply a new surgery date to another patient's record.
+    (activeRows ?? []).filter(row => row.difference_status !== "Duplicate").forEach(row => {
       const metadata = row?.metadata ?? {};
       const patientId = String(
         metadata["CoCANoT Patient ID"] ??
