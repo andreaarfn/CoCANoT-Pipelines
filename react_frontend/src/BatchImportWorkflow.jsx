@@ -3202,6 +3202,15 @@ function BatchSummary({
         <strong>{batch.file_name}</strong>
 
         <span>{batch.path}</span>
+        {batch.file_sha256 && (
+          <span title={batch.file_sha256}>File SHA-256: {batch.file_sha256.slice(0, 16)}…</span>
+        )}
+        {batch.dictionary_file && (
+          <span title={batch.dictionary_sha256 || ""}>
+            Dictionary: {batch.dictionary_file}
+            {batch.dictionary_sha256 ? ` (${batch.dictionary_sha256.slice(0, 12)}…)` : ""}
+          </span>
+        )}
 
       </div>
 
