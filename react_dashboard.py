@@ -13364,6 +13364,13 @@ class CoCANoTAPI:
             "table_name": table_name,
             "path": str(path),
             "file_name": path.name,
+            # Stable fingerprint lets users distinguish two files with the same
+            # name when inconsistent validation results are reported.
+            "file_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "dictionary_file": _active_dictionary_path().name,
+            "dictionary_sha256": hashlib.sha256(
+                _active_dictionary_path().read_bytes()
+            ).hexdigest(),
             "row_count": len(preview),
             "valid_count": sum(
                 1 for item in preview if not item["problems"]
