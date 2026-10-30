@@ -1874,24 +1874,19 @@ export default function BatchImportWorkflow({
 
 
       if (!imported.ok) {
-
-        setError(
-
-          (imported.problems ?? []).join(
-
-            "\n"
-
-          ) ||
-
-            "One or more included rows still need attention."
-
-        );
-
+        // Some failures are caught during the final database save, rather than
+        // pre-import validation. Always show each failed source row and reason.
+        const details = [
+          ...(imported.problems ?? []).map(value => String(value)),
+          ...(imported.results ?? [])
+            .filter(item => item.status === "Failed")
+            .map(item => `Row ${item.row_number}: ${item.message || "Save failed (no details returned)"}`),
+        ];
+        setError([...new Set(details)].join("\n") ||
+          "Import was not completed. Please review included rows and retry.");
+        // Keep the review page visible and never imply complete success.
         return;
-
       }
-
-
 
       setStep(3);
 
