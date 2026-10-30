@@ -13307,6 +13307,13 @@ class CoCANoTAPI:
             table_name
         )
 
+        # Keep the original spreadsheet headers separate from normalized
+        # metadata. System-generated fields may be populated after parsing.
+        uploaded_headers = list(dict.fromkeys(
+            str(key).strip() for row in rows for key in row.keys()
+            if str(key).strip()
+        ))
+
         preview: list[dict[str, Any]] = []
 
         for row_number, row in enumerate(rows, start=2):
@@ -13407,6 +13414,7 @@ class CoCANoTAPI:
             "table_name": table_name,
             "path": str(path),
             "file_name": path.name,
+            "uploaded_headers": uploaded_headers,
             # Stable fingerprint lets users distinguish two files with the same
             # name when inconsistent validation results are reported.
             "file_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -13521,7 +13529,9 @@ class CoCANoTAPI:
                 validation,
                 rules,
             )
-            if missing_clinical:
+            # Out-of-scope rows are visible for review, but their missing
+            # clinical assessments must not count as import validation errors.
+            if missing_clinical and bool(item.get("include", True)):
                 problems.append({
                     "field_name": "Clinical Assessment ID",
                     "status": "missing_required",
