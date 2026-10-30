@@ -13521,9 +13521,23 @@ class CoCANoTAPI:
                     else:
                         missing_clinical = True
 
+            validation_context = {}
+            if table_name == "Surgical":
+                surgery_date = str(item.get("actual_surgery_date") or "").strip()
+                if not surgery_date:
+                    patient_key = str(clean.get("CoCANoT Patient ID") or "").strip()
+                    surgery_key = str(clean.get("Surgery ID") or "").strip()
+                    if patient_key and surgery_key:
+                        tracking = self.metadata_get_real_surgery_date(
+                            self.get_site_id(), patient_key, surgery_key
+                        )
+                        surgery_date = str(tracking.get("real_surgery_date") or "").strip()
+                validation_context["actual_surgery_date"] = surgery_date
+
             validation = validator.validate_record(
                 table_name,
                 clean,
+                context=validation_context,
             )
             problems = self._batch_validation_problems(
                 validation,
