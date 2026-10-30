@@ -324,38 +324,23 @@ export default function BatchImportWorkflow({
 
   const missingSurgeryDates = useMemo(() => {
     if (tableName !== "Surgical") return [];
-
     const unique = new Map();
-
-    rows.filter(row => row.include).forEach(row => {
-      const metadata = row?.metadata ?? {};
-      const patientId = String(
-        metadata["CoCANoT Patient ID"] ??
-          row?.patient_id ??
-          ""
-      ).trim();
-      const surgeryId = String(
-        metadata["Surgery ID"] ?? ""
-      ).trim();
-
-      if (
-        patientId &&
-        surgeryId &&
-        row?.actual_surgery_date_missing
-      ) {
-        unique.set(
-          `${patientId}::${surgeryId}`,
-          {
-            patient_id: patientId,
-            surgery_id: surgeryId,
-          }
-        );
+    // Also flag the scoped patient's deselected rows. A missing date must
+    // not disappear just because another field prevents row inclusion.
+    rows.filter(row => row.include || (
+      scopedPatientId && rowPatientId(row) === normalizedPatientId(scopedPatientId)
+    )).forEach(row => {
+      const patientId = rowPatientId(row);
+      const surgeryId = String(row?.metadata?.["Surgery ID"] ?? "").trim();
+      const savedDate = String(row?.actual_surgery_date ?? "").trim();
+      if (patientId && surgeryId && !savedDate) {
+        unique.set(surgeryDateKey(patientId, surgeryId), {
+          patient_id: patientId, surgery_id: surgeryId,
+        });
       }
     });
-
     return [...unique.values()];
-  }, [rows, tableName]);
-
+  }, [rows, tableName, scopedPatientId]);
 
   const unmatchedHeaders = useMemo(() => {
     const known = new Set(
@@ -1829,6 +1814,20 @@ export default function BatchImportWorkflow({
         throw new Error("An included row belongs to another patient. Confirm reassignment before importing.");
       }
 
+      if (tableName === "Surgical") {
+        const missingIncluded = rows.filter(row =>
+          row.include && !String(row.actual_surgery_date ?? "").trim()
+        );
+        if (missingIncluded.length) {
+          const names = missingIncluded.map(row =>
+            `patient ${rowPatientId(row)}, surgery ${String(row?.metadata?.["Surgery ID"] ?? "")}`
+          ).join("; ");
+          throw new Error(
+            `Actual Surgery Date is required before import for: ${names}. Save each date in the Local Surgery Follow-up section.`
+          );
+        }
+      }
+
       setBusy(true);
 
       setError("");
@@ -2165,13 +2164,13 @@ export default function BatchImportWorkflow({
 
           {tableName === "Surgical" &&
             missingSurgeryDates.length > 0 && (
-              <section className={styles.surgeryDateCard}>
+              <section className={styles.surgeryDateCard} role="alert">
                 <div className={styles.surgeryDateHeader}>
                   <span>
                     LOCAL SURGERY FOLLOW-UP
                   </span>
                   <h2>
-                    Add Actual Surgery Dates
+                    Missing Actual Surgery Date — {missingSurgeryDates.length} surgery record(s)
                   </h2>
                   <p>
                     Enter the actual date for each surgery before importing.
