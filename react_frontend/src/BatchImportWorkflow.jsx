@@ -625,12 +625,9 @@ export default function BatchImportWorkflow({
     if (tableName !== "Surgical") return activeRows;
 
     const bridge = api();
-    if (!bridge?.get_site_id || !bridge?.metadata_get_patient) {
+    if (!bridge?.metadata_batch_clinical_link) {
       throw new Error("Clinical Assessment lookup is unavailable. No surgical rows were imported.");
     }
-    const siteId = String(await bridge.get_site_id() || "").trim();
-    if (!siteId) throw new Error("No authenticated site ID was available for Clinical Assessment linking.");
-
     // Look up every row belonging to the scoped patient, not merely rows that
     // happen to be selected during validation. The identifier must match
     // CoCANoT's numeric-equivalence rule (1 == 001).
@@ -639,26 +636,20 @@ export default function BatchImportWorkflow({
     )];
     const clinicalByPatient = {};
     for (const patientId of patientIds) {
-      let snapshot;
+      let link;
       try {
-        snapshot = await bridge.metadata_get_patient(siteId, patientId);
+        link = await bridge.metadata_batch_clinical_link(patientId);
       } catch (err) {
         throw new Error(
-          `Could not check Clinical Assessments for patient ${patientId}: ${String(err)}. The existing record was not assumed missing.`
+          `Could not check Clinical Assessments for patient ${patientId}: ${String(err)}. Existing records were not assumed missing.`
         );
       }
-      if (!snapshot || !Array.isArray(snapshot.clinical)) {
+      if (!link || typeof link.found !== "boolean") {
         throw new Error(
           `Clinical Assessment lookup returned an invalid response for patient ${patientId}. Please retry without importing.`
         );
       }
-      const latest = snapshot.clinical[0] ?? null;
-      clinicalByPatient[patientId] = String(
-        latest?.record_id ??
-        latest?.assessment_id ??
-        latest?.metadata?.["Clinical Assessment ID"] ??
-        ""
-      ).trim();
+      clinicalByPatient[patientId] = String(link.assessment_id ?? "").trim();
     }
 
     return (activeRows ?? []).map(row => {
