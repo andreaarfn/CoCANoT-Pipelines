@@ -1049,23 +1049,19 @@ export default function BatchImportWorkflow({
 
 
 
-      const [nextBatch, nextRules] =
+      // Avoid concurrent pywebview bridge calls while macOS displays its
+      // native file picker. A simultaneous rules request can race the dialog.
+      const bridge = api();
+      if (!bridge?.metadata_batch_choose_file || !bridge?.metadata_get_rules) {
+        throw new Error("The metadata upload API is not available.");
+      }
 
-        await Promise.all([
-
-          api()?.metadata_batch_choose_file?.(
-
-            tableName
-
-          ),
-
-          api()?.metadata_get_rules?.(
-
-            tableName
-
-          ),
-
-        ]);
+      const nextBatch = await bridge.metadata_batch_choose_file(tableName);
+      if (!nextBatch || nextBatch.cancelled) return;
+      if (nextBatch.ok === false) {
+        throw new Error(nextBatch.message || "Could not read the selected file.");
+      }
+      const nextRules = await bridge.metadata_get_rules(tableName);
 
 
 
