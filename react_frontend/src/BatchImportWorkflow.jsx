@@ -315,6 +315,12 @@ export default function BatchImportWorkflow({
 
     missingClinicalPatients.length;
 
+  // Report all uploaded patients, but only included rows block import.
+  const missingIncludedClinicalCount = rows.filter(row =>
+    row.include &&
+    !String(row?.metadata?.["Clinical Assessment ID"] ?? "").trim()
+  ).length;
+
 
 
   const missingSurgeryDates = useMemo(() => {
@@ -2797,7 +2803,7 @@ export default function BatchImportWorkflow({
                   invalidIncludedCount > 0 ||
                   (tableName === "Surgical" &&
                     (
-                      missingClinicalPatients.length > 0 ||
+                      missingIncludedClinicalCount > 0 ||
                       missingSurgeryDates.length > 0
                     ))
                 }
