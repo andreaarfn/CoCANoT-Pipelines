@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import csv
+from functools import wraps
 import io
 import hashlib
 import json
@@ -30,6 +31,20 @@ from PIL import Image, ImageDraw
 import nibabel as nib
 import numpy as np
 from matplotlib import image as mpl_image
+
+# pyedflib rejects a second EdfReader for an EDF that is already open
+# in the same process. Coordinate preview and duration reads across
+# concurrent PyWebView calls; keep the lock until readers are closed.
+_EDF_READER_LOCK = threading.RLock()
+
+
+def _serialized_edf_reader(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        with _EDF_READER_LOCK:
+            return func(*args, **kwargs)
+    return wrapper
+
 
 ROOT = Path(__file__).resolve().parent
 
@@ -1982,6 +1997,7 @@ class CoCANoTAPI:
         return normalized
 
     @staticmethod
+    @_serialized_edf_reader
     def _recording_duration_hours(
         edf_path: Path,
     ) -> object:
@@ -11193,6 +11209,7 @@ class CoCANoTAPI:
             start_seconds, window_seconds, channels,
         )
 
+    @_serialized_edf_reader
     def metadata_get_ephys_signal_preview(
         self,
         record: dict[str, Any],
