@@ -659,169 +659,74 @@ export default function BatchImportWorkflow({
 
 
   async function attachClinicalAssessmentIds(activeRows) {
-
     if (tableName !== "Surgical") return activeRows;
 
-
-
-    const siteId = (await api()?.get_site_id?.()) ?? "";
-
-    const patientIds = [
-
-      ...new Set(
-
-        (activeRows ?? [])
-
-          // All patients in a Bulk Surgical upload must be checked,
-          // including excluded and invalid rows; patient-scoped uploads
-          // only check the selected patient's rows.
-          .filter(row =>
-            !scopedPatientId ||
-            rowPatientId(row) === normalizedPatientId(scopedPatientId)
-          )
-          .map(row =>
-
-            String(
-
-              row?.metadata?.["CoCANoT Patient ID"] ??
-
-                row?.patient_id ??
-
-                ""
-
-            ).trim()
-
-          )
-
-          .filter(Boolean)
-
-      ),
-
-    ];
-
-
-
-    const clinicalByPatient = {};
-
-
-
-    await Promise.all(
-
-      patientIds.map(async patientId => {
-
-        try {
-
-          const snapshot =
-
-            await api()?.metadata_get_patient?.(
-
-              siteId,
-
-              patientId
-
-            );
-
-
-
-          const clinicalRows = Array.isArray(
-
-            snapshot?.clinical
-
-          )
-
-            ? snapshot.clinical
-
-            : [];
-
-
-
-          const latest = clinicalRows[0] ?? null;
-
-
-
-          clinicalByPatient[patientId] = String(
-
-            latest?.record_id ??
-
-              latest?.assessment_id ??
-
-              latest?.metadata?.["Clinical Assessment ID"] ??
-
-              ""
-
-          ).trim();
-
-        } catch {
-
-          clinicalByPatient[patientId] = "";
-
-        }
-
-      })
-
+    const targetId = normalizedPatientId(scopedPatientId);
+    const lookupRows = (activeRows ?? []).filter(row =>
+      !scopedPatientId || rowPatientId(row) === targetId
     );
+    const patientIds = [...new Set(
+      lookupRows.map(row => rowPatientId(row)).filter(Boolean)
+    )];
 
+    // Do not confuse an unavailable patient lookup with an assessment
+    // genuinely absent from the saved patient record.
+    const siteId = String((await api()?.get_site_id?.()) ?? "").trim();
+    if (!siteId) {
+      throw new Error("Cannot verify Clinical Assessments: site ID is unavailable.");
+    }
+    if (typeof api()?.metadata_get_patient !== "function") {
+      throw new Error("Cannot verify Clinical Assessments: patient lookup is unavailable.");
+    }
 
+    const clinicalByPatient = new Map();
+    await Promise.all(patientIds.map(async patientId => {
+      let snapshot;
+      try {
+        snapshot = await api().metadata_get_patient(siteId, patientId);
+      } catch (error) {
+        throw new Error(
+          `Could not verify Clinical Assessment for patient ${patientId}: ${String(error)}`
+        );
+      }
+      if (!snapshot || !Array.isArray(snapshot.clinical)) {
+        throw new Error(
+          `Clinical Assessment lookup returned an invalid response for patient ${patientId}.`
+        );
+      }
+      const latest = snapshot.clinical[0] ?? null;
+      const assessmentId = String(
+        latest?.record_id ||
+        latest?.assessment_id ||
+        latest?.metadata?.["Clinical Assessment ID"] ||
+        ""
+      ).trim();
+      if (latest && !assessmentId) {
+        throw new Error(
+          `Patient ${patientId} has a saved Clinical Assessment without a usable record ID.`
+        );
+      }
+      clinicalByPatient.set(patientId, assessmentId);
+    }));
 
     return (activeRows ?? []).map(row => {
-
       const metadata = { ...(row?.metadata ?? {}) };
-
-      const patientId = String(
-
-        metadata["CoCANoT Patient ID"] ??
-
-          row?.patient_id ??
-
-          ""
-
-      ).trim();
-
-
-
-      // Clinical Assessment ID is a system-generated link.
-
-      // Never trust or require the value supplied in a Surgical upload.
-
+      const patientId = rowPatientId(row);
+      const isInScope = !scopedPatientId || patientId === targetId;
+      // Never trust a system-generated clinical link from the uploaded CSV.
       delete metadata["Clinical Assessment ID"];
-
-
-
-      const assessmentId =
-
-        clinicalByPatient[patientId] ?? "";
-
-
-
-      if (assessmentId) {
-
-        metadata["Clinical Assessment ID"] =
-
-          assessmentId;
-
-      }
-
-
-
+      const assessmentId = isInScope
+        ? (clinicalByPatient.get(patientId) ?? "")
+        : "";
+      if (assessmentId) metadata["Clinical Assessment ID"] = assessmentId;
       return {
-
         ...row,
-
         metadata,
-
         clinical_assessment_id: assessmentId,
-
-        clinical_assessment_missing:
-
-          Boolean(patientId) && !assessmentId,
-
+        clinical_assessment_missing: isInScope && Boolean(patientId) && !assessmentId,
       };
-
     });
-
   }
-
-
 
   function stripSystemGeneratedUploadedFields(
 
