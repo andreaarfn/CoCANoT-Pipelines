@@ -9336,34 +9336,44 @@ class CoCANoTAPI:
         site_id: str,
         patient_id: str,
         surgery_id: str,
-    ) -> None:
-        site_id = normalize_site_id(
-            site_id
-        )
-        patient_id = str(
-            patient_id or ""
-        ).strip()
-        surgery_id = str(
-            surgery_id or ""
-        ).strip()
+    ) -> int:
+        """Remove local follow-up dates for a deleted surgery, including legacy IDs.
 
+        Older uploads used IDs such as 1/001 and 1/SURG-001 interchangeably.
+        Deleting only an exact text key leaves orphan dates that reappear in
+        the next import. Delete all equivalent keys for THIS site and surgery.
+        """
+        site_id = normalize_site_id(site_id)
+        patient_id = str(patient_id or "").strip()
+        surgery_id = str(surgery_id or "").strip()
         if not site_id or not patient_id or not surgery_id:
-            return
+            return 0
 
+        canonical_patient = normalize_patient_id(patient_id)
+        canonical_surgery = normalize_record_id("Surgical", surgery_id)
+        removed = 0
         with self._surgical_followup_connection() as connection:
-            connection.execute(
+            matches = connection.execute(
                 """
-                DELETE FROM surgical_followup_dates
-                WHERE site_id = ?
-                  AND patient_id = ?
-                  AND surgery_id = ?
+                SELECT site_id, patient_id, surgery_id
+                FROM surgical_followup_dates
+                WHERE UPPER(site_id) = ?
                 """,
-                (
-                    site_id,
-                    patient_id,
-                    surgery_id,
-                ),
-            )
+                (site_id,),
+            ).fetchall()
+            for row in matches:
+                if (normalize_patient_id(row["patient_id"]) != canonical_patient or
+                    normalize_record_id("Surgical", row["surgery_id"]) != canonical_surgery):
+                    continue
+                cursor = connection.execute(
+                    """
+                    DELETE FROM surgical_followup_dates
+                    WHERE site_id = ? AND patient_id = ? AND surgery_id = ?
+                    """,
+                    (row["site_id"], row["patient_id"], row["surgery_id"]),
+                )
+                removed += cursor.rowcount
+        return removed
 
 
     @staticmethod
