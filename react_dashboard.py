@@ -13533,6 +13533,9 @@ class CoCANoTAPI:
                         )
                         surgery_date = str(tracking.get("real_surgery_date") or "").strip()
                 validation_context["actual_surgery_date"] = surgery_date
+                # Report a missing LOCAL surgery date as a first-class
+                # validation problem. It is not a consortium metadata field.
+                missing_surgery_date = not bool(surgery_date)
 
             validation = validator.validate_record(
                 table_name,
@@ -13543,6 +13546,12 @@ class CoCANoTAPI:
                 validation,
                 rules,
             )
+            if table_name == "Surgical" and missing_surgery_date and bool(item.get("include", True)):
+                problems.append({
+                    "field_name": "Actual Surgery Date (local only)",
+                    "status": "missing_required",
+                    "message": "Enter and save the Actual Surgery Date in Local Surgery Follow-up before importing this Surgical record.",
+                })
             # Out-of-scope rows are visible for review, but their missing
             # clinical assessments must not count as import validation errors.
             if missing_clinical and bool(item.get("include", True)):
@@ -13588,6 +13597,8 @@ class CoCANoTAPI:
                     "metadata": clean,
                     "clinical_assessment_id": str(clean.get("Clinical Assessment ID", "") or "") if table_name == "Surgical" else "",
                     "clinical_assessment_missing": missing_clinical if table_name == "Surgical" else False,
+                    "actual_surgery_date": surgery_date if table_name == "Surgical" else str(item.get("actual_surgery_date") or ""),
+                    "actual_surgery_date_missing": missing_surgery_date if table_name == "Surgical" else False,
                     "problems": problems,
                     "status": (
                         "Needs attention"
