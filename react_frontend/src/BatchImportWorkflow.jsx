@@ -156,8 +156,23 @@ export default function BatchImportWorkflow({
   );
   const rowCanImport = row =>
     (row?.problems ?? []).length === 0 &&
+    row?.requires_review !== true &&
     row?.import_allowed !== false &&
     row?.difference_status !== "Duplicate";
+
+  const importBlockReasons = row => {
+    const reasons = (row?.problems ?? []).map(problem =>
+      String(problem?.message ?? problem?.field_name ?? "Validation problem")
+    );
+    if (row?.requires_review && !reasons.length) {
+      reasons.push(row?.proposed_action || "Manual review required");
+    }
+    if (row?.import_allowed === false && row?.difference_status !== "Duplicate" &&
+        !reasons.length) {
+      reasons.push(row?.proposed_action || "This record is not eligible for import");
+    }
+    return reasons;
+  };
 
   const [step, setStep] = useState(1);
 
@@ -215,7 +230,7 @@ export default function BatchImportWorkflow({
 
           row.include &&
 
-          (row.problems ?? []).length > 0
+          !rowCanImport(row)
 
       ).length,
 
@@ -378,7 +393,11 @@ export default function BatchImportWorkflow({
 
       Object.keys(row?.metadata ?? {}).forEach(key => {
 
-        if (!known.has(key)) headers.add(key);
+        if (
+          !known.has(key) &&
+          !(tableName === "Surgical" &&
+            normalizeText(key) === normalizeText("Clinical Assessment ID"))
+        ) headers.add(key);
 
       });
 
@@ -2036,9 +2055,9 @@ export default function BatchImportWorkflow({
 
 
       if (imported.rows) {
-
-        setRows(imported.rows);
-
+        // The backend revalidates during commit. Show its authoritative
+        // row statuses, but retain the selected patient's inclusion choices.
+        setRows(refreshIncludeFlags(imported.rows, rows));
       }
 
 
@@ -2047,13 +2066,11 @@ export default function BatchImportWorkflow({
 
         setError(
 
-          (imported.problems ?? []).join(
-
-            "\n"
-
-          ) ||
-
-            "One or more included rows still need attention."
+          (imported.problems ?? []).filter(Boolean).join("\n") ||
+          (imported.rows ?? []).filter(row => row.include && !rowCanImport(row))
+            .map(row => `Row ${row.row_number}: ${importBlockReasons(row).join("; ")}`)
+            .join("\n") ||
+          "The import was rejected. Please review the included rows."
 
         );
 
@@ -2709,11 +2726,8 @@ export default function BatchImportWorkflow({
 
                 <p>
 
-                  Invalid rows are excluded by
-
-                  default. Edit them before
-
-                  validation if needed.
+                  Surgical rows remain selected while you correct errors.
+                  Only valid, eligible rows can be imported.
 
                 </p>
 
@@ -3499,7 +3513,7 @@ function BatchTable({
 
                   disabled={
 
-                    row.import_allowed === false
+                    row.import_allowed === false && tableName !== "Surgical"
 
                   }
 
@@ -3755,6 +3769,15 @@ function BatchTable({
 
                   </div>
 
+                ) : tableName === "Surgical" && !rowCanImport(row) ? (
+                  <div className={styles.problemList}>
+                    {importBlockReasons(row).map((reason, reasonIndex) => (
+                      <div className={styles.problemItem} key={reasonIndex}>
+                        <strong>Import blocked</strong>
+                        <span>{reason}</span>
+                      </div>
+                    ))}
+                  </div>
                 ) : tableName === "Clinical" ? (
                   <div className={styles.clinicalCompareStatus}>
                     {row.existing_record_id ? (
