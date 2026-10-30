@@ -729,6 +729,7 @@ export default function DictionaryForm({
   initiallyValidate = false,
   onFieldValid,
   context = {},
+  prioritizeSurgeryMilestones = false,
 }) {
   const [touched, setTouched] = useState({});
 
@@ -747,17 +748,23 @@ export default function DictionaryForm({
     setTouched(allTouched);
   }, [rules, initiallyValidate]);
 
-  const visibleRules = useMemo(
-    () =>
-      (rules ?? []).filter(rule =>
-        fieldIsVisible(
-          rule,
-          values,
-          context
-        )
-      ),
-    [rules, values, context]
-  );
+  const visibleRules = useMemo(() => {
+    const visible = (rules ?? []).filter(rule =>
+      fieldIsVisible(rule, values, context)
+    );
+    if (!prioritizeSurgeryMilestones) return visible;
+    // Surface all due postoperative assessment fields directly after the
+    // date panel, while retaining the dictionary's order within each group.
+    return [...visible].sort((left, right) => {
+      const milestone = rule =>
+        rule?.available_after_surgery_months === undefined ||
+        rule?.available_after_surgery_months === null ||
+        rule?.available_after_surgery_months === ""
+          ? Number.POSITIVE_INFINITY
+          : Number(rule.available_after_surgery_months);
+      return milestone(left) - milestone(right);
+    });
+  }, [rules, values, context, prioritizeSurgeryMilestones]);
 
   function markTouched(fieldName) {
     setTouched(current => ({
