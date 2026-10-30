@@ -3481,7 +3481,7 @@ export default function MetadataDashboard({
 
 
 
-                  <strong>Delete record only</strong>
+                  <strong>{(deleteRequest.tableName === "Imaging" || deleteRequest.tableName === "Electrophysiology") ? "Delete record only" : "Delete record"}</strong>
 
 
 
@@ -3593,7 +3593,7 @@ export default function MetadataDashboard({
 
 
 
-                Delete Record Only
+                {(deleteRequest.tableName === "Imaging" || deleteRequest.tableName === "Electrophysiology") ? "Delete Record Only" : "Delete Record"}
 
 
 
