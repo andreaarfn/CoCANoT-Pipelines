@@ -421,15 +421,25 @@ export default function BatchImportWorkflow({
 
 
   function refreshIncludeFlags(activeRows, previousRows = null) {
-    return (activeRows ?? []).map((row, index) => ({
-      ...row,
-      include: rowCanImport(row) &&
-        (!scopedPatientId || rowPatientId(row) === normalizedPatientId(scopedPatientId)) && (
-        previousRows
-          ? Boolean(previousRows[index]?.include)
-          : !scopedPatientId || rowPatientId(row) === normalizedPatientId(scopedPatientId)
-      ),
-    }));
+    return (activeRows ?? []).map((row, index) => {
+      const matchesPatient =
+        !scopedPatientId ||
+        rowPatientId(row) === normalizedPatientId(scopedPatientId);
+      // In Manage One Patient, include the selected patient's Surgical rows
+      // even if they still need validation. Import eligibility is separate.
+      const eligibleForSelection =
+        (tableName === "Surgical" && scopedPatientId)
+          ? matchesPatient
+          : rowCanImport(row) && matchesPatient;
+      return {
+        ...row,
+        include: eligibleForSelection && (
+          previousRows
+            ? Boolean(previousRows[index]?.include)
+            : Boolean(scopedPatientId ? matchesPatient : rowCanImport(row))
+        ),
+      };
+    });
   }
 
   function surgeryDateKey(patientId, surgeryId) {
@@ -635,7 +645,11 @@ export default function BatchImportWorkflow({
 
         (activeRows ?? [])
 
-          .filter(row => row.include)
+          .filter(row =>
+            row.include ||
+            (scopedPatientId &&
+              rowPatientId(row) === normalizedPatientId(scopedPatientId))
+          )
           .map(row =>
 
             String(
@@ -920,6 +934,9 @@ export default function BatchImportWorkflow({
 
 
 
+      // The validator may return freshly constructed rows without the
+      // clinical link. Restore it from the saved patient record.
+      refreshed = await attachClinicalAssessmentIds(refreshed);
       setRows(refreshed);
 
       setValidation(null);
@@ -1023,16 +1040,15 @@ export default function BatchImportWorkflow({
 
 
 
+    let validatedRows = refreshIncludeFlags(
+      checked.rows ?? activeRows, activeRows
+    );
+    if (tableName === "Surgical" && scopedPatientId) {
+      validatedRows = await attachClinicalAssessmentIds(validatedRows);
+    }
     return {
-
       ...checked,
-
-      rows: refreshIncludeFlags(
-
-        checked.rows ?? activeRows, activeRows
-
-      ),
-
+      rows: validatedRows,
     };
 
   }
@@ -1168,6 +1184,12 @@ export default function BatchImportWorkflow({
       }
 
 
+
+      if (tableName === "Surgical" && scopedPatientId) {
+        // Restore the existing clinical assessment independently of any
+        // row-level validation problems returned by the backend.
+        stagedRows = await attachClinicalAssessmentIds(stagedRows);
+      }
 
       const initialTargets = {};
 
