@@ -1332,7 +1332,14 @@ export default function BatchImportWorkflow({
       const ignoreColumn =
         targetHeader === "__IGNORE__";
 
-
+      // The source column was already excluded when staging the surgical CSV.
+      // Ignoring it changes no clinical data: do not revalidate the same rows
+      // and accidentally discard their original required-field findings.
+      if (tableName === "Surgical" && ignoreColumn &&
+          normalizeText(sourceHeader) === normalizeText("Clinical Assessment ID")) {
+        setResolvedUploadedHeaders(current => [...new Set([...current, sourceHeader])]);
+        return;
+      }
 
       const mapped = rows.map(row => {
 
