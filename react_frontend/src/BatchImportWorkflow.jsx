@@ -568,32 +568,23 @@ export default function BatchImportWorkflow({
         [key]: savedDate,
       }));
 
-      setRows(current =>
-        current.map(row => {
-          const metadata = row?.metadata ?? {};
-          const rowPatient = String(
-            metadata["CoCANoT Patient ID"] ??
-              row?.patient_id ??
-              ""
-          ).trim();
-          const rowSurgery = String(
-            metadata["Surgery ID"] ?? ""
-          ).trim();
-
-          if (
-            rowPatient !== String(patientId) ||
-            rowSurgery !== String(surgeryId)
-          ) {
-            return row;
-          }
-
-          return {
-            ...row,
-            actual_surgery_date: savedDate,
-            actual_surgery_date_missing: false,
-          };
-        })
-      );
+      const updatedRows = rows.map(row => {
+        const metadata = row?.metadata ?? {};
+        const rowPatient = rowPatientId(row);
+        const rowSurgery = String(metadata["Surgery ID"] ?? "").trim();
+        if (rowPatient !== normalizedPatientId(patientId) ||
+            rowSurgery !== String(surgeryId)) return row;
+        return {
+          ...row,
+          actual_surgery_date: savedDate,
+          actual_surgery_date_missing: false,
+        };
+      });
+      // Surgery-date milestones change field visibility and requirements.
+      // Always revalidate after changing the date, not just after import.
+      const checked = await validateRowsAgainstBackend(updatedRows);
+      setRows(checked.rows ?? updatedRows);
+      setValidation(null);
 
       setSurgeryDateMessage(
         `Saved Actual Surgery Date for patient ${patientId}, surgery ${surgeryId}.`
@@ -3010,9 +3001,49 @@ export default function BatchImportWorkflow({
               </section>
             )}
 
+            {tableName === "Surgical" && (() => {
+              const selected = rows[editingIndex];
+              const patient = rowPatientId(selected);
+              const surgery = String(editingValues["Surgery ID"] ?? selected?.metadata?.["Surgery ID"] ?? "").trim();
+              const dateKey = surgeryDateKey(patient, surgery);
+              const savedDate = String(selected?.actual_surgery_date ?? "").trim();
+              return (
+                <section className={styles.surgeryDateCard}>
+                  <div className={styles.surgeryDateHeader}>
+                    <span>LOCAL SURGERY FOLLOW-UP</span>
+                    <h2>Actual Surgery Date and postoperative assessments</h2>
+                    <p>Follow-up fields due at 12, 24, and later months appear immediately below when their milestones are reached. The actual date stays local.</p>
+                  </div>
+                  <div className={styles.surgeryDateRows}>
+                    <label>
+                      <span>Actual Surgery Date</span>
+                      <input type="date"
+                        value={surgeryDateDrafts[dateKey] ?? savedDate}
+                        onChange={event => setSurgeryDateDrafts(current => ({
+                          ...current, [dateKey]: event.target.value,
+                        }))}
+                      />
+                    </label>
+                    <button type="button" className={styles.primary}
+                      disabled={busy || !patient || !surgery}
+                      onClick={() => saveActualSurgeryDate(patient, surgery)}>
+                      Save Date & Refresh Follow-ups
+                    </button>
+                    {savedDate && <span>Saved: {savedDate}</span>}
+                  </div>
+                </section>
+              );
+            })()}
+
             <DictionaryForm
 
               rules={rules}
+
+              context={tableName === "Surgical" ? {
+                actual_surgery_date: rows[editingIndex]?.actual_surgery_date ??
+                  "",
+              } : {}}
+              prioritizeSurgeryMilestones={tableName === "Surgical"}
 
               values={editingValues}
 
