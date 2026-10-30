@@ -235,7 +235,7 @@ export default function BatchImportWorkflow({
 
 
 
-    rows.filter(row => row.include).forEach(row => {
+    rows.forEach(row => {
 
       const metadata = row?.metadata ?? {};
 
@@ -427,16 +427,18 @@ export default function BatchImportWorkflow({
         rowPatientId(row) === normalizedPatientId(scopedPatientId);
       // In Manage One Patient, include the selected patient's Surgical rows
       // even if they still need validation. Import eligibility is separate.
+      // Surgical selection is independent of validity in both upload modes.
+      // Preserve explicit choices through revalidation.
       const eligibleForSelection =
-        (tableName === "Surgical" && scopedPatientId)
-          ? matchesPatient
-          : rowCanImport(row) && matchesPatient;
+        tableName === "Surgical" ? matchesPatient : rowCanImport(row) && matchesPatient;
       return {
         ...row,
         include: eligibleForSelection && (
           previousRows
             ? Boolean(previousRows[index]?.include)
-            : Boolean(scopedPatientId ? matchesPatient : rowCanImport(row))
+            : tableName === "Surgical"
+              ? matchesPatient
+              : Boolean(scopedPatientId ? matchesPatient : rowCanImport(row))
         ),
       };
     });
@@ -645,10 +647,12 @@ export default function BatchImportWorkflow({
 
         (activeRows ?? [])
 
+          // All patients in a Bulk Surgical upload must be checked,
+          // including excluded and invalid rows; patient-scoped uploads
+          // only check the selected patient's rows.
           .filter(row =>
-            row.include ||
-            (scopedPatientId &&
-              rowPatientId(row) === normalizedPatientId(scopedPatientId))
+            !scopedPatientId ||
+            rowPatientId(row) === normalizedPatientId(scopedPatientId)
           )
           .map(row =>
 
@@ -1043,7 +1047,7 @@ export default function BatchImportWorkflow({
     let validatedRows = refreshIncludeFlags(
       checked.rows ?? activeRows, activeRows
     );
-    if (tableName === "Surgical" && scopedPatientId) {
+    if (tableName === "Surgical") {
       validatedRows = await attachClinicalAssessmentIds(validatedRows);
     }
     return {
@@ -1185,9 +1189,10 @@ export default function BatchImportWorkflow({
 
 
 
-      if (tableName === "Surgical" && scopedPatientId) {
-        // Restore the existing clinical assessment independently of any
-        // row-level validation problems returned by the backend.
+      if (tableName === "Surgical") {
+        // Validation can reconstruct rows and discard system-generated
+        // clinical links. Requery the saved assessments for every uploaded
+        // patient (or just the selected patient in Manage One Patient).
         stagedRows = await attachClinicalAssessmentIds(stagedRows);
       }
 
@@ -1308,7 +1313,8 @@ export default function BatchImportWorkflow({
       ));
       return;
     }
-    if (!rowCanImport(selected) && (!scopedPatientId || rowPatientId(selected) === normalizedPatientId(scopedPatientId))) return;
+    if (tableName !== "Surgical" && !rowCanImport(selected) &&
+        (!scopedPatientId || rowPatientId(selected) === normalizedPatientId(scopedPatientId))) return;
 
     if (scopedPatientId && rowPatientId(selected) !== normalizedPatientId(scopedPatientId)) {
       const sourceId = rowPatientId(selected) || "(blank)";
