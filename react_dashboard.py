@@ -10536,6 +10536,35 @@ class CoCANoTAPI:
             for patient_id in patient_ids
         ]
 
+    def metadata_batch_clinical_link(
+        self,
+        patient_id: str,
+    ) -> dict[str, Any]:
+        """Resolve a Surgical upload's Clinical Assessment by current site.
+
+        Do not load/canonicalize unrelated Surgical, Imaging, or Ephys records.
+        An empty assessment ID means a verified absence, not a swallowed error.
+        """
+        site_id = str(self.get_site_id() or "").strip().upper()
+        if not site_id:
+            raise ValueError("No authenticated CoCANoT site is available.")
+        requested = str(patient_id or "").strip()
+        if not requested:
+            raise ValueError("A patient ID is required for Clinical Assessment linking.")
+        resolved = self._resolve_existing_patient_id(requested)
+        records = self.repository.clinical_assessments(site_id, resolved)
+        latest = records[0] if records else None
+        return {
+            "patient_id": resolved,
+            "site_id": site_id,
+            "assessment_id": str(
+                (latest or {}).get("record_id")
+                or (latest or {}).get("assessment_id")
+                or ""
+            ).strip(),
+            "found": bool(latest),
+        }
+
     def metadata_get_patient(
         self,
         site_id: str,
