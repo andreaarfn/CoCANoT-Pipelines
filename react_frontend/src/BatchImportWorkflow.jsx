@@ -3432,7 +3432,9 @@ function BatchSummary({
 
           {rows.filter(
 
-            row => (row.problems ?? []).length > 0
+            row => tableName === "Surgical"
+              ? !rowCanImport(row) && row.difference_status !== "Duplicate"
+              : (row.problems ?? []).length > 0
 
           ).length}
 
