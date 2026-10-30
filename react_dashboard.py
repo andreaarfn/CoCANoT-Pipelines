@@ -12146,6 +12146,20 @@ class CoCANoTAPI:
         if clean.get("CoCANoT Patient ID"):
             clean["CoCANoT Patient ID"] = self._resolve_existing_patient_id(clean["CoCANoT Patient ID"])
 
+        # Check the authoritative site-scoped Clinical Assessment again at
+        # actual save time; frontend row state must not bypass this safeguard.
+        if table_name == "Surgical":
+            patient_key = str(clean.get("CoCANoT Patient ID", "") or "").strip()
+            if patient_key:
+                link = self.metadata_batch_clinical_link(patient_key)
+                assessment_id = str(link.get("assessment_id", "") or "").strip()
+                if not assessment_id:
+                    raise ValueError(
+                        f"Patient {patient_key} does not have a current Clinical Assessment. "
+                        "Create one before saving the Surgical record."
+                    )
+                clean["Clinical Assessment ID"] = assessment_id
+
         exclusive_problems = (
             _exclusive_multiselect_conflicts(
                 clean,
