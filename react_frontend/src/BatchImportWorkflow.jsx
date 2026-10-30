@@ -235,7 +235,11 @@ export default function BatchImportWorkflow({
 
 
 
-    rows.filter(row => row.include).forEach(row => {
+    // Keep the scoped patient's missing Clinical Assessment warning visible
+    // even when validation correctly deselects blocked rows.
+    rows.filter(row => row.include || (
+      scopedPatientId && rowPatientId(row) === normalizedPatientId(scopedPatientId)
+    )).forEach(row => {
 
       const metadata = row?.metadata ?? {};
 
@@ -289,7 +293,7 @@ export default function BatchImportWorkflow({
 
     return [...byPatient.values()];
 
-  }, [rows, tableName]);
+  }, [rows, tableName, scopedPatientId]);
 
 
 
