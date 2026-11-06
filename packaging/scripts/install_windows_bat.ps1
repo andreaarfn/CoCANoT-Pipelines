@@ -24,6 +24,7 @@ if ($cleanList -notmatch '(?im)^\s*\*?\s*Ubuntu-24\.04\s+\S+\s+2\s*$') {
 & $wsl -d Ubuntu-24.04 --exec bash -lc 'id -u >/dev/null && test -d "$HOME"'
 Assert-Exit 'Ubuntu-24.04 initialization check'
 Write-Host 'Verified WSL 2 with initialized Ubuntu 24.04 LTS. WSL will not be modified.' -ForegroundColor Green
+Write-Host 'IMPORTANT: For MRI defacing, set Ubuntu-24.04 as the default distro yourself: wsl --set-default Ubuntu-24.04'
 $homeDir = Join-Path $env:LOCALAPPDATA 'CoCANoT'
 $runtime = Join-Path $homeDir 'runtime'
 $workspace = Join-Path $homeDir 'installer-cache'
@@ -81,7 +82,7 @@ foreach ($folder in @('app','config','MetadataPipeline')) {
 }
 foreach ($folder in @('ImagingPipeline','ElectrophysiologyPipeline')) {
   New-Item -ItemType Directory -Force (Join-Path $app $folder) | Out-Null
-  Copy-Item (Join-Path $repoRoot "$folder\scripts") (Join-Path $app $folder 'scripts') -Recurse -Force
+  Copy-Item (Join-Path $repoRoot "$folder\scripts") (Join-Path (Join-Path $app $folder) 'scripts') -Recurse -Force
 }
 New-Item -ItemType Directory -Force (Join-Path $app 'react_frontend') | Out-Null
 Copy-Item (Join-Path $repoRoot 'react_frontend\dist') (Join-Path $app 'react_frontend\dist') -Recurse -Force
