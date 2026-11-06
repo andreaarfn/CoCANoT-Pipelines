@@ -33,7 +33,7 @@ rem Create a normal Start Menu shortcut which launches without showing a console
 if errorlevel 1 exit /b 1
 if not exist "%APPROOT%\setup_windows_defacing.ps1" (echo Required MRI defacing setup utility missing & exit /b 1)
 rem Required Step 3C dependency setup, with explicit consent for system changes.
-"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder 'Complete MRI defacing setup.lnk')); $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'; $shortcut.Arguments='-NoProfile -ExecutionPolicy Bypass -NoExit -File ""%APPROOT%\setup_windows_defacing.ps1""'; $shortcut.WorkingDirectory='%APPROOT%'; $shortcut.Description='Required Step 3C WSL2, FSL and PyDeface setup; may require restart'; $shortcut.Save()"
+"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder 'Complete MRI defacing setup.lnk')); $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'; $shortcut.Arguments='-NoProfile -ExecutionPolicy Bypass -NoExit -File ""%APPROOT%\setup_windows_defacing.ps1""'; $shortcut.WorkingDirectory='%APPROOT%'; $shortcut.Description='Installs FSL and PyDeface in an existing manually installed WSL 2 Ubuntu 24.04'; $shortcut.Save()"
 if errorlevel 1 exit /b 1
 rem Launch the optional Step 3C provisioning assistant automatically after app installation.
 rem It runs in its own visible PowerShell window so user prompts and sudo are interactive.

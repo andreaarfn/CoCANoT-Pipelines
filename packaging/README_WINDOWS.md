@@ -1,52 +1,61 @@
-# CoCANoT Windows x64 package (experimental)
+# CoCANoT Windows x64: single BAT installer
 
-The Windows desktop app is native: React dist + Python + pywebview + Imaging,
-Electrophysiology, and patient metadata management. Packaging targets a
-Conda Constructor NSIS **.exe installer**, built on a **Windows x64** machine.
+The GitHub Actions Windows target produces exactly **one downloadable file**:
+`CoCANoT-Windows-x64.bat` (inside the GitHub Actions artifact ZIP).
+No Windows EXE, installer payload ZIP, checksum, or PowerShell script is published as a separate artifact.
 
-## Important: PyDeface and FSL
+## Mandatory manual prerequisite: WSL 2 with Ubuntu 24.04 LTS
 
-FSL does not provide a native Windows installation. CoCANoT deliberately does
-**not** bundle a pretend native Windows FSL or generate arbitrary masks.
-Automatic MRI defacing delegates its PyDeface subprocess through WSL2. Other
-Windows operations run natively. If WSL2, FSL, or PyDeface is missing, defacing
-fails explicitly; it does not mark the image as defaced.
+Before running the BAT, users independently install **WSL version 2** and the
+**Ubuntu 24.04 LTS** distribution. This is *not* WSL version 1, and
+"24.04" refers to the Ubuntu Linux version, not the WSL version.
 
-Install WSL2 Ubuntu following:
-https://fsl.fmrib.ox.ac.uk/fsl/docs/install/windows.html
+1. Open PowerShell as Administrator and run `wsl --install -d Ubuntu-24.04`.
+2. Restart Windows when prompted.
+3. Open Ubuntu 24.04 from the Start Menu and complete first-run Linux username/password creation.
+4. Run `wsl --list --verbose`. Confirm `Ubuntu-24.04` shows **VERSION 2**.
+   If necessary, manually run `wsl --set-version Ubuntu-24.04 2`.
+5. Set `Ubuntu-24.04` as the default distribution with
+   `wsl --set-default Ubuntu-24.04`, because CoCANoT's defacing pipeline uses the default WSL distro.
 
-Install FSL **inside the WSL Linux filesystem**, and install PyDeface in that
-same distro. From Ubuntu confirm both `command -v pydeface` and
-`command -v flirt` succeed. The Windows app invokes the default WSL
-distribution using `wsl.exe`, translates NIfTI paths with `wslpath`, and
-allows the Python viewer to validate the output on the Windows-mounted drive.
+Microsoft instructions: https://learn.microsoft.com/windows/wsl/install
 
-WSL requires OS virtualization/administrative setup; the installer does not
-make those system changes silently. **WSL2 support is experimental and needs
-testing on clinical-site Windows PCs.** Research PHI must remain on approved
-local drives; avoid cloud-syncing intermediate source data.
+The CoCANoT BAT does **not** run `wsl --install`, `wsl --update`, DISM,
+Windows feature installers, or WSL distribution setup. It checks for the
+already initialized WSL 2 Ubuntu 24.04 installation and stops with instructions
+if it is missing. This does not modify the user's WSL installation.
 
-## Build
+## Running the installer
 
-On a Windows x64 PC or Windows x64 virtual machine, install Node/npm, Conda,
-Conda Constructor, and NSIS prerequisites; activate a Windows x64 Conda
-build environment with Python and pip:
+On **Windows x64** with Internet access, download the GitHub Actions Windows
+artifact, extract `CoCANoT-Windows-x64.bat`, and double-click it.
 
-```powershell
-git switch fix/ephys-imaging-parity-20261021
-git pull --ff-only origin fix/ephys-imaging-parity-20261021
-powershell -ExecutionPolicy Bypass -File packaging/scripts/build_windows.ps1
-```
+The BAT is a network bootstrapper, **not an offline installer**. It downloads
+a revision-pinned CoCANoT source archive and bootstrap script, Miniforge,
+a Node.js 22 runtime, native Windows Conda dependencies (Python 3.12,
+dcm2niix, pyedflib, nibabel, PyMuPDF, etc.), pip dependencies, and builds
+the React frontend locally. It installs into
+`%LOCALAPPDATA%\CoCANoT` and creates a Start Menu CoCANoT shortcut.
 
-The build produces:
-`packaging/constructor/windows/CoCANoT-Windows-x64.exe`
+MRI Step 3C additionally requires Linux FSL FLIRT and PyDeface.
+After installation, use **Start Menu > CoCANoT > Install MRI defacing dependencies**
+to install those dependencies *inside the existing Ubuntu 24.04 distribution*.
+That utility never installs WSL itself. Other application workflows do
+not depend on FSL/PyDeface.
 
-Install the EXE in the current-user AppData Local CoCANoT runtime directory.
-Launch via `CoCANoT.bat` there; the native UI requires an Edge WebView2
-runtime and graphical desktop. Run `verify_install_windows.ps1` and test
-DICOM conversion, EDF waveform/saving, patient metadata, and imaging exports.
+## GitHub Actions build
 
-**Limitations:** No Windows installer has yet been built or tested. Conda
-packages/wheels may require adjustment for Windows. Windows ARM64 is not
-supported by this target. Signing and installer smoke testing are required
-before distribution.
+Go to **Actions > Build CoCANoT installers > Run workflow**,
+choose the desired branch and the **windows-x64** target.
+The target defaults to Windows; choosing `all` explicitly also builds
+macOS/Linux installers in their separate jobs.
+
+The Windows job creates and uploads only the BAT. GitHub Actions itself
+delivers artifacts wrapped in a ZIP, which must be extracted before running.
+The BAT references the exact commit that produced it.
+
+**Status:** This new BAT approach still requires a successful GitHub Actions
+run and an installation test on a Windows x64 computer before clinical distribution.
+Consider code signing, checksum verification of downloaded third-party
+installers, and validating installation on restricted site machines before
+broad deployment.

@@ -7,7 +7,7 @@ on:
         description: Installer target
         required: true
         type: choice
-        default: all
+        default: windows-x64
         options:
           - all
           - mac-intel
@@ -140,44 +140,25 @@ jobs:
   windows-x64:
     if: ${{ inputs.target == 'all' || inputs.target == 'windows-x64' }}
     runs-on: windows-2022
-    timeout-minutes: 120
-    defaults:
-      run:
-        shell: pwsh
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
-      - uses: conda-incubator/setup-miniconda@v4
-        with:
-          auto-update-conda: true
-          activate-environment: packaging-build
-          python-version: '3.12'
-          channels: conda-forge
-          channel-priority: strict
-      - name: Install Windows builder and NSIS
+      - name: Produce single-file Windows BAT
         shell: pwsh
         run: |
-          conda install -y -n packaging-build -c conda-forge constructor pip nsis
-          if ($LASTEXITCODE -ne 0) { throw "Constructor or NSIS installation failed" }
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: react_frontend/package-lock.json
-      - name: Build Windows EXE
-        shell: pwsh
-        run: ./packaging/scripts/build_windows.ps1
-      - name: Check installer
-        shell: pwsh
-        run: |
-          $f = "packaging/constructor/windows/CoCANoT-Windows-x64.exe"
-          if (!(Test-Path $f) -or (Get-Item $f).Length -eq 0) { throw "Windows installer missing/empty" }
-          (Get-FileHash $f -Algorithm SHA256).Hash + "  CoCANoT-Windows-x64.exe" |
-            Out-File -Encoding ascii "$f.sha256"
+          $out = "dist/CoCANoT-Windows-x64.bat"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $template = Get-Content "packaging/scripts/CoCANoT-Windows-x64.bat" -Raw
+          if (-not $template.Contains('__GITHUB_SHA__')) { throw "Revision placeholder missing" }
+          $template.Replace('__GITHUB_SHA__', "${{ github.sha }}") |
+            Set-Content -LiteralPath $out -Encoding ascii
+          if (!(Test-Path $out) -or (Get-Item $out).Length -lt 500) { throw "BAT missing/empty" }
+          if ((Get-ChildItem dist -File).Count -ne 1) { throw "Windows distribution must contain exactly one BAT" }
       - uses: actions/upload-artifact@v6
         with:
-          name: CoCANoT-Windows-x64
-          path: |
-            packaging/constructor/windows/CoCANoT-Windows-x64.exe
-            packaging/constructor/windows/CoCANoT-Windows-x64.exe.sha256
+          name: CoCANoT-Windows-x64-BAT
+          path: dist/CoCANoT-Windows-x64.bat
           if-no-files-found: error
           retention-days: 14
