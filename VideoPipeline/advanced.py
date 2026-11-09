@@ -54,7 +54,7 @@ def _interpolate(region, time):
     return {**region, **ordered[-1]}
 
 
-def track_region(path: str, clip_start: float, clip_end: float, region: dict, from_time: float) -> dict:
+def track_region(path: str, clip_start: float, clip_end: float, region: dict, from_time: float, until_time: float) -> dict:
     """Track visual features using Lucas-Kanade optical flow and RANSAC.
 
     Stop on ambiguous motion; never extrapolate a mask after tracking loss.
@@ -66,8 +66,11 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict, fr
         raise ValueError("Cannot open video for tracking.")
     try:
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        duration = clip_end - clip_start
+        if not (0 <= from_time < until_time <= duration + 1e-6):
+            raise ValueError("Tracking start/end are outside this clip.")
         start_frame = max(0, round((clip_start + from_time) * fps))
-        end_frame = min(round(clip_end * fps) - 1, start_frame + round(fps * 120))
+        end_frame = min(round((clip_start + until_time) * fps), max(0, round(clip_end * fps) - 1))
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
         ok, frame = cap.read()
         if not ok:
@@ -91,8 +94,9 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict, fr
         stride = max(1, round(fps / 10))
         index = start_frame
         warning = ""
-        while index + stride <= end_frame:
-            for _ in range(stride - 1):
+        while index < end_frame:
+            step = min(stride, end_frame - index)
+            for _ in range(step - 1):
                 if not cap.grab():
                     warning = "Video decoding ended."
                     break
@@ -102,7 +106,7 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict, fr
             if not ok:
                 warning = "Video decoding ended."
                 break
-            index += stride
+            index += step
             current = cv2.cvtColor(_canvas(frame, cv2), cv2.COLOR_BGR2GRAY)
             next_points, status, _ = cv2.calcOpticalFlowPyrLK(
                 previous, current, points, None, winSize=(23, 23), maxLevel=3)
@@ -147,14 +151,20 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict, fr
             x,y,w,h = round(nx),round(ny),round(nw),round(nh)
             previous = current
             points = features(previous, (x,y,w,h))
-            if points is None or len(points) < 7:
+            if (points is None or len(points) < 7) and index < end_frame:
                 warning = "Tracking region lost detail."
                 break
             t = index/fps-clip_start
             frames.append({"t":round(t,4),"x":x/1280,"y":y/720,"w":w/1280,"h":h/720})
-        complete = not warning and end_frame >= round(clip_end*fps)-stride-1
-        if not complete and not warning:
-            warning = "120-second tracking limit reached."
+        complete = not warning and index >= end_frame
+        if complete:
+            # The final source frame represents the last frame before the
+            # requested endpoint; retain its position through that boundary.
+            final_time = round(float(until_time), 4)
+            if final_time > frames[-1]["t"]:
+                frames.append({**frames[-1], "t": final_time})
+            else:
+                frames[-1]["t"] = final_time
         last = frames[-1]["t"]
         return {"keyframes":frames,"tracked_until":last,"complete":complete,
                 "warning": (f"{warning} Tracking ended at {last:.2f}s. Inspect and retrack any uncovered frames."
