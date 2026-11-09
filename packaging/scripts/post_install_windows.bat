@@ -36,13 +36,15 @@ rem Create a normal Start Menu shortcut which launches without showing a console
 if errorlevel 1 exit /b 1
 if not exist "%APPROOT%\setup_windows_defacing.ps1" (echo Required MRI defacing setup utility missing & exit /b 1)
 rem Optional Step 3C Linux dependency setup; users install WSL2 and Ubuntu independently.
-"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder 'Complete MRI defacing setup.lnk')); $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'; $shortcut.Arguments='-NoProfile -ExecutionPolicy Bypass -NoExit -File ""%APPROOT%\setup_windows_defacing.ps1""'; $shortcut.WorkingDirectory='%APPROOT%'; $shortcut.Description='Install Step 3C Linux FLIRT and PyDeface dependencies (requires user-installed WSL2 Ubuntu)'; $shortcut.Save()"
+rem Remove the previous shortcut name when reinstalling/upgrading to avoid duplicates.
+"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; Remove-Item -LiteralPath (Join-Path $folder 'Complete MRI defacing setup.lnk') -ErrorAction SilentlyContinue"
+"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder 'Complete defacing setup.lnk')); $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'; $shortcut.Arguments='-NoProfile -ExecutionPolicy Bypass -NoExit -File ""%APPROOT%\setup_windows_defacing.ps1""'; $shortcut.WorkingDirectory='%APPROOT%'; $shortcut.Description='Install Step 3C Linux FLIRT and PyDeface dependencies (requires user-installed WSL2 Ubuntu)'; $shortcut.Save()"
 if errorlevel 1 exit /b 1
 rem Do not automatically launch the defacing assistant after app installation.
 rem Users can optionally open it through the Start Menu shortcut after installing WSL2 and Ubuntu.
 echo CoCANoT installed. Launch from Start Menu CoCANoT or "%PREFIX%\CoCANoT.vbs".
 echo For diagnostics run "%PREFIX%\CoCANoT-Diagnostics.bat" to see console output.
 echo Imaging Step 3C: Install WSL2 Ubuntu yourself using: wsl --install -d Ubuntu
-echo After Ubuntu initialization, use Start Menu ^> CoCANoT ^> Complete MRI defacing setup to install FLIRT and PyDeface.
+echo After Ubuntu initialization, use Start Menu ^> CoCANoT ^> Complete defacing setup to install FLIRT and PyDeface.
 echo Defacing requires WSL2 with Linux FSL and PyDeface; native Windows FSL is not bundled.
 exit /b 0
