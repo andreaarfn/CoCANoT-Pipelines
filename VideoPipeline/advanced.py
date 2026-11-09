@@ -163,6 +163,39 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict, fr
         cap.release()
 
 
+def _subject_aware_blur(frame, region, cv2):
+    """GrabCut foreground separation from a user-selected subject rectangle.
+
+    On failure, blur the entire frame instead of leaving a potentially
+    identifying background unredacted. This is not privacy certification.
+    """
+    import numpy as np
+    height, width = frame.shape[:2]
+    preview_width = 480
+    preview_height = max(1, round(height * preview_width / width))
+    small = cv2.resize(frame, (preview_width, preview_height))
+    x, y, w, h = region
+    sx, sy = preview_width / width, preview_height / height
+    rx = max(1, min(preview_width - 4, round(x * sx)))
+    ry = max(1, min(preview_height - 4, round(y * sy)))
+    rw = max(3, min(preview_width - rx - 1, round(w * sx)))
+    rh = max(3, min(preview_height - ry - 1, round(h * sy)))
+    blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=26)
+    try:
+        labels = np.zeros((preview_height, preview_width), np.uint8)
+        background_model = np.zeros((1, 65), np.float64)
+        foreground_model = np.zeros((1, 65), np.float64)
+        cv2.grabCut(small, labels, (rx, ry, rw, rh), background_model,
+                    foreground_model, 2, cv2.GC_INIT_WITH_RECT)
+        foreground = np.isin(labels, [cv2.GC_FGD, cv2.GC_PR_FGD]).astype("float32")
+        foreground = cv2.resize(foreground, (width, height), interpolation=cv2.INTER_LINEAR)
+        foreground = cv2.GaussianBlur(foreground, (0, 0), sigmaX=3)
+        alpha = np.clip(foreground, 0, 1)[:, :, None]
+        return np.clip(frame * alpha + blurred * (1 - alpha), 0, 255).astype("uint8")
+    except cv2.error:
+        return blurred
+
+
 def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
     """Render with moving masks and background blur; video audio is removed."""
     cv2 = _cv2()
@@ -197,10 +230,13 @@ def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
                     if background and background.get("enabled"):
                         preserve = _rect(background)
                         # Strong but not irreversible background blur.
-                        blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=24)
-                        x, y, w, h = preserve
-                        blurred[y:y+h, x:x+w] = image[y:y+h, x:x+w]
-                        image = blurred
+                        if background.get("mode") == "subject":
+                            image = _subject_aware_blur(image, preserve, cv2)
+                        else:
+                            blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=24)
+                            x, y, w, h = preserve
+                            blurred[y:y+h, x:x+w] = image[y:y+h, x:x+w]
+                            image = blurred
                     for mask in clip.get("masks", []):
                         if float(mask.get("start", 0)) <= time <= float(mask.get("end", clip["end"] - clip["start"])):
                             region = _interpolate(mask, time)
