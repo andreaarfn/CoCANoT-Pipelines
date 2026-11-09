@@ -36,20 +36,37 @@ export default function VideoDashboard() {
     return {...mask,...points[points.length-1]};
   };
   async function trackMask(mask) {
-    if(mask.end <= mask.start + 0.05) {setNotice("Increase the mask time interval before tracking.");return;}
-    if(!bridge()?.video_track_region) {setNotice("Motion tracking is unavailable in this desktop build.");return;}
+    const start = Number(mask.start);
+    const end = Number(mask.end);
+    if(!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end > duration || end <= start) {
+      setNotice("Set a valid censor start and end before tracking.");
+      return;
+    }
+    if(!bridge()?.video_track_region) {
+      setNotice("Motion tracking is unavailable in this desktop build.");
+      return;
+    }
     try {
-      setBusy(true);setNotice("Tracking locally. The tracker stops when confidence drops.");
-      const start = Math.max(0, Math.min(cursor, mask.end-0.05, duration-0.05));
-      const current = trackedRegion(mask,start);
-      const result = await bridge().video_track_region(clip, current, start);
-      mutateClip(c=>({...c,masks:c.masks.map(item=>item.id===mask.id?{
-        ...item,...current,keyframes:result.keyframes,
+      setBusy(true);
+      setNotice(`Tracking region from ${seconds(start)}s to ${seconds(end)}s…`);
+      // Always initialize tracking from the box geometry at its start time,
+      // regardless of the current video playhead position.
+      const current = trackedRegion(mask, start);
+      const result = await bridge().video_track_region(clip, current, start, end);
+      if(!Array.isArray(result?.keyframes) || !result.keyframes.length) {
+        throw new Error("Tracking did not produce any positions.");
+      }
+      mutateClip(c=>({...c,masks:c.masks.map(item=>item.id===mask.id ? {
+        ...item,
+        keyframes:result.keyframes,
         tracked_until:result.tracked_until,
-        start:start
       }:item)}));
-      setNotice(result.warning || "Motion tracking completed. Review tracked censor box at multiple points before export.");
-    }catch(error){setNotice("Tracking failed: " + (error.message || error));}finally{setBusy(false);}
+      setNotice(result.warning || `Tracking completed from ${seconds(start)}s to ${seconds(end)}s. Review the rendered censor coverage.`);
+    } catch(error) {
+      setNotice("Tracking failed: " + (error.message || error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function mutateClip(updater) {
@@ -193,10 +210,10 @@ export default function VideoDashboard() {
       </>}
       <h3>Censor regions ({masks.length})</h3>{!masks.length && <p>No masks on this clip.</p>}
       {masks.map((m,i)=><div className="video-mask-settings" key={m.id}><div><strong>Region {i+1}</strong><button aria-label="Remove mask" onClick={()=>mutateClip(c=>({...c,masks:c.masks.filter(x=>x.id!==m.id)}))}><Trash2 size={15}/></button></div>
-        <div className="video-actions"><button disabled={busy} onClick={()=>trackMask(m)}>Track forward from playhead</button></div>
-        {m.keyframes?.length>0 && <p>Tracked to {seconds(m.tracked_until)}s · {m.keyframes.length} keyframes. Verify alignment throughout the clip.</p>}
+        <div className="video-actions"><button disabled={busy} onClick={()=>trackMask(m)}>Track censor interval</button></div>
+        {m.keyframes?.length>0 && <p>Tracked {seconds(m.start)}–{seconds(m.tracked_until)}s of {seconds(m.end)}s · {m.keyframes.length} keyframes. {m.tracked_until < m.end - 0.05 ? "Tracking incomplete: reposition and retry before export." : "Review alignment throughout the selected interval."}</p>}
         <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>{k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(m[k]*100)} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value)/100,0,k==="x"?1-m.w:k==="y"?1-m.h:k==="w"?1-m.x:1-m.y)}:x)}))}/></label>)}</div>
-        <div className="video-fields">{["start","end"].map(k=><label key={k}>{k} (s)<input type="number" step="0.01" min="0" max={duration} value={seconds(m[k])} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,[k]:clamp(Number(e.target.value),0,duration)}:x)}))}/></label>)}</div>
+        <div className="video-fields">{["start","end"].map(k=><label key={k}>{k} (s)<input type="number" step="0.01" min="0" max={duration} value={seconds(m[k])} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value),0,duration)}:x)}))}/></label>)}</div>
       </div>)}
       </> : <p>Select a clip to inspect and edit.</p>}</aside></div>
     <section className="video-panel video-timeline"><div className="video-panel-title">Timeline <small>{project.clips.length} clip(s) · {seconds(combinedDuration)} seconds</small></div><div className="video-clips">{project.clips.map((c,i)=><div key={c.id} className={`video-clip ${clip?.id===c.id?"video-selected":""}`} onClick={()=>selectClip(c)}>
