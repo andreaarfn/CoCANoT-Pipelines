@@ -60,6 +60,8 @@ export default function VideoDashboard() {
         ...item,
         keyframes:result.keyframes,
         tracked_until:result.tracked_until,
+        tracking_complete:Boolean(result.complete),
+        tracking_message:result.warning || "",
       }:item)}));
       setNotice(result.warning || `Tracking completed from ${seconds(start)}s to ${seconds(end)}s. Review the rendered censor coverage.`);
     } catch(error) {
@@ -211,8 +213,12 @@ export default function VideoDashboard() {
       <h3>Censor regions ({masks.length})</h3>{!masks.length && <p>No masks on this clip.</p>}
       {masks.map((m,i)=><div className="video-mask-settings" key={m.id}><div><strong>Region {i+1}</strong><button aria-label="Remove mask" onClick={()=>mutateClip(c=>({...c,masks:c.masks.filter(x=>x.id!==m.id)}))}><Trash2 size={15}/></button></div>
         <div className="video-actions"><button disabled={busy} onClick={()=>trackMask(m)}>Track censor interval</button></div>
-        {m.keyframes?.length>0 && <p>Tracked {seconds(m.start)}–{seconds(m.tracked_until)}s of {seconds(m.end)}s · {m.keyframes.length} keyframes. {m.tracked_until < m.end - 0.05 ? "Tracking incomplete: reposition and retry before export." : "Review alignment throughout the selected interval."}</p>}
-        <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>{k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(m[k]*100)} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value)/100,0,k==="x"?1-m.w:k==="y"?1-m.h:k==="w"?1-m.x:1-m.y)}:x)}))}/></label>)}</div>
+        {m.keyframes?.length>0 && <p role="status">
+          <strong>{m.tracking_complete === false || Number(m.tracked_until) < m.end - 0.05 ? "Tracking incomplete" : "Tracking reached the end"}</strong>
+          {" · "}{seconds(m.start)}–{seconds(m.tracked_until)}s of {seconds(m.end)}s · {m.keyframes.length} positions.
+          {m.tracking_message && <> {m.tracking_message}</>}
+        </p>}
+        <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>{k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(m[k]*100)} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,tracking_complete:null,tracking_message:"",[k]:clamp(Number(e.target.value)/100,0,k==="x"?1-m.w:k==="y"?1-m.h:k==="w"?1-m.x:1-m.y)}:x)}))}/></label>)}</div>
         <div className="video-fields">{["start","end"].map(k=><label key={k}>{k} (s)<input type="number" step="0.01" min="0" max={duration} value={seconds(m[k])} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value),0,duration)}:x)}))}/></label>)}</div>
       </div>)}
       </> : <p>Select a clip to inspect and edit.</p>}</aside></div>
