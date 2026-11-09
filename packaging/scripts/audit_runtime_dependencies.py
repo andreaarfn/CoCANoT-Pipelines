@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ENV = ROOT / "packaging" / "environment"
 FILES = [ROOT / "react_dashboard.py", ROOT / "pipeline_config.py"]
 for folder in ("app", "MetadataPipeline", "ImagingPipeline/scripts", "ElectrophysiologyPipeline/scripts"):
-    FILES.extend((ROOT / folder).rglob("*.py"))
+    FILES.extend(p for p in (ROOT / folder).rglob("*.py") if p.is_file())
 
 # External import name -> package specification (Conda and/or pip name).
 PACKAGES = {
@@ -79,13 +79,15 @@ def main() -> int:
     pip = ENV / ("requirements-pip-bundled.txt" if platform == "macos" else
                  "requirements-pip-" + platform + ".txt")
     declared = packages_in(conda) | packages_in(pip)
-    missing_files = [str(p.relative_to(ROOT)) for p in FILES if not p.exists()]
+    missing_files = [str(p.relative_to(ROOT)) for p in FILES if not p.is_file()]
     if missing_files:
         print("Missing source files:", missing_files, file=sys.stderr)
         return 1
     imported = set()
     for path in sorted(set(FILES)):
         if "__pycache__" in path.parts or "tests" in path.parts:
+            continue
+        if not path.is_file():
             continue
         imported |= imports_in(path)
     required = REQUIRED[platform] | {
