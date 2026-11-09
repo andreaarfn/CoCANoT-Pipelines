@@ -76,3 +76,14 @@ blurred exports require it. The pipeline never uploads video to a remote service
 - If a region still fails: draw it around a larger textured area, avoid
   fully black/flat regions, or split the censor time span into smaller intervals.
 - An incomplete track is *not* accepted as de-identified. Check every frame.
+
+## Censor boxes growing during tracking (fixed)
+The previous optical-flow path applied repeated scale/rotation estimates,
+which could inflate a box over time even if the target had not grown.
+Tracking now estimates **translation only** and preserves each mask's
+initial width and height throughout the interval. Preview and export
+also clamp tracked keyframe dimensions back to that original size,
+including already-saved projects with older enlarged keyframes.
+For best tracking positions, retrack old regions after updating.
+This preserves size but does not guarantee that a moving or approaching
+subject remains fully covered: verify the rendered video frame by frame.
