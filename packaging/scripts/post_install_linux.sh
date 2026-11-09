@@ -15,6 +15,7 @@ tar -xzf "$PREFIX/payload/pip_packages.tar.gz" -C "$PREFIX/payload/pip_packages"
   -r "$ROOT/packaging_requirements_pip.txt"
 "$PREFIX/bin/python" - <<'PY'
 import webview, numpy, nibabel, pyedflib, fitz, openpyxl
+import scipy, scipy.ndimage, matplotlib, PIL, flask, yaml, nipype, requests
 print("CoCANoT Python dependency imports OK")
 PY
 test -f "$ROOT/react_frontend/dist/index.html"
