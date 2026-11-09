@@ -268,6 +268,35 @@ def _subject_aware_blur(frame, region, cv2):
         return blurred
 
 
+def apply_polygon_background_blur(frame, polygons, cv2, feather=9, sigma=24):
+    """Preserve user-selected polygon subjects; blur all pixels outside.
+
+    Polygon vertices use 0..1 coordinates on the normalized 1280x720 frame.
+    Multiple polygons preserve multiple separate people or objects. A missing
+    or invalid selection fails loudly rather than exporting unblurred footage.
+    """
+    import numpy as np
+    if not isinstance(polygons, list) or not polygons:
+        raise ValueError("Draw at least one subject outline before exporting polygon blur.")
+    height, width = frame.shape[:2]
+    keep = np.zeros((height, width), dtype=np.uint8)
+    for polygon in polygons:
+        vertices = polygon.get("points", [])
+        if len(vertices) < 3:
+            raise ValueError("Each preserved-area mask requires at least three points.")
+        coords = np.array([
+            [round(float(p["x"]) * (width - 1)), round(float(p["y"]) * (height - 1))]
+            for p in vertices
+        ], dtype=np.int32)
+        cv2.fillPoly(keep, [coords], 255)
+    # A soft boundary avoids hard cutout artifacts but cannot certify privacy.
+    keep = cv2.GaussianBlur(keep, (0, 0), sigmaX=max(0.1, feather))
+    alpha = (keep.astype(np.float32) / 255.0)[:, :, None]
+    blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=max(1.0, sigma))
+    return np.clip(frame.astype(np.float32) * alpha +
+                   blurred.astype(np.float32) * (1 - alpha), 0, 255).astype(np.uint8)
+
+
 class PersonBackgroundSegmenter:
     """Local MediaPipe person/background segmentation for a Zoom-style blur."""
 
@@ -364,7 +393,12 @@ def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
                     if background and background.get("enabled"):
                         preserve = _rect(background)
                         # Strong but not irreversible background blur.
-                        if background.get("mode") == "person":
+                        if background.get("mode") == "polygon":
+                            image = apply_polygon_background_blur(
+                                image, background.get("polygons", []), cv2,
+                                feather=background.get("feather", 9),
+                                sigma=background.get("strength", 24))
+                        elif background.get("mode") == "person":
                             if person_segmenter is None:
                                 person_segmenter = PersonBackgroundSegmenter()
                             image = person_segmenter.apply(image, cv2, idx / 30)
