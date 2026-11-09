@@ -14,6 +14,8 @@ export default function VideoDashboard() {
   const [cursor, setCursor] = useState(0);
   const [maskMode, setMaskMode] = useState(false);
   const dragAnchor = useRef(null);
+  const [polygonMode, setPolygonMode] = useState(false);
+  const [polygonDraft, setPolygonDraft] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [personBlurStatus, setPersonBlurStatus] = useState(null);
@@ -68,6 +70,59 @@ export default function VideoDashboard() {
     } catch (error) {
       setNotice("People-aware preview failed: " + (error.message || error));
     } finally { setPersonBlurBusy(false); }
+  }
+
+  function beginPolygon() {
+    if(!clip) return;
+    player.current?.pause();
+    setMaskMode(false);
+    setPolygonDraft([]);
+    setPolygonMode(true);
+    setPersonBlurPreview(null);
+    setNotice("Click around the person or area to keep sharp; then choose Finish outline.");
+  }
+
+  function addPolygonPoint(event) {
+    if(!polygonMode || !clip || !frame.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    player.current?.pause();
+    const bounds=frame.current.getBoundingClientRect();
+    const point={x:clamp((event.clientX-bounds.left)/bounds.width,0,1),
+                 y:clamp((event.clientY-bounds.top)/bounds.height,0,1)};
+    setPolygonDraft(points=>points.length<100?[...points,point]:points);
+  }
+
+  function finishPolygon() {
+    if(polygonDraft.length<3) {
+      setNotice("Choose at least three points to close the foreground outline.");
+      return;
+    }
+    mutateClip(c=>({...c,background_blur:{
+      enabled:true,x:0.25,y:0.25,w:0.5,h:0.5,feather:9,strength:24,
+      ...(c.background_blur||{}),mode:"polygon",
+      polygons:[...((c.background_blur||{}).polygons||[]),{id:id(),points:polygonDraft}]
+    }}));
+    setPolygonDraft([]);
+    setPolygonMode(false);
+    setPersonBlurPreview(null);
+    setNotice("Foreground mask saved. Use Preview blur at playhead to inspect the result.");
+  }
+
+  async function previewPolygonBlur() {
+    if(!clip || !bridge()?.video_polygon_blur_preview) {
+      setNotice("Manual blur preview is unavailable in this desktop build.");
+      return;
+    }
+    try {
+      setPersonBlurBusy(true);
+      player.current?.pause();
+      const result=await bridge().video_polygon_blur_preview(clip,cursor);
+      setPersonBlurPreview({clipId:clip.id,time:cursor,image:result.image});
+      setNotice("Manual background mask preview generated locally.");
+    }catch(error) {
+      setNotice("Manual blur preview failed: "+(error.message||error));
+    }finally{setPersonBlurBusy(false);}
   }
 
   const trackedRegion = (mask, at) => {
@@ -129,6 +184,8 @@ export default function VideoDashboard() {
   }
   function selectClip(c) {
     setSelected(c.id);
+    setPolygonMode(false);
+    setPolygonDraft([]);
     setPersonBlurPreview(null);
     setCursor(0);
     setMaskMode(false);
@@ -164,6 +221,7 @@ export default function VideoDashboard() {
     setReviewed(false);
   }
   function editBlur(key,value) {
+    if(key==="mode") {setPolygonMode(false);setPolygonDraft([]);}
     setPersonBlurPreview(null);
     mutateClip(c=>({...c,background_blur:{...{enabled:false,x:0.25,y:0.25,w:0.5,h:0.5},...(c.background_blur || {}),[key]:value}}));
   }
@@ -250,7 +308,7 @@ export default function VideoDashboard() {
         </> : <div className="video-empty">Import a recording to begin. Original footage is never modified.</div>}
       </div>
       <div className="video-scrub"><input type="range" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip} onChange={e=>{const time=Number(e.target.value);setCursor(time);setPersonBlurPreview(null);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
-      <div className="video-actions"><button disabled={!clip || busy} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
+      <div className="video-actions"><button disabled={!clip || busy} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setPolygonMode(false);setPolygonDraft([]);setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
       <p className="video-hint">Censor boxes are solid black. Tracking is approximate; inspect the rendered file before releasing it. Audio is removed from exports.</p>
       </section><aside className="video-panel video-properties"><h2>Clip and censor settings</h2>{clip ? <>
       <label>Start (seconds)<input type="number" step="0.01" min="0" max={clip.end-0.01} value={clip.start} onChange={e=>mutateClip(c=>({...c,start:clamp(Number(e.target.value),0,c.end-0.01)}))}/></label>
