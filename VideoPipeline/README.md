@@ -13,11 +13,16 @@ blurred exports require it. The pipeline never uploads video to a remote service
 
 ## How to test
 1. Import an H.264 MP4 and add a solid censor box.
-2. Move the playhead to the desired starting frame.
-3. Drag directly on the video to draw a censor region, then use **Track forward from playhead**.
-   Tracking uses Lucas–Kanade optical flow with bidirectional checks and RANSAC, and stops on low confidence.
-4. Scrub the preview to inspect the tracked positions. Tracking is limited
-   to 120 seconds per request, and stops if confidence drops.
+2. Move the playhead to the intended first frame and drag to draw a censor box.
+3. Set the censor region's **Start** and **End** times in the region settings.
+4. Click **Track censor interval**. Tracking begins at the region's Start time
+   and ends at its End time, regardless of where the playhead currently is.
+   Lucas–Kanade optical flow with consistency checks/RANSAC tracks visual features.
+   There is no 120-second cutoff; long intervals can take significantly longer.
+   If confidence drops, tracking stops and warns you, and export will block
+   incomplete tracked intervals until they are corrected.
+   Changing Start/End clears the previous tracking and requires tracking again.
+   Scrub the preview and visually inspect the rendered result.
 5. Optionally choose **Blur outside preserved area** and change the
    four preserve-region coordinates (percent of the 1280x720 canvas).
    Select **Smart subject selection (GrabCut)** to attempt separating the
@@ -28,7 +33,7 @@ blurred exports require it. The pipeline never uploads video to a remote service
    motion, occlusions, and cuts, before any sharing.
 
 ## Privacy warnings
-- Motion tracking is based on local template matching and can drift or stop.
+- Motion tracking is based on local optical flow and can drift or stop.
 - Tracking gaps extending beyond the last keyframe block export; re-track
   or explicitly revise the censor interval and manually inspect the remainder.
 - Background blur is aesthetic obscuration, not guaranteed de-identification.
