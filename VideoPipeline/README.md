@@ -106,3 +106,28 @@ the model frame by frame with temporal mask smoothing.
 including faces, sharp. Use separate opaque censor boxes for identities and
 inspect the entire output. Selfie Segmenter is optimized for front-facing
 people and may miss clinical subjects, odd perspectives, or foregrounds.
+
+## Manual foreground masks for distant subjects (new)
+When the Zoom-style automatic person model misses a distant or unusually posed
+person, select **Background blur → Draw foreground masks (manual)**.
+
+1. Import your video and pause at a representative frame.
+2. Check **Blur outside preserved area** and set **Blur method** to
+   **Draw foreground masks (manual)**.
+3. Click **Draw foreground mask**, then click successive points along the
+   subject's outline. Use **Undo point** to correct the last vertex, and
+   **Finish outline** to close and save the selected foreground area.
+4. Repeat for additional people or other areas you want to keep sharp.
+5. Change **Blur strength** and **Edge softness**, then click
+   **Preview masked blur at playhead** to inspect a processed still image.
+6. Export as usual. The selected foreground areas are preserved, while
+   pixels outside the outlines receive Gaussian background blur.
+   The exported recording has no audio.
+
+This method uses OpenCV locally and does **not** require MediaPipe or downloading
+a people-detection model. It is manual, image-frame-anchored masking; outlines do
+not yet auto-follow moving subjects. For footage with significant camera/subject
+motion, recheck the mask on multiple frames and do not release an output with
+exposed identifying background details. The preview is a still frame; the saved
+MP4 must be examined separately. Opaque face censor boxes remain necessary
+where de-identification requires obscuring people's identities.
