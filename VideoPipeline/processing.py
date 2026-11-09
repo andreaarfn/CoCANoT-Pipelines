@@ -76,7 +76,29 @@ def validate_project(project: dict) -> list[dict]:
                 raise ValueError("Invalid mask time interval.")
         background = clip.get("background_blur")
         if background and background.get("enabled"):
-            _validate_box(background)
+            mode = background.get("mode", "rectangle")
+            if mode not in ("rectangle", "subject", "person", "polygon"):
+                raise ValueError("Unsupported background blur mode.")
+            if mode == "polygon":
+                polygons = background.get("polygons")
+                if not isinstance(polygons, list) or not (1 <= len(polygons) <= 30):
+                    raise ValueError("Draw at least one subject outline to preserve for background blur.")
+                for polygon in polygons:
+                    points = polygon.get("points") if isinstance(polygon, dict) else None
+                    if not isinstance(points, list) or not (3 <= len(points) <= 100):
+                        raise ValueError("Each subject outline needs 3 to 100 points.")
+                    for point in points:
+                        if not isinstance(point, dict):
+                            raise ValueError("Invalid polygon vertex.")
+                        x, y = float(point.get("x", -1)), float(point.get("y", -1))
+                        if not math.isfinite(x) or not math.isfinite(y) or not (0 <= x <= 1 and 0 <= y <= 1):
+                            raise ValueError("Preserved-area vertices must be inside the video frame.")
+                for prop, lower, upper in (("feather", 0, 50), ("strength", 1, 70)):
+                    val = float(background.get(prop, 9 if prop == "feather" else 24))
+                    if not math.isfinite(val) or not lower <= val <= upper:
+                        raise ValueError(f"Invalid polygon blur {prop} setting.")
+            else:
+                _validate_box(background)
         for mask in masks:
             points = mask.get("keyframes", [])
             if points:
