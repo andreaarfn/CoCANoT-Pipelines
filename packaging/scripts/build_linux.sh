@@ -10,6 +10,7 @@ case "$ARCH" in x86_64) SUBDIR=linux-64;; aarch64) SUBDIR=linux-aarch64;; *) ech
 test "$("$CONDA_PREFIX/bin/python" -c 'import platform; print(platform.machine())')" = "$ARCH"
 command -v constructor >/dev/null || { echo "Install conda constructor in build environment." >&2; exit 1; }
 command -v npm >/dev/null || { echo "Install Node.js/npm on the Linux build machine." >&2; exit 1; }
+"$CONDA_PREFIX/bin/python" "$ROOT/packaging/scripts/audit_runtime_dependencies.py" --platform linux
 cd "$ROOT/react_frontend"
 npm ci
 npm run build
