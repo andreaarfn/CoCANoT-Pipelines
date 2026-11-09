@@ -287,19 +287,24 @@ export default function VideoDashboard() {
       <div className="video-actions"><button onClick={addVideos} disabled={busy}><Plus size={16}/> Import video</button><button onClick={()=>projectAction("video_load_project")} disabled={busy}><FolderOpen size={16}/> Open project</button><button onClick={()=>projectAction("video_save_project")} disabled={busy || !clip}><Save size={16}/> Save project</button></div></header>
     <div className="video-steps"><span>1 · Import</span><span>2 · Edit</span><span>3 · Censor</span><span>4 · Review</span><span>5 · Export</span></div>
     <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
-      <div className="video-player" ref={frame} style={{cursor:maskMode?"crosshair":"default"}}>
+      <div className="video-player" ref={frame} style={{cursor:maskMode||polygonMode?"crosshair":"default"}}>
         {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} controls style={{visibility:personBlurPreview?.clipId===clip.id?"hidden":"visible"}} onPlay={()=>setPersonBlurPreview(null)} onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}} onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
           onTimeUpdate={event=>{const time=event.currentTarget.currentTime;if(time >=clip.end){event.currentTarget.pause();}setCursor(clamp(time-clip.start,0,duration));}}/>
           {personBlurPreview?.clipId===clip.id && <img className="video-person-blur-preview" src={personBlurPreview.image} alt="Local person-aware background blur preview" />}
-          <div className="video-mask-capture" aria-label="Draw censor region" onMouseDown={startMaskDrag} onMouseUp={finishMaskDrag} onClick={event=>{event.preventDefault();event.stopPropagation();}} style={{pointerEvents:maskMode?"auto":"none",cursor:maskMode?"crosshair":"default"}} />
+          <div className="video-mask-capture" aria-label="Draw censor region" onMouseDown={startMaskDrag} onMouseUp={finishMaskDrag} onClick={addPolygonPoint} style={{pointerEvents:maskMode||polygonMode?"auto":"none",cursor:maskMode||polygonMode?"crosshair":"default"}} />
           <div className="video-mask-overlay">
-            {blur.enabled && blur.mode !== "person" && <>
+            {blur.enabled && !["person","polygon"].includes(blur.mode) && <>
               <div className="video-blurred-area" style={{left:0,top:0,width:"100%",height:`${blur.y*100}%`}} />
               <div className="video-blurred-area" style={{left:0,top:`${(blur.y+blur.h)*100}%`,width:"100%",height:`${(1-blur.y-blur.h)*100}%`}} />
               <div className="video-blurred-area" style={{left:0,top:`${blur.y*100}%`,width:`${blur.x*100}%`,height:`${blur.h*100}%`}} />
               <div className="video-blurred-area" style={{left:`${(blur.x+blur.w)*100}%`,top:`${blur.y*100}%`,width:`${(1-blur.x-blur.w)*100}%`,height:`${blur.h*100}%`}} />
               <div className="video-preserve-outline" style={{left:`${blur.x*100}%`,top:`${blur.y*100}%`,width:`${blur.w*100}%`,height:`${blur.h*100}%`}} />
             </>}
+            {blur.enabled && blur.mode === "polygon" && <svg className="video-polygon-outline" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+              {(blur.polygons||[]).map((p,i)=><polygon key={p.id||i} points={p.points.map(v=>`${v.x*1000},${v.y*1000}`).join(" ")} fill="rgba(80,187,235,0.12)" stroke="#45d5ff" strokeWidth="3" vectorEffect="non-scaling-stroke"/> )}
+              {polygonDraft.length>0 && <polyline points={polygonDraft.map(v=>`${v.x*1000},${v.y*1000}`).join(" ")} fill="none" stroke="#ffde59" strokeDasharray="8 5" strokeWidth="3" vectorEffect="non-scaling-stroke"/>}
+              {polygonDraft.map((v,i)=><circle key={i} cx={v.x*1000} cy={v.y*1000} r="6" fill="#ffde59" stroke="#000" strokeWidth="2" vectorEffect="non-scaling-stroke"/>)}
+            </svg>}
             {masks.filter(m=>cursor>=m.start && cursor<=m.end).map(m=>{
               const at=trackedRegion(m,cursor);
               return <div key={m.id} className="video-mask" style={{left:`${at.x*100}%`,top:`${at.y*100}%`,width:`${at.w*100}%`,height:`${at.h*100}%`}}/>;
@@ -320,8 +325,11 @@ export default function VideoDashboard() {
           <option value="rectangle">Preserve rectangle</option>
           <option value="subject">Smart subject selection (GrabCut)</option>
           <option value="person">Detect people automatically (Zoom-style)</option>
+          <option value="polygon">Draw foreground masks (manual)</option>
         </select></label>
-        <p>{blur.mode === "person"
+        <p>{blur.mode === "polygon"
+          ? "Outline each person or subject to keep sharp. Everything outside those outlines is blurred. Draw separate masks for multiple subjects. Masks are fixed to the image frame and do not automatically follow movement."
+          : blur.mode === "person"
           ? "Detects and keeps people sharp while blurring the background. Requires an optional local MediaPipe model. The editor only approximates the effect; review the exported MP4."
           : blur.mode === "subject"
           ? "The selected rectangle seeds pixel-level segmentation when exporting. The editor only shows an approximate preview; inspect the final output."
@@ -340,7 +348,32 @@ export default function VideoDashboard() {
           {personBlurPreview && <button onClick={()=>setPersonBlurPreview(null)}>Return to video playback</button>}
           <p>People remain visible, including faces. Use opaque censor boxes where identifying features must be hidden.</p>
         </div>}
-        {blur.mode !== "person" && <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>Preserve {k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(blur[k]*100)} onChange={e=>editBlur(k,clamp(Number(e.target.value)/100,0,k==="x"?1-blur.w:k==="y"?1-blur.h:k==="w"?1-blur.x:1-blur.y))}/></label>)}</div>}
+        {blur.mode === "polygon" && <div className="video-person-tools">
+          <p>{(blur.polygons||[]).length} saved foreground mask(s). Click points around the subject while paused, then finish the outline.</p>
+          {!polygonMode ? <button disabled={!clip || busy} onClick={beginPolygon}>Draw foreground mask</button> : <>
+            <p>{polygonDraft.length} point(s) selected</p>
+            <div className="video-actions">
+              <button disabled={polygonDraft.length<3} onClick={finishPolygon}>Finish outline</button>
+              <button disabled={!polygonDraft.length} onClick={()=>setPolygonDraft(points=>points.slice(0,-1))}>Undo point</button>
+              <button onClick={()=>{setPolygonMode(false);setPolygonDraft([]);}}>Cancel</button>
+            </div>
+          </>}
+          {(blur.polygons||[]).map((p,i)=><div key={p.id||i} className="video-mask-settings">
+            <div><strong>Foreground {i+1}</strong>
+            <button aria-label={`Remove foreground mask ${i+1}`} onClick={()=>editBlur("polygons",(blur.polygons||[]).filter((_,j)=>j!==i))}><Trash2 size={15}/></button></div>
+            <p>{p.points.length} outline points</p>
+          </div>)}
+          <div className="video-fields">
+            <label>Edge softness (px)<input type="number" min="0" max="50" step="1" value={blur.feather??9} onChange={e=>editBlur("feather",clamp(Number(e.target.value),0,50))}/></label>
+            <label>Blur strength<input type="number" min="1" max="70" step="1" value={blur.strength??24} onChange={e=>editBlur("strength",clamp(Number(e.target.value),1,70))}/></label>
+          </div>
+          <button disabled={!clip || personBlurBusy || !(blur.polygons||[]).length || polygonMode} onClick={previewPolygonBlur}>
+            {personBlurBusy?"Preparing preview…":"Preview masked blur at playhead"}
+          </button>
+          {personBlurPreview && <button onClick={()=>setPersonBlurPreview(null)}>Return to video playback</button>}
+          <p>For moving people, fixed outlines may stop covering them. Recheck movement throughout the exported recording.</p>
+        </div>}
+        {!["person","polygon"].includes(blur.mode) && <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>Preserve {k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(blur[k]*100)} onChange={e=>editBlur(k,clamp(Number(e.target.value)/100,0,k==="x"?1-blur.w:k==="y"?1-blur.h:k==="w"?1-blur.x:1-blur.y))}/></label>)}</div>}
       </>}
       <h3>Censor regions ({masks.length})</h3>{!masks.length && <p>No masks on this clip.</p>}
       {masks.map((m,i)=><div className="video-mask-settings" key={m.id}><div><strong>Region {i+1}</strong><button aria-label="Remove mask" onClick={()=>mutateClip(c=>({...c,masks:c.masks.filter(x=>x.id!==m.id)}))}><Trash2 size={15}/></button></div>
