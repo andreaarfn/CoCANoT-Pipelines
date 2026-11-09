@@ -71,7 +71,7 @@ import webview
 import scipy
 import scipy.ndimage
 import numpy, nibabel, matplotlib, PIL, fitz, openpyxl, pyedflib
-import flask, yaml, nipype, requests
+import flask, yaml, nipype, requests, tkinter
 print("CoCANoT macOS imaging and application runtime imports: OK")
 PY
 then
