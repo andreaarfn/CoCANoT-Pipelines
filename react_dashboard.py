@@ -679,6 +679,20 @@ class CoCANoTAPI:
             output.append(info)
         return output
 
+    def video_track_region(self, clip: dict[str, Any], region: dict[str, Any], start_time: float) -> dict[str, Any]:
+        """Track an approved mask within the clip. Never uploads footage."""
+        from VideoPipeline.advanced import track_region
+        from VideoPipeline.processing import validate_project
+        # Validate the selected media and region before entering OpenCV.
+        validated = validate_project({"clips": [{**clip, "masks": []}]})[0]
+        return track_region(
+            validated["media"]["path"],
+            validated["start"],
+            validated["end"],
+            region,
+            float(start_time),
+        )
+
     def video_save_project(self, project: dict[str, Any]) -> dict[str, Any]:
         if self._window is None:
             raise RuntimeError("The application window is unavailable.")
