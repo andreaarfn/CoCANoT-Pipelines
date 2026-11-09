@@ -26,14 +26,17 @@ export default function VideoDashboard() {
   const trackedRegion = (mask, at) => {
     const points = mask.keyframes || [];
     if (!points.length) return mask;
-    if (at <= points[0].t) return {...mask,...points[0]};
+    const fixed = p => ({...mask,
+      x:clamp(Number(p.x),0,1-mask.w),y:clamp(Number(p.y),0,1-mask.h),
+      w:mask.w,h:mask.h});
+    if(at <= points[0].t) return fixed(points[0]);
     for(let i=1;i<points.length;i++) {
       if(at <= points[i].t) {
         const a=points[i-1],b=points[i],factor=(at-a.t)/(b.t-a.t || 1);
-        return {...mask,...Object.fromEntries(["x","y","w","h"].map(k=>[k,a[k]+(b[k]-a[k])*factor]))};
+        return fixed({x:a.x+(b.x-a.x)*factor,y:a.y+(b.y-a.y)*factor});
       }
     }
-    return {...mask,...points[points.length-1]};
+    return fixed(points[points.length-1]);
   };
   async function trackMask(mask) {
     const start = Number(mask.start);
@@ -61,6 +64,7 @@ export default function VideoDashboard() {
         keyframes:result.keyframes,
         tracked_until:result.tracked_until,
         tracking_complete:Boolean(result.complete),
+        tracking_size_mode:"fixed",
         tracking_message:result.warning || "",
       }:item)}));
       setNotice(result.warning || `Tracking completed from ${seconds(start)}s to ${seconds(end)}s. Review the rendered censor coverage.`);
@@ -221,7 +225,7 @@ export default function VideoDashboard() {
         <div className="video-actions"><button disabled={busy} onClick={()=>trackMask(m)}>Track censor interval</button></div>
         {m.keyframes?.length>0 && <p role="status">
           <strong>{m.tracking_complete === false || Number(m.tracked_until) < m.end - 0.05 ? "Tracking incomplete" : "Tracking reached the end"}</strong>
-          {" · "}{seconds(m.start)}–{seconds(m.tracked_until)}s of {seconds(m.end)}s · {m.keyframes.length} positions.
+          {" · "}{seconds(m.start)}–{seconds(m.tracked_until)}s of {seconds(m.end)}s · {m.keyframes.length} positions · fixed box size.
           {m.tracking_message && <> {m.tracking_message}</>}
         </p>}
         <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>{k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(m[k]*100)} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,tracking_complete:null,tracking_message:"",[k]:clamp(Number(e.target.value)/100,0,k==="x"?1-m.w:k==="y"?1-m.h:k==="w"?1-m.x:1-m.y)}:x)}))}/></label>)}</div>
