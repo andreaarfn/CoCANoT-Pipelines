@@ -31,9 +31,20 @@ rem Only CoCANoT.vbs is the primary launcher; diagnostics batch is explicitly na
 > "%PREFIX%\CoCANoT.vbs" echo Set cocanotShell = CreateObject("WScript.Shell")
 >> "%PREFIX%\CoCANoT.vbs" echo cocanotShell.Run Chr(34) ^& "%PREFIX%\CoCANoT-Diagnostics.bat" ^& Chr(34), 0, False
 if errorlevel 1 exit /b 1
-rem Create a normal Start Menu shortcut which launches without showing a console.
-"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; New-Item -ItemType Directory -Force -Path $folder | Out-Null; $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder 'CoCANoT.lnk')); $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\wscript.exe'; $shortcut.Arguments='"%PREFIX%\CoCANoT.vbs"'; $shortcut.WorkingDirectory='%PREFIX%'; $shortcut.Description='Launch CoCANoT without a console'; $shortcut.IconLocation='%APPROOT%\\cocanot.ico,0'; $shortcut.Save()"
-if errorlevel 1 exit /b 1
+rem Ask whether to create the optional main application Start Menu shortcut.
+rem The defacing setup tool remains available in the Start Menu regardless of choice.
+"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.Windows.Forms; $answer=[System.Windows.Forms.MessageBox]::Show('Would you like to add a CoCANoT shortcut to the Windows Start Menu?','CoCANoT Setup',[System.Windows.Forms.MessageBoxButtons]::YesNo,[System.Windows.Forms.MessageBoxIcon]::Question); if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) { exit 10 } else { exit 11 }"
+set "SHORTCUT_CHOICE=%ERRORLEVEL%"
+if "%SHORTCUT_CHOICE%"=="11" (
+  rem Remove an existing shortcut when the user declines during reinstall.
+  "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$link=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT\CoCANoT.lnk'; Remove-Item -LiteralPath $link -ErrorAction SilentlyContinue"
+  if errorlevel 1 exit /b 1
+  echo CoCANoT Start Menu shortcut declined. Launcher remains at "%PREFIX%\CoCANoT.vbs".
+) else (
+  if not "%SHORTCUT_CHOICE%"=="10" (echo Could not obtain shortcut preference. & exit /b 1)
+  "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$folder=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\CoCANoT'; New-Item -ItemType Directory -Force -Path $folder | Out-Null; $shortcut=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder 'CoCANoT.lnk')); $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\wscript.exe'; $shortcut.Arguments='"%PREFIX%\CoCANoT.vbs"'; $shortcut.WorkingDirectory='%PREFIX%'; $shortcut.Description='Launch CoCANoT without a console'; $shortcut.IconLocation='%APPROOT%\cocanot.ico,0'; $shortcut.Save()"
+  if errorlevel 1 exit /b 1
+)
 if not exist "%APPROOT%\setup_windows_defacing.ps1" (echo Required MRI defacing setup utility missing & exit /b 1)
 rem Optional Step 3C Linux dependency setup; users install WSL2 and Ubuntu independently.
 rem Remove the previous shortcut name when reinstalling/upgrading to avoid duplicates.
@@ -42,7 +53,7 @@ rem Remove the previous shortcut name when reinstalling/upgrading to avoid dupli
 if errorlevel 1 exit /b 1
 rem Do not automatically launch the defacing assistant after app installation.
 rem Users can optionally open it through the Start Menu shortcut after installing WSL2 and Ubuntu.
-echo CoCANoT installed. Launch from Start Menu CoCANoT or "%PREFIX%\CoCANoT.vbs".
+echo CoCANoT installed. Launch from the optional Start Menu shortcut or "%PREFIX%\CoCANoT.vbs".
 echo For diagnostics run "%PREFIX%\CoCANoT-Diagnostics.bat" to see console output.
 echo Imaging Step 3C: Install WSL2 Ubuntu yourself using: wsl --install -d Ubuntu
 echo After Ubuntu initialization, use Start Menu ^> CoCANoT ^> Complete defacing setup to install FLIRT and PyDeface.
