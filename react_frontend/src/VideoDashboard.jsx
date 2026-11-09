@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, FolderOpen, Plus, Save, Scissors, ShieldCheck, Trash2, Video } from "lucide-react";
 import "./VideoDashboard.css";
 
@@ -16,6 +16,9 @@ export default function VideoDashboard() {
   const dragAnchor = useRef(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [personBlurStatus, setPersonBlurStatus] = useState(null);
+  const [personBlurPreview, setPersonBlurPreview] = useState(null);
+  const [personBlurBusy, setPersonBlurBusy] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const player = useRef(null);
   const frame = useRef(null);
@@ -23,6 +26,50 @@ export default function VideoDashboard() {
   const duration = clip ? Math.max(0, clip.end - clip.start) : 0;
   const masks = clip?.masks || [];
   const blur = clip?.background_blur || {enabled:false,x:0.25,y:0.25,w:0.5,h:0.5};
+  useEffect(() => {
+    if (!blur.enabled || blur.mode !== "person" || !bridge()?.video_person_blur_status) return;
+    let active = true;
+    bridge().video_person_blur_status().then(result => {
+      if (active) setPersonBlurStatus(result);
+    }).catch(error => {
+      if (active) setNotice("Person blur setup check failed: " + (error.message || error));
+    });
+    return () => { active = false; };
+  }, [blur.enabled, blur.mode]);
+
+  async function installPersonBlurModel() {
+    if (!bridge()?.video_person_blur_install_model) {
+      setNotice("Person blur setup is unavailable in this desktop build.");
+      return;
+    }
+    try {
+      setPersonBlurBusy(true);
+      setNotice("Downloading public person segmentation model; no video data is sent.");
+      const result = await bridge().video_person_blur_install_model();
+      setPersonBlurStatus(result);
+      setNotice(result.ready ? "People detection is ready." :
+        "Model downloaded. Install MediaPipe in CoCANoT's Python environment.");
+    } catch (error) {
+      setNotice("Person detection setup failed: " + (error.message || error));
+    } finally { setPersonBlurBusy(false); }
+  }
+
+  async function previewPersonBlur() {
+    if (!clip || !bridge()?.video_person_blur_preview) {
+      setNotice("People-aware blur preview is unavailable.");
+      return;
+    }
+    try {
+      setPersonBlurBusy(true);
+      player.current?.pause();
+      const result = await bridge().video_person_blur_preview(clip, cursor);
+      setPersonBlurPreview({clipId:clip.id, time:cursor, image:result.image});
+      setNotice("People-aware blur preview generated locally. Inspect export for privacy.");
+    } catch (error) {
+      setNotice("People-aware preview failed: " + (error.message || error));
+    } finally { setPersonBlurBusy(false); }
+  }
+
   const trackedRegion = (mask, at) => {
     const points = mask.keyframes || [];
     if (!points.length) return mask;
@@ -82,6 +129,7 @@ export default function VideoDashboard() {
   }
   function selectClip(c) {
     setSelected(c.id);
+    setPersonBlurPreview(null);
     setCursor(0);
     setMaskMode(false);
     if (player.current) player.current.pause();
@@ -116,6 +164,7 @@ export default function VideoDashboard() {
     setReviewed(false);
   }
   function editBlur(key,value) {
+    setPersonBlurPreview(null);
     mutateClip(c=>({...c,background_blur:{...{enabled:false,x:0.25,y:0.25,w:0.5,h:0.5},...(c.background_blur || {}),[key]:value}}));
   }
   function startMaskDrag(event) {
@@ -181,8 +230,9 @@ export default function VideoDashboard() {
     <div className="video-steps"><span>1 · Import</span><span>2 · Edit</span><span>3 · Censor</span><span>4 · Review</span><span>5 · Export</span></div>
     <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
       <div className="video-player" ref={frame} style={{cursor:maskMode?"crosshair":"default"}}>
-        {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} controls onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}} onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
+        {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} controls style={{visibility:personBlurPreview?.clipId===clip.id?"hidden":"visible"}} onPlay={()=>setPersonBlurPreview(null)} onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}} onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
           onTimeUpdate={event=>{const time=event.currentTarget.currentTime;if(time >=clip.end){event.currentTarget.pause();}setCursor(clamp(time-clip.start,0,duration));}}/>
+          {personBlurPreview?.clipId===clip.id && <img className="video-person-blur-preview" src={personBlurPreview.image} alt="Local person-aware background blur preview" />}
           <div className="video-mask-capture" aria-label="Draw censor region" onMouseDown={startMaskDrag} onMouseUp={finishMaskDrag} onClick={event=>{event.preventDefault();event.stopPropagation();}} style={{pointerEvents:maskMode?"auto":"none",cursor:maskMode?"crosshair":"default"}} />
           <div className="video-mask-overlay">
             {blur.enabled && blur.mode !== "person" && <>
@@ -199,7 +249,7 @@ export default function VideoDashboard() {
           </div>
         </> : <div className="video-empty">Import a recording to begin. Original footage is never modified.</div>}
       </div>
-      <div className="video-scrub"><input type="range" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
+      <div className="video-scrub"><input type="range" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip} onChange={e=>{const time=Number(e.target.value);setCursor(time);setPersonBlurPreview(null);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
       <div className="video-actions"><button disabled={!clip || busy} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
       <p className="video-hint">Censor boxes are solid black. Tracking is approximate; inspect the rendered file before releasing it. Audio is removed from exports.</p>
       </section><aside className="video-panel video-properties"><h2>Clip and censor settings</h2>{clip ? <>
