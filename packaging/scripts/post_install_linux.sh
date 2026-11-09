@@ -15,9 +15,12 @@ tar -xzf "$PREFIX/payload/pip_packages.tar.gz" -C "$PREFIX/payload/pip_packages"
   -r "$ROOT/packaging_requirements_pip.txt"
 "$PREFIX/bin/python" - <<'PY'
 import webview, numpy, nibabel, pyedflib, fitz, openpyxl
-import scipy, scipy.ndimage, matplotlib, PIL, flask, yaml, nipype, requests
+import scipy, scipy.ndimage, matplotlib, PIL, flask, yaml, nipype, requests, tkinter
 print("CoCANoT Python dependency imports OK")
 PY
+test -x "$PREFIX/bin/dcm2niix"
+test -x "$PREFIX/bin/flirt"
+test -x "$PREFIX/bin/pydeface"
 test -f "$ROOT/react_frontend/dist/index.html"
 test -f "$ROOT/MetadataPipeline/dictionaries/CoCANoT_Metadata_Phase1.0.xlsx"
 cat > "$HOME/.local/bin/cocanot" <<EOF
