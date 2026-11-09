@@ -179,7 +179,13 @@ export default function VideoDashboard() {
       <h3>Background blur</h3>
       <label className="video-checkbox"><input type="checkbox" checked={Boolean(blur.enabled)} onChange={e=>editBlur("enabled",e.target.checked)}/> Blur outside preserved area</label>
       {blur.enabled && <>
-        <p>Keep the rectangle below sharp; the rest of the frame is blurred. Blur alone is not validated de-identification.</p>
+        <label>Blur method<select value={blur.mode || "rectangle"} onChange={e=>editBlur("mode",e.target.value)}>
+          <option value="rectangle">Preserve rectangle</option>
+          <option value="subject">Smart subject selection (GrabCut)</option>
+        </select></label>
+        <p>{blur.mode === "subject"
+          ? "The selected rectangle seeds pixel-level segmentation when exporting. The editor only shows an approximate preview; inspect the final output."
+          : "Keep the rectangle sharp and blur the remaining background. Blur alone is not validated de-identification."}</p>
         <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>Preserve {k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(blur[k]*100)} onChange={e=>editBlur(k,clamp(Number(e.target.value)/100,0,k==="x"?1-blur.w:k==="y"?1-blur.h:k==="w"?1-blur.x:1-blur.y))}/></label>)}</div>
       </>}
       <h3>Censor regions ({masks.length})</h3>{!masks.length && <p>No masks on this clip.</p>}
