@@ -56,9 +56,9 @@ def _interpolate(region, time):
 
 def track_region(path: str, clip_start: float, clip_end: float, region: dict,
                  from_time: float, until_time: float) -> dict:
-    """Hybrid optical-flow / local template tracking over an explicit interval.
+    """Fixed-size translation tracking over an explicit censor interval.
 
-    Motion estimates use RANSAC when reliable. Template correlation can recover
+    Motion uses robust inlier translations; estimated scaling is ignored. Template matching can recover
     from feature-loss on low-texture targets. Neither method silently accepts
     uncertain detections: export validation retains the gap warning.
     """
@@ -107,6 +107,7 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict,
         stride = max(1, round(fps / 15))
         warning = ""
         fallback_frames = 0
+        fixed_width, fixed_height = w, h
 
         while index < end_frame:
             step = min(stride, end_frame - index)
@@ -138,20 +139,28 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict,
                             consistent = (back_status.ravel() == 1) & (error < 3.5)
                             source, dest = source[consistent], dest[consistent]
                             if len(source) >= 5:
+                                # Do NOT transform all four rectangle corners:
+                                # accumulated RANSAC scale/rotation expands
+                                # boxes even when the object barely changes size.
+                                # Estimate robust translation only and keep the
+                                # user-selected width/height exactly fixed.
                                 affine, inliers = cv2.estimateAffinePartial2D(
                                     source, dest, method=cv2.RANSAC,
                                     ransacReprojThreshold=4)
                                 if affine is not None and inliers is not None and inliers.mean() >= 0.50:
-                                    scale = math.hypot(float(affine[0,0]), float(affine[0,1]))
-                                    if 0.75 <= scale <= 1.3:
-                                        corners = np.float32([[x,y],[x+w,y],[x+w,y+h],[x,y+h]])
-                                        moved = cv2.transform(corners[None,:,:], affine)[0]
-                                        lo, hi = moved.min(axis=0), moved.max(axis=0)
-                                        bx, by = map(float,lo)
-                                        bw,bh = map(float,hi-lo)
-                                        if (bx >= 0 and by >= 0 and bx+bw <= 1280
-                                                and by+bh <= 720 and min(bw,bh) >= 12):
-                                            bounds = (round(bx),round(by),round(bw),round(bh))
+                                    kept = inliers.ravel().astype(bool)
+                                    displacement = dest[kept] - source[kept]
+                                    if len(displacement) >= 4:
+                                        dx, dy = np.median(displacement, axis=0)
+                                        # Reject implausible jumps rather than silently
+                                        # following a different object.
+                                        if (np.isfinite(dx) and np.isfinite(dy)
+                                                and abs(dx) <= max(20, w * 0.45)
+                                                and abs(dy) <= max(20, h * 0.45)):
+                                            bx = round(x + float(dx))
+                                            by = round(y + float(dy))
+                                            if 0 <= bx <= 1280 - w and 0 <= by <= 720 - h:
+                                                bounds = (bx, by, w, h)
             if bounds is None:
                 # Recover using a nearby patch when distinctive corners disappear.
                 margin = max(32, round(max(w,h)*0.7))
@@ -176,6 +185,8 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict,
                     )
                     break
             x,y,w,h = bounds
+            # Safety invariant: motion tracking may move a box, never resize it.
+            w,h = fixed_width,fixed_height
             previous = current
             points = get_features(previous, bounds)
             patch = sample_template(previous, bounds)
@@ -201,6 +212,7 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict,
             "tracked_until":last,
             "complete":complete,
             "fallback_frames":fallback_frames,
+            "size_mode":"fixed",
             "warning": (
                 f"{warning} Tracking stopped at {last:.2f}s of {until_time:.2f}s. "
                 "The uncovered frames need manual correction."
