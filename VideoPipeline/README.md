@@ -87,3 +87,22 @@ including already-saved projects with older enlarged keyframes.
 For best tracking positions, retrack old regions after updating.
 This preserves size but does not guarantee that a moving or approaching
 subject remains fully covered: verify the rendered video frame by frame.
+
+## People-aware blur setup in the Video workspace
+The **Detect people automatically (Zoom-style)** option now has an integrated
+setup and single-frame preview. Import a clip, enable background blur, select
+the people-aware mode, and click **Download person detection model**.
+This downloads *public model weights only* after an explicit click. Footage
+remains on the local computer. The MediaPipe Python runtime is still an
+optional install: `python -m pip install mediapipe` in the same environment
+that launches CoCANoT. The UI checks readiness and shows setup instructions.
+
+Use **Preview people-aware blur at playhead** to generate a real segmented
+still frame with background blur. This does not play the video or modify it.
+Click **Return to video playback** to resume editing. The final export applies
+the model frame by frame with temporal mask smoothing.
+
+**Not a de-identification guarantee:** This intentionally keeps people,
+including faces, sharp. Use separate opaque censor boxes for identities and
+inspect the entire output. Selfie Segmenter is optimized for front-facing
+people and may miss clinical subjects, odd perspectives, or foregrounds.
