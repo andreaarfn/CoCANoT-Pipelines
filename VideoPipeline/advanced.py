@@ -196,6 +196,67 @@ def _subject_aware_blur(frame, region, cv2):
         return blurred
 
 
+class PersonBackgroundSegmenter:
+    """Local MediaPipe person/background segmentation for a Zoom-style blur."""
+
+    def __init__(self):
+        try:
+            import mediapipe as mp
+        except ImportError as exc:
+            raise RuntimeError(
+                "Person-aware blur requires MediaPipe. Install with: python -m pip install mediapipe"
+            ) from exc
+        import os
+        from pathlib import Path
+        model = Path(os.environ.get(
+            "COCANOT_PERSON_SEGMENTATION_MODEL",
+            str(Path.home() / ".cocanot" / "models" / "selfie_segmenter.tflite")
+        )).expanduser()
+        if not model.is_file():
+            raise RuntimeError(
+                "Person segmentation model missing. Download MediaPipe Selfie Segmenter "
+                f"to {model}. No patient video is uploaded."
+            )
+        self.mp = mp
+        self.segmenter = mp.tasks.vision.ImageSegmenter.create_from_options(
+            mp.tasks.vision.ImageSegmenterOptions(
+                base_options=mp.tasks.BaseOptions(model_asset_path=str(model)),
+                running_mode=mp.tasks.vision.RunningMode.VIDEO,
+                output_confidence_masks=True,
+                output_category_mask=False,
+            )
+        )
+        self.timestamp = -1
+        self.smooth_mask = None
+
+    def apply(self, frame, cv2, time_seconds):
+        import numpy as np
+        image = self.mp.Image(
+            image_format=self.mp.ImageFormat.SRGB,
+            data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        )
+        timestamp = max(self.timestamp + 1, round(time_seconds * 1000))
+        self.timestamp = timestamp
+        result = self.segmenter.segment_for_video(image, timestamp)
+        if len(result.confidence_masks or []) < 2:
+            # Fail closed: if no person mask is returned, blur the full frame.
+            return cv2.GaussianBlur(frame, (0, 0), sigmaX=28)
+        confidence = result.confidence_masks[1].numpy_view().astype(np.float32)
+        confidence = cv2.resize(confidence, (frame.shape[1], frame.shape[0]))
+        # Temporal smoothing reduces visible flicker at edges.
+        if self.smooth_mask is None:
+            self.smooth_mask = confidence
+        else:
+            self.smooth_mask = self.smooth_mask * 0.45 + confidence * 0.55
+        alpha = np.clip((self.smooth_mask - 0.30) / 0.40, 0, 1)
+        alpha = cv2.GaussianBlur(alpha, (0, 0), sigmaX=2.5)[:, :, None]
+        blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=28)
+        return np.clip(frame * alpha + blurred * (1-alpha), 0, 255).astype(np.uint8)
+
+    def close(self):
+        self.segmenter.close()
+
+
 def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
     """Render with moving masks and background blur; video audio is removed."""
     cv2 = _cv2()
@@ -204,6 +265,7 @@ def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
                "-i", "pipe:0", "-an", "-c:v", "libx264", "-preset", "veryfast",
                "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(temp)]
     proc = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    person_segmenter = None
     try:
         for clip in clips:
             cap = cv2.VideoCapture(clip["media"]["path"])
@@ -230,7 +292,11 @@ def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
                     if background and background.get("enabled"):
                         preserve = _rect(background)
                         # Strong but not irreversible background blur.
-                        if background.get("mode") == "subject":
+                        if background.get("mode") == "person":
+                            if person_segmenter is None:
+                                person_segmenter = PersonBackgroundSegmenter()
+                            image = person_segmenter.apply(image, cv2, idx / 30)
+                        elif background.get("mode") == "subject":
                             image = _subject_aware_blur(image, preserve, cv2)
                         else:
                             blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=24)
@@ -247,12 +313,17 @@ def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
                     proc.stdin.write(image.tobytes())
             finally:
                 cap.release()
+                if person_segmenter is not None:
+                    person_segmenter.close()
+                    person_segmenter = None
         proc.stdin.close()
         message = proc.stderr.read().decode("utf-8", "replace") if proc.stderr else ""
         result = proc.wait(timeout=600)
         if result:
             raise RuntimeError(f"FFmpeg encoding failed: {message[-1500:]}")
     except Exception:
+        if person_segmenter is not None:
+            person_segmenter.close()
         if proc.poll() is None:
             proc.kill()
             proc.wait()
