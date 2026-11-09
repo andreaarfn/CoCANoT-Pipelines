@@ -2,6 +2,7 @@ name: CoCANoT-Pipelines
 version: "0.2.0"
 installer_type: exe
 installer_filename: CoCANoT-Windows-x64.exe
+icon_image: ../../../assets/logo/logo-1024.png
 environment_file: ../../environment/environment-windows.yaml
 company: CoCANoT
 reverse_domain_identifier: org.cocanot.pipelines
