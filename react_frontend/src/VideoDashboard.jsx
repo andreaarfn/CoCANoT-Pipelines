@@ -44,7 +44,7 @@ export default function VideoDashboard() {
       mutateClip(c=>({...c,masks:c.masks.map(item=>item.id===mask.id?{
         ...item,...current,keyframes:result.keyframes,
         tracked_until:result.tracked_until,
-        start:Math.min(item.start,start)
+        start:start
       }:item)}));
       setNotice(result.warning || "Motion tracking completed. Review tracked censor box at multiple points before export.");
     }catch(error){setNotice("Tracking failed: " + (error.message || error));}finally{setBusy(false);}
@@ -138,7 +138,13 @@ export default function VideoDashboard() {
         {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} controls onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}} onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
           onTimeUpdate={event=>{const time=event.currentTarget.currentTime;if(time >=clip.end){event.currentTarget.pause();}setCursor(clamp(time-clip.start,0,duration));}}/>
           <div className="video-mask-overlay">
-            {blur.enabled && <div className="video-background-blur" style={{left:`${blur.x*100}%`,top:`${blur.y*100}%`,width:`${blur.w*100}%`,height:`${blur.h*100}%`}} />}
+            {blur.enabled && <>
+              <div className="video-blurred-area" style={{left:0,top:0,width:"100%",height:`${blur.y*100}%`}} />
+              <div className="video-blurred-area" style={{left:0,top:`${(blur.y+blur.h)*100}%`,width:"100%",height:`${(1-blur.y-blur.h)*100}%`}} />
+              <div className="video-blurred-area" style={{left:0,top:`${blur.y*100}%`,width:`${blur.x*100}%`,height:`${blur.h*100}%`}} />
+              <div className="video-blurred-area" style={{left:`${(blur.x+blur.w)*100}%`,top:`${blur.y*100}%`,width:`${(1-blur.x-blur.w)*100}%`,height:`${blur.h*100}%`}} />
+              <div className="video-preserve-outline" style={{left:`${blur.x*100}%`,top:`${blur.y*100}%`,width:`${blur.w*100}%`,height:`${blur.h*100}%`}} />
+            </>}
             {masks.filter(m=>cursor>=m.start && cursor<=m.end).map(m=>{
               const at=trackedRegion(m,cursor);
               return <div key={m.id} className="video-mask" style={{left:`${at.x*100}%`,top:`${at.y*100}%`,width:`${at.w*100}%`,height:`${at.h*100}%`}}/>;
@@ -156,12 +162,12 @@ export default function VideoDashboard() {
       <label className="video-checkbox"><input type="checkbox" checked={Boolean(blur.enabled)} onChange={e=>editBlur("enabled",e.target.checked)}/> Blur outside preserved area</label>
       {blur.enabled && <>
         <p>Keep the rectangle below sharp; the rest of the frame is blurred. Blur alone is not validated de-identification.</p>
-        <div className="video-actions"><button disabled={busy} onClick={()=>trackMask(m)}>Track forward from playhead</button></div>
-        {m.keyframes?.length>0 && <p>Tracked to {seconds(m.tracked_until)}s · {m.keyframes.length} keyframes. Verify alignment throughout the clip.</p>}
         <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>Preserve {k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(blur[k]*100)} onChange={e=>editBlur(k,clamp(Number(e.target.value)/100,0,k==="x"?1-blur.w:k==="y"?1-blur.h:k==="w"?1-blur.x:1-blur.y))}/></label>)}</div>
       </>}
       <h3>Censor regions ({masks.length})</h3>{!masks.length && <p>No masks on this clip.</p>}
       {masks.map((m,i)=><div className="video-mask-settings" key={m.id}><div><strong>Region {i+1}</strong><button aria-label="Remove mask" onClick={()=>mutateClip(c=>({...c,masks:c.masks.filter(x=>x.id!==m.id)}))}><Trash2 size={15}/></button></div>
+        <div className="video-actions"><button disabled={busy} onClick={()=>trackMask(m)}>Track forward from playhead</button></div>
+        {m.keyframes?.length>0 && <p>Tracked to {seconds(m.tracked_until)}s · {m.keyframes.length} keyframes. Verify alignment throughout the clip.</p>}
         <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>{k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(m[k]*100)} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value)/100,0,k==="x"?1-m.w:k==="y"?1-m.h:k==="w"?1-m.x:1-m.y)}:x)}))}/></label>)}</div>
         <div className="video-fields">{["start","end"].map(k=><label key={k}>{k} (s)<input type="number" step="0.01" min="0" max={duration} value={seconds(m[k])} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,[k]:clamp(Number(e.target.value),0,duration)}:x)}))}/></label>)}</div>
       </div>)}
