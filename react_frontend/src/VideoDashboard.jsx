@@ -13,6 +13,7 @@ export default function VideoDashboard() {
   const [selected, setSelected] = useState(null);
   const [cursor, setCursor] = useState(0);
   const [maskMode, setMaskMode] = useState(false);
+  const dragAnchor = useRef(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [reviewed, setReviewed] = useState(false);
@@ -94,12 +95,28 @@ export default function VideoDashboard() {
   function editBlur(key,value) {
     mutateClip(c=>({...c,background_blur:{...{enabled:false,x:0.25,y:0.25,w:0.5,h:0.5},...(c.background_blur || {}),[key]:value}}));
   }
-  function addMask(event) {
-    if (!maskMode || !clip || !frame.current) return;
+  function startMaskDrag(event) {
+    if (!maskMode || !clip || !frame.current || event.button !== 0) return;
+    const rect = frame.current.getBoundingClientRect();
+    dragAnchor.current = {
+      x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+      y: clamp((event.clientY - rect.top) / rect.height, 0, 1)
+    };
+  }
+  function finishMaskDrag(event) {
+    if(!maskMode || !clip || !dragAnchor.current || !frame.current) return;
     const bounds=frame.current.getBoundingClientRect();
-    const x=clamp((event.clientX-bounds.left)/bounds.width,0,0.8);
-    const y=clamp((event.clientY-bounds.top)/bounds.height,0,0.8);
-    mutateClip(c=>({...c,masks:[...c.masks,{id:id(),type:"solid",x,y,w:0.2,h:0.2,start:cursor,end:duration}]}));
+    const point={x:clamp((event.clientX-bounds.left)/bounds.width,0,1),
+                 y:clamp((event.clientY-bounds.top)/bounds.height,0,1)};
+    const anchor=dragAnchor.current;
+    dragAnchor.current=null;
+    let x=Math.min(point.x,anchor.x), y=Math.min(point.y,anchor.y);
+    let w=Math.abs(point.x-anchor.x),h=Math.abs(point.y-anchor.y);
+    if(w<0.025 || h<0.025) {
+      x=clamp(point.x-0.1,0,0.8);y=clamp(point.y-0.1,0,0.8);
+      w=0.2;h=0.2;
+    }
+    mutateClip(c=>({...c,masks:[...c.masks,{id:id(),type:"solid",x,y,w,h,start:cursor,end:duration}]}));
     setMaskMode(false);
   }
   async function projectAction(action) {
@@ -135,7 +152,7 @@ export default function VideoDashboard() {
       <div className="video-actions"><button onClick={addVideos} disabled={busy}><Plus size={16}/> Import video</button><button onClick={()=>projectAction("video_load_project")} disabled={busy}><FolderOpen size={16}/> Open project</button><button onClick={()=>projectAction("video_save_project")} disabled={busy || !clip}><Save size={16}/> Save project</button></div></header>
     <div className="video-steps"><span>1 · Import</span><span>2 · Edit</span><span>3 · Censor</span><span>4 · Review</span><span>5 · Export</span></div>
     <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
-      <div className="video-player" ref={frame} onClick={addMask} style={{cursor:maskMode?"crosshair":"default"}}>
+      <div className="video-player" ref={frame} onMouseDown={startMaskDrag} onMouseUp={finishMaskDrag} style={{cursor:maskMode?"crosshair":"default"}}>
         {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} controls onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}} onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
           onTimeUpdate={event=>{const time=event.currentTarget.currentTime;if(time >=clip.end){event.currentTarget.pause();}setCursor(clamp(time-clip.start,0,duration));}}/>
           <div className="video-mask-overlay">
@@ -154,7 +171,7 @@ export default function VideoDashboard() {
         </> : <div className="video-empty">Import a recording to begin. Original footage is never modified.</div>}
       </div>
       <div className="video-scrub"><input type="range" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
-      <div className="video-actions"><button disabled={!clip || busy} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>setMaskMode(v=>!v)}><ShieldCheck size={16}/> {maskMode?"Click preview to place mask":"Add censor box"}</button></div>
+      <div className="video-actions"><button disabled={!clip || busy} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>setMaskMode(v=>!v)}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
       <p className="video-hint">Censor boxes are solid black. Tracking is approximate; inspect the rendered file before releasing it. Audio is removed from exports.</p>
       </section><aside className="video-panel video-properties"><h2>Clip and censor settings</h2>{clip ? <>
       <label>Start (seconds)<input type="number" step="0.01" min="0" max={clip.end-0.01} value={clip.start} onChange={e=>mutateClip(c=>({...c,start:clamp(Number(e.target.value),0,c.end-0.01)}))}/></label>
