@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Users,
+  Video,
 } from "lucide-react";
 import styles from "./AppShell.module.css";
 
@@ -22,6 +23,7 @@ const NAV = [
   { key: "home", label: "Home", icon: Home },
   { key: "imaging", label: "Imaging", icon: Brain },
   { key: "ephys", label: "Electrophysiology", icon: Activity },
+  { key: "video", label: "Video", icon: Video },
   { key: "metadata", label: "Metadata", icon: FileText },
   { key: "patient-review", label: "Patient Data Review", icon: Users },
   { key: "needs-attention", label: "Needs Attention", icon: AlertTriangle },
@@ -60,6 +62,7 @@ export default function AppShell({
       home: "home",
       imaging: "imaging",
       ephys: "ephys",
+      video: "video",
       metadata: "metadata-home",
       "patient-review": "patient-review",
       "needs-attention": "needs-attention",
