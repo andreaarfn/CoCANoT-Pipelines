@@ -111,3 +111,46 @@ def preview_frame(clip: dict, relative_time: float) -> dict:
         "time": relative_time,
         "note": "Single-frame person blur preview. Inspect the final video for privacy.",
     }
+
+
+def preview_polygon_frame(clip: dict, relative_time: float) -> dict:
+    """Generate a frame-accurate still showing manual foreground preservation."""
+    import math
+    from VideoPipeline.processing import validate_project
+    from VideoPipeline.advanced import _canvas, _cv2, apply_polygon_background_blur
+    validated = validate_project({"clips": [{**clip, "masks": []}]})[0]
+    blur = validated.get("background_blur") or {}
+    if not blur.get("enabled") or blur.get("mode") != "polygon":
+        raise ValueError("Enable the draw-your-own background blur mode first.")
+    duration = validated["end"] - validated["start"]
+    if not math.isfinite(relative_time) or not (0 <= relative_time <= duration):
+        raise ValueError("Preview timestamp is outside the clip.")
+    cv2 = _cv2()
+    cap = cv2.VideoCapture(validated["media"]["path"])
+    if not cap.isOpened():
+        raise RuntimeError("Cannot open video to generate blur preview.")
+    try:
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30
+        frame_no = max(0, round((validated["start"] + relative_time) * fps))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
+        ok, frame = cap.read()
+        if not ok:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, frame_no - 1))
+            ok, frame = cap.read()
+        if not ok:
+            raise RuntimeError("Cannot decode selected video frame.")
+    finally:
+        cap.release()
+    image = _canvas(frame, cv2)
+    image = apply_polygon_background_blur(
+        image, blur["polygons"], cv2,
+        feather=float(blur.get("feather", 9)),
+        sigma=float(blur.get("strength", 24)))
+    ok, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 88])
+    if not ok:
+        raise RuntimeError("Unable to encode background blur preview.")
+    return {
+        "image": "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii"),
+        "time": relative_time,
+        "note": "Preview of manual subject mask; inspect rendered output.",
+    }
