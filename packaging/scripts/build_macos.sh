@@ -29,6 +29,7 @@ if [ "${PYTHON_ARCH}" != "${HOST_ARCH}" ]; then
   exit 1
 fi
 echo "Building CoCANoT for ${EXPECTED_SUBDIR} using ${CONDA_PREFIX}"
+"${CONDA_PREFIX}/bin/python" "${PROJECT_ROOT}/packaging/scripts/audit_runtime_dependencies.py" --platform macos
 
 
 # ------------------------------------------------------------
