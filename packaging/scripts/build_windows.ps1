@@ -22,6 +22,20 @@ if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
 $Payload = Join-Path $Stage "app"
 $Wheels = Join-Path $Stage "wheels"
 New-Item -ItemType Directory -Force $Payload,$Wheels | Out-Null
+# Use the existing CoCANoT logo for Windows Start Menu shortcuts.
+$LogoPng = Join-Path $ProjectRoot "assets/logo/logo-1024.png"
+$IconIco = Join-Path $Payload "cocanot.ico"
+if (-not (Test-Path $LogoPng)) { throw "CoCANoT source logo missing: $LogoPng" }
+$IconScript = @'
+import sys
+from PIL import Image
+source, target = sys.argv[1:3]
+with Image.open(source) as img:
+    img.convert("RGBA").save(target, format="ICO", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+'@
+$IconScript | & $Py - $LogoPng $IconIco
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $IconIco)) { throw "CoCANoT Windows icon generation failed (Pillow required on build runner)." }
+Write-Host "Prepared Windows application icon: $IconIco"
 Copy-Item (Join-Path $ProjectRoot "react_dashboard.py") $Payload
 Copy-Item (Join-Path $ProjectRoot "pipeline_config.py") $Payload
 Copy-Item (Join-Path $ProjectRoot "packaging/scripts/setup_windows_defacing.ps1") (Join-Path $Payload "setup_windows_defacing.ps1")
@@ -53,7 +67,7 @@ foreach ($package in @("pythonnet", "clr_loader", "cffi", "pycparser", "pywebvie
   Write-Host "Bundled Windows dependency: $package"
 }
 # Fail the GitHub build if required setup scripts or the frontend payload are absent.
-foreach ($required in @("setup_windows_defacing.ps1", "packaging_requirements_pip.txt", "react_frontend/dist/index.html")) {
+foreach ($required in @("setup_windows_defacing.ps1", "packaging_requirements_pip.txt", "react_frontend/dist/index.html", "cocanot.ico")) {
   if (-not (Test-Path (Join-Path $Payload $required))) { throw "Missing Windows installer payload file: $required" }
 }
 Compress-Archive -Path (Join-Path $Payload "*") -DestinationPath (Join-Path $Stage "app_payload.zip") -Force
