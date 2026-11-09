@@ -545,6 +545,32 @@ def main() -> None:
 
         source_hash = sha256_file(nifti_path) if not args.overwrite else ""
         if not args.overwrite and verified_existing_output(nifti_path, output_nifti):
+            # Older outputs may have a missing or stale sidecar (Defaced: false).
+            # Repair metadata only after validating the existing defaced NIfTI.
+            # Never change the source JSON in scrubbed_header.
+            if input_json.is_file():
+                try:
+                    sidecar_message = copy_and_update_json(
+                        input_json=input_json,
+                        output_json=output_json,
+                        source_nifti=nifti_path,
+                        input_dir=input_dir,
+                        source_hash=source_hash,
+                    )
+                    if not output_json.is_file():
+                        raise RuntimeError(sidecar_message)
+                    print("Existing defaced sidecar verified/updated:", sidecar_message)
+                except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+                    print("ERROR: Could not refresh the existing defaced JSON sidecar:", exc)
+                    results.append({
+                        "input": str(relative_path),
+                        "size": input_size_text,
+                        "status": "failed",
+                        "elapsed": None,
+                    })
+                    continue
+            else:
+                print("WARNING: No source JSON sidecar; cannot create defacing metadata.")
             completed_hashes[source_hash] = output_nifti
             print("Skipping: matching defaced output already exists and passed validation.")
             results.append(
