@@ -35,10 +35,11 @@ export default function VideoDashboard() {
     return {...mask,...points[points.length-1]};
   };
   async function trackMask(mask) {
+    if(mask.end <= mask.start + 0.05) {setNotice("Increase the mask time interval before tracking.");return;}
     if(!bridge()?.video_track_region) {setNotice("Motion tracking is unavailable in this desktop build.");return;}
     try {
       setBusy(true);setNotice("Tracking locally. The tracker stops when confidence drops.");
-      const start = Math.max(0, Math.min(cursor, duration-0.05));
+      const start = Math.max(0, Math.min(cursor, mask.end-0.05, duration-0.05));
       const current = trackedRegion(mask,start);
       const result = await bridge().video_track_region(clip, current, start);
       mutateClip(c=>({...c,masks:c.masks.map(item=>item.id===mask.id?{
@@ -78,8 +79,8 @@ export default function VideoDashboard() {
   function split() {
     if (!clip || cursor <= 0.05 || cursor >= duration - 0.05) return;
     const splitAt = clip.start + cursor;
-    const left = {...clip, end:splitAt, masks:clip.masks.map(m => ({...m, end:Math.min(m.end,cursor)})).filter(m => m.end > m.start)};
-    const right = {...clip, id:id(), start:splitAt, masks:clip.masks.map(m => ({...m, start:Math.max(0,m.start-cursor), end:m.end-cursor})).filter(m => m.end > m.start)};
+    const left = {...clip, end:splitAt, masks:clip.masks.map(m => ({...m, keyframes:[], tracked_until:null, end:Math.min(m.end,cursor)})).filter(m => m.end > m.start)};
+    const right = {...clip, id:id(), start:splitAt, masks:clip.masks.map(m => ({...m, keyframes:[], tracked_until:null, start:Math.max(0,m.start-cursor), end:m.end-cursor})).filter(m => m.end > m.start)};
     setProject(p => {const i=p.clips.findIndex(c=>c.id===clip.id); const clips=[...p.clips];clips.splice(i,1,left,right);return {...p,clips};});
     setSelected(right.id); setCursor(0); setReviewed(false);
   }
@@ -154,7 +155,7 @@ export default function VideoDashboard() {
       </div>
       <div className="video-scrub"><input type="range" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
       <div className="video-actions"><button disabled={!clip || busy} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>setMaskMode(v=>!v)}><ShieldCheck size={16}/> {maskMode?"Click preview to place mask":"Add censor box"}</button></div>
-      <p className="video-hint">Censor boxes are solid black. Preview overlays are guides; inspect the rendered file before releasing it. Audio is removed from exports.</p>
+      <p className="video-hint">Censor boxes are solid black. Tracking is approximate; inspect the rendered file before releasing it. Audio is removed from exports.</p>
       </section><aside className="video-panel video-properties"><h2>Clip and censor settings</h2>{clip ? <>
       <label>Start (seconds)<input type="number" step="0.01" min="0" max={clip.end-0.01} value={clip.start} onChange={e=>mutateClip(c=>({...c,start:clamp(Number(e.target.value),0,c.end-0.01)}))}/></label>
       <label>End (seconds)<input type="number" step="0.01" min={clip.start+0.01} max={clip.duration} value={clip.end} onChange={e=>mutateClip(c=>({...c,end:clamp(Number(e.target.value),c.start+0.01,c.duration)}))}/></label>
