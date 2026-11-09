@@ -42,3 +42,23 @@ blurred exports require it. The pipeline never uploads video to a remote service
 - The OpenCV renderer normalizes output to 1280x720 at 30fps and is intended
   for short development/test clips. Variable-frame-rate inputs require
   additional verification.
+
+## Zoom-style people-aware blur (optional)
+- Install the optional person segmentation runtime into the **active** Python
+  environment: `python -m pip install mediapipe`.
+- Download the official MediaPipe selfie segmentation model locally:
+  `mkdir -p ~/.cocanot/models`
+  `curl -fL https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite -o ~/.cocanot/models/selfie_segmenter.tflite`
+- In Video -> Background blur, select **Detect people automatically (Zoom-style)**.
+  This runs inference entirely on-device (the model download is separate).
+- People are automatically preserved in focus and the remaining scene is
+  blurred; no manual bounding rectangle is required.
+- The current video preview is approximate. The actual segmentation is only
+  visible after exporting. Inspect the output for flickering edges, partial
+  people, missed subjects, and visible information in the background.
+- This model is primarily intended for foreground portraits/video calls. It
+  may perform poorly on overhead surgical fields, multiple occluded people,
+  unusual viewpoints, or gloves/instruments. Keep the rectangle and GrabCut
+  alternatives for those recordings.
+- MediaPipe is optional and not currently included in packaged installers.
+  This branch requires manual installation for testing.
