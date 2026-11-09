@@ -156,7 +156,7 @@ jobs:
       - name: Install Windows builder and NSIS
         shell: pwsh
         run: |
-          conda install -y -n packaging-build -c conda-forge constructor pip nsis
+          conda install -y -n packaging-build -c conda-forge constructor pip nsis pillow
           if ($LASTEXITCODE -ne 0) { throw "Constructor or NSIS installation failed" }
       - uses: actions/setup-node@v6
         with:
