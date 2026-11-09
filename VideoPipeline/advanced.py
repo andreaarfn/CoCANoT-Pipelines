@@ -391,8 +391,7 @@ def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
                     image = _canvas(current_frame, cv2)
                     background = clip.get("background_blur")
                     if background and background.get("enabled"):
-                        preserve = _rect(background)
-                        # Strong but not irreversible background blur.
+                        # Apply the selected method without assuming a rectangle.
                         if background.get("mode") == "polygon":
                             image = apply_polygon_background_blur(
                                 image, background.get("polygons", []), cv2,
@@ -403,10 +402,10 @@ def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
                                 person_segmenter = PersonBackgroundSegmenter()
                             image = person_segmenter.apply(image, cv2, idx / 30)
                         elif background.get("mode") == "subject":
-                            image = _subject_aware_blur(image, preserve, cv2)
+                            image = _subject_aware_blur(image, _rect(background), cv2)
                         else:
                             blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=24)
-                            x, y, w, h = preserve
+                            x, y, w, h = _rect(background)
                             blurred[y:y+h, x:x+w] = image[y:y+h, x:x+w]
                             image = blurred
                     for mask in clip.get("masks", []):
