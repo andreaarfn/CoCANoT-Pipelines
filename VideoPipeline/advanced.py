@@ -55,78 +55,112 @@ def _interpolate(region, time):
 
 
 def track_region(path: str, clip_start: float, clip_end: float, region: dict, from_time: float) -> dict:
-    """Track a rectangle forward using local template matching.
+    """Track visual features using Lucas-Kanade optical flow and RANSAC.
 
-    A confidence failure stops tracking; never silently extrapolates beyond it.
+    Stop on ambiguous motion; never extrapolate a mask after tracking loss.
     """
     cv2 = _cv2()
-    video = cv2.VideoCapture(path)
-    if not video.isOpened():
+    import numpy as np
+    cap = cv2.VideoCapture(path)
+    if not cap.isOpened():
         raise ValueError("Cannot open video for tracking.")
     try:
-        fps = video.get(cv2.CAP_PROP_FPS) or 30
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         start_frame = max(0, round((clip_start + from_time) * fps))
-        end_frame = min(round(clip_end * fps), start_frame + round(fps * 120))
-        video.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-        success, frame = video.read()
-        if not success:
+        end_frame = min(round(clip_end * fps) - 1, start_frame + round(fps * 120))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        ok, frame = cap.read()
+        if not ok:
             raise ValueError("Could not read selected starting frame.")
-        canvas = _canvas(frame, cv2)
+        previous = cv2.cvtColor(_canvas(frame, cv2), cv2.COLOR_BGR2GRAY)
         x, y, w, h = _rect(region)
-        if w < 12 or h < 12:
-            raise ValueError("Tracking region must be at least 12 pixels wide and high.")
-        template = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)[y:y+h, x:x+w].copy()
-        if template.shape[:2] != (h, w):
-            raise ValueError("Tracking region is outside the video.")
-        keyframes = [{"t": float(from_time), "x": x/1280, "y": y/720, "w": w/1280, "h": h/720}]
-        failed = False
-        sampled = 0
-        # One sample every ~0.15 seconds, keeping processing practical on laptops.
-        stride = max(1, round(fps / 7))
-        frame_index = start_frame
-        while frame_index + stride < end_frame:
+        if min(w, h) < 18:
+            raise ValueError("Please draw a larger tracking rectangle.")
+
+        def features(gray, box):
+            bx, by, bw, bh = box
+            roi = np.zeros(gray.shape, np.uint8)
+            margin = max(2, min(bw, bh) // 12)
+            roi[by+margin:by+bh-margin, bx+margin:bx+bw-margin] = 255
+            return cv2.goodFeaturesToTrack(gray, 120, 0.012, 5, mask=roi)
+
+        points = features(previous, (x, y, w, h))
+        if points is None or len(points) < 7:
+            raise ValueError("Not enough distinctive pixels. Draw the box around a more textured object.")
+        frames = [{"t": round(from_time, 4), "x": x/1280, "y": y/720, "w": w/1280, "h": h/720}]
+        stride = max(1, round(fps / 10))
+        index = start_frame
+        warning = ""
+        while index + stride <= end_frame:
             for _ in range(stride - 1):
-                if not video.grab():
-                    failed = True
+                if not cap.grab():
+                    warning = "Video decoding ended."
                     break
-            if failed:
+            if warning:
                 break
-            ok, frame = video.read()
+            ok, frame = cap.read()
             if not ok:
-                failed = True
+                warning = "Video decoding ended."
                 break
-            frame_index += stride
-            canvas = _canvas(frame, cv2)
-            gray = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
-            margin = max(26, round(max(w, h) * 0.65))
-            left = max(0, x - margin)
-            top = max(0, y - margin)
-            right = min(1280, x + w + margin)
-            bottom = min(720, y + h + margin)
-            search = gray[top:bottom, left:right]
-            if search.shape[0] < h or search.shape[1] < w:
-                failed = True
+            index += stride
+            current = cv2.cvtColor(_canvas(frame, cv2), cv2.COLOR_BGR2GRAY)
+            next_points, status, _ = cv2.calcOpticalFlowPyrLK(
+                previous, current, points, None, winSize=(23, 23), maxLevel=3)
+            if next_points is None:
+                warning = "Object features disappeared."
                 break
-            match = cv2.matchTemplate(search, template, cv2.TM_CCOEFF_NORMED)
-            _, score, _, location = cv2.minMaxLoc(match)
-            if not math.isfinite(score) or score < 0.55:
-                failed = True
+            good = status.ravel() == 1
+            source = points.reshape(-1, 2)[good]
+            dest = next_points.reshape(-1, 2)[good]
+            if len(source) < 7:
+                warning = "Too few tracked pixels."
                 break
-            x, y = left + location[0], top + location[1]
-            # Slow adaptation helps accommodate lighting changes.
-            new_patch = gray[y:y+h, x:x+w]
-            template = cv2.addWeighted(template, 0.8, new_patch, 0.2, 0)
-            t = (frame_index / fps) - clip_start
-            keyframes.append({"t": round(t, 4), "x": x/1280, "y": y/720, "w": w/1280, "h": h/720})
-            sampled += 1
-        last_time = float(keyframes[-1]["t"])
-        expected_end = clip_end - clip_start
-        complete = not failed and frame_index + stride >= end_frame and end_frame >= round(clip_end * fps) - stride
-        return {"keyframes": keyframes, "tracked_until": last_time,
-                "complete": complete, "warning": "" if complete else
-                f"Tracking ended at {last_time:.2f}s (loss of confidence or 120s tracking limit). Reposition the mask and track again; review every affected frame."}
+            reverse, rev_status, _ = cv2.calcOpticalFlowPyrLK(
+                current, previous, dest.astype("float32").reshape(-1,1,2), None)
+            if reverse is None:
+                warning = "Tracking confidence dropped."
+                break
+            error = np.linalg.norm(source - reverse.reshape(-1,2), axis=1)
+            passed = (rev_status.ravel() == 1) & (error < 2.5)
+            source, dest = source[passed], dest[passed]
+            if len(source) < 7:
+                warning = "Tracked pixels failed consistency checks."
+                break
+            affine, inliers = cv2.estimateAffinePartial2D(
+                source, dest, method=cv2.RANSAC, ransacReprojThreshold=3)
+            if affine is None or inliers is None or inliers.mean() < 0.55:
+                warning = "Movement was ambiguous."
+                break
+            scale = math.hypot(float(affine[0,0]), float(affine[0,1]))
+            if not 0.8 <= scale <= 1.25:
+                warning = "Object resized too quickly."
+                break
+            corners = np.float32([[x,y],[x+w,y],[x+w,y+h],[x,y+h]])
+            transformed = cv2.transform(corners[None,:,:], affine)[0]
+            low = transformed.min(axis=0)
+            high = transformed.max(axis=0)
+            nx, ny = map(float, low)
+            nw, nh = map(float, high-low)
+            if nx < 0 or ny < 0 or nx+nw >= 1280 or ny+nh >= 720 or min(nw,nh) < 18:
+                warning = "Tracked object reached the frame edge."
+                break
+            x,y,w,h = round(nx),round(ny),round(nw),round(nh)
+            previous = current
+            points = features(previous, (x,y,w,h))
+            if points is None or len(points) < 7:
+                warning = "Tracking region lost detail."
+                break
+            t = index/fps-clip_start
+            frames.append({"t":round(t,4),"x":x/1280,"y":y/720,"w":w/1280,"h":h/720})
+        complete = not warning and end_frame >= round(clip_end*fps)-stride-1
+        if not complete and not warning:
+            warning = "120-second tracking limit reached."
+        last = frames[-1]["t"]
+        return {"keyframes":frames,"tracked_until":last,"complete":complete,
+                "warning": (f"{warning} Tracking ended at {last:.2f}s. Inspect and retrack any uncovered frames."
+                            if not complete else "Tracking completed. Review the rendered video frame by frame.")}
     finally:
-        video.release()
+        cap.release()
 
 
 def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
