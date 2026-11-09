@@ -67,3 +67,12 @@ blurred exports require it. The pipeline never uploads video to a remote service
   alternatives for those recordings.
 - MediaPipe is optional and not currently included in packaged installers.
   This branch requires manual installation for testing.
+
+## If every censor region reports "Tracking incomplete"
+- Update to the latest branch and run **Track censor interval** again.
+  Existing saved projects retain old keyframes until retracked.
+- The tracker now combines optical flow with a local correlation fallback
+  when corner features disappear; it reports the reason and stop time per region.
+- If a region still fails: draw it around a larger textured area, avoid
+  fully black/flat regions, or split the censor time span into smaller intervals.
+- An incomplete track is *not* accepted as de-identified. Check every frame.
