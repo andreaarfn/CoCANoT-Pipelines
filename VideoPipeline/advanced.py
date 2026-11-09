@@ -40,18 +40,28 @@ def _rect(region):
 
 
 def _interpolate(region, time):
+    """Move tracked boxes without changing their original dimensions.
+
+    Also prevents older saved tracks with scale drift from expanding masks.
+    """
     points = region.get("keyframes") or []
     if not points:
         return region
     ordered = sorted(points, key=lambda item: float(item["t"]))
+    fixed_w, fixed_h = float(region["w"]), float(region["h"])
+    def fixed(point):
+        # Clamp the position to keep the original-size redaction on-screen.
+        return {**region, "x": max(0.0, min(1.0-fixed_w, float(point["x"]))),
+                "y": max(0.0, min(1.0-fixed_h, float(point["y"]))),
+                "w": fixed_w, "h": fixed_h}
     if time <= float(ordered[0]["t"]):
-        return {**region, **ordered[0]}
+        return fixed(ordered[0])
     for left, right in zip(ordered, ordered[1:]):
         lo, hi = float(left["t"]), float(right["t"])
         if lo <= time <= hi:
             factor = (time - lo) / max(1e-8, hi - lo)
-            return {**region, **{k: float(left[k]) * (1 - factor) + float(right[k]) * factor for k in ("x", "y", "w", "h")}}
-    return {**region, **ordered[-1]}
+            return fixed({k: float(left[k])*(1-factor) + float(right[k])*factor for k in ("x","y")})
+    return fixed(ordered[-1])
 
 
 def track_region(path: str, clip_start: float, clip_end: float, region: dict,
