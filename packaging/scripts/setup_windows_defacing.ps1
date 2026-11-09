@@ -113,7 +113,7 @@ try {
 } finally {
   Remove-Item -LiteralPath $temporaryScript -Force -ErrorAction SilentlyContinue
 }
-if ($installExitCode -ne 0) { throw "One or more Linux dependencies could not be installed (Ubuntu exit code $installExitCode). See the output above. You may retry using Start Menu > CoCANoT > Complete MRI defacing setup." }
+if ($installExitCode -ne 0) { throw "One or more Linux dependencies could not be installed (Ubuntu exit code $installExitCode). See the output above. You may retry using Start Menu > CoCANoT > Complete defacing setup." }
 & $wslPath -d Ubuntu --exec bash -lc $check
 if ($LASTEXITCODE -ne 0) { throw 'FSL/PyDeface setup returned success but the required Linux tools are not accessible. Step 3C is NOT ready.' }
 Write-Host 'SUCCESS: All Step 3C prerequisites detected. Restart CoCANoT and retry Step 3C.' -ForegroundColor Green
