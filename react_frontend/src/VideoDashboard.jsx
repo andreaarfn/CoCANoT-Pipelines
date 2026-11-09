@@ -268,6 +268,20 @@ export default function VideoDashboard() {
           : blur.mode === "subject"
           ? "The selected rectangle seeds pixel-level segmentation when exporting. The editor only shows an approximate preview; inspect the final output."
           : "Keep the rectangle sharp and blur the remaining background. Blur alone is not validated de-identification."}</p>
+        {blur.mode === "person" && <div className="video-person-tools">
+          {personBlurStatus?.ready ? <p>People detection is ready on this device.</p> : <>
+            <p>{personBlurStatus?.runtime_installed ? "The people-detection model is not installed." : "Install MediaPipe in the Python environment running CoCANoT."}</p>
+            <code>python -m pip install mediapipe</code>
+            <button disabled={personBlurBusy} onClick={installPersonBlurModel}>
+              {personBlurBusy ? "Setting up…" : "Download person detection model"}
+            </button>
+          </>}
+          <button disabled={!clip || personBlurBusy || !personBlurStatus?.ready} onClick={previewPersonBlur}>
+            {personBlurBusy ? "Generating preview…" : "Preview people-aware blur at playhead"}
+          </button>
+          {personBlurPreview && <button onClick={()=>setPersonBlurPreview(null)}>Return to video playback</button>}
+          <p>People remain visible, including faces. Use opaque censor boxes where identifying features must be hidden.</p>
+        </div>}
         {blur.mode !== "person" && <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>Preserve {k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(blur[k]*100)} onChange={e=>editBlur(k,clamp(Number(e.target.value)/100,0,k==="x"?1-blur.w:k==="y"?1-blur.h:k==="w"?1-blur.x:1-blur.y))}/></label>)}</div>}
       </>}
       <h3>Censor regions ({masks.length})</h3>{!masks.length && <p>No masks on this clip.</p>}
