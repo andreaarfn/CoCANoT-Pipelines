@@ -34,6 +34,7 @@ fi
 
 "${PREFIX}/bin/python" - <<'PY'
 import webview, fitz, PIL, nibabel, numpy, matplotlib, openpyxl, pyedflib
+import scipy, scipy.ndimage, flask, yaml, nipype, requests
 print("Python imports: OK")
 PY
 
