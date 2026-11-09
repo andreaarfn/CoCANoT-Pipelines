@@ -14,6 +14,9 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 "%PREFIX%\python.exe" -c "import webview, numpy, nibabel, pyedflib, fitz, openpyxl, clr_loader, cffi, pythonnet"
 if errorlevel 1 exit /b 1
+rem Verify all major Windows application and imaging runtime dependencies were installed.
+"%PREFIX%\python.exe" -c "import flask, yaml, PIL, matplotlib, requests, networkx, nipype, traits"
+if errorlevel 1 exit /b 1
 if not exist "%PREFIX%\Library\bin\dcm2niix.exe" (echo Bundled dcm2niix.exe missing from Windows Conda runtime & exit /b 1)
 if exist "%PREFIX%\CoCANoT.bat" del /q "%PREFIX%\CoCANoT.bat"
 if not exist "%APPROOT%\react_frontend\dist\index.html" (echo React frontend missing & exit /b 1)
