@@ -4,6 +4,7 @@ import {
   Brain,
   FileText,
   Users,
+  Video,
 } from "lucide-react";
 import NeedsAttention from "./NeedsAttention";
 import styles from "./HomeDashboard.module.css";
@@ -31,6 +32,13 @@ export default function HomeDashboard({
         "Select EDF recordings, scrub identifying header information, review results, and convert accepted recordings to BIDS.",
       icon: Activity,
       button: "Open Electrophysiology",
+    },
+    {
+      key: "video",
+      title: "Video",
+      description: "Import, trim, rearrange, and manually censor research videos before export and privacy review.",
+      icon: Video,
+      button: "Open Video",
     },
     {
       key: "metadata-home",
