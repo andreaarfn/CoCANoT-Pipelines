@@ -61,7 +61,10 @@ def packages_in(path: Path) -> set[str]:
     return names
 
 def imports_in(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+    except (SyntaxError, UnicodeError, OSError) as exc:
+        raise RuntimeError(f"Cannot audit Python source {path.relative_to(ROOT)}: {exc}") from exc
     imports = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
