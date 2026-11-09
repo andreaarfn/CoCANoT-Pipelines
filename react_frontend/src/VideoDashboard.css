@@ -54,3 +54,5 @@
 
 .video-properties select{padding:9px 10px;border:1px solid #c8d5e1;border-radius:7px;width:100%;background:white;color:#203854;font:inherit}
 .video-player:has(.video-mask-overlay) {user-select:none}
+
+.video-mask-capture{position:absolute;inset:0;z-index:5;touch-action:none;background:transparent}
