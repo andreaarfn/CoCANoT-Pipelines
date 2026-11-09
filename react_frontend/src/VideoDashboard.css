@@ -62,3 +62,10 @@
 .video-person-tools{display:flex;flex-direction:column;gap:9px;padding:12px;background:#f4f8fb;border:1px solid #d8e5ef;border-radius:10px;margin:9px 0}
 .video-person-tools code{display:block;padding:9px;background:#e9f0f6;border-radius:6px;white-space:normal;overflow-wrap:anywhere;font-size:12px}
 .video-person-tools button{align-self:flex-start}
+
+.video-polygon-outline{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.video-player{isolation:isolate}
+.video-mask-capture{user-select:none}
+.video-person-tools .video-mask-settings{width:100%;box-sizing:border-box;margin:0}
+.video-person-tools .video-actions{display:flex;flex-wrap:wrap}
+.video-person-tools .video-fields input{max-width:100%}
