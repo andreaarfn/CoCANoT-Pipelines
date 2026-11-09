@@ -15342,7 +15342,7 @@ class QuietHandler(
         byte_range = self.headers.get("Range", "")
         start, end = 0, size - 1
         if byte_range:
-            match = re.fullmatch(r"bytes=(\\d*)-(\\d*)", byte_range)
+            match = re.fullmatch(r"bytes=(\d*)-(\d*)", byte_range)
             if not match or (not match.group(1) and not match.group(2)):
                 self.send_error(416)
                 return
