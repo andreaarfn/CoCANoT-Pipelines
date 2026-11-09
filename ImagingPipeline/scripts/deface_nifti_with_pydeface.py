@@ -559,6 +559,9 @@ def main() -> None:
                     )
                     if not output_json.is_file():
                         raise RuntimeError(sidecar_message)
+                    updated_metadata = json.loads(output_json.read_text(encoding="utf-8"))
+                    if not isinstance(updated_metadata, dict) or updated_metadata.get("Defaced") is not True:
+                        raise RuntimeError("Defaced output JSON was not marked true.")
                     print("Existing defaced sidecar verified/updated:", sidecar_message)
                 except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
                     print("ERROR: Could not refresh the existing defaced JSON sidecar:", exc)
