@@ -451,7 +451,7 @@ class SurgicalFollowupStore:
 
         if (
             period != "Unable to quantify"
-            and str(count ?? "").strip() == ""
+            and (count is None or str(count).strip() == "")
         ):
             return False
 
