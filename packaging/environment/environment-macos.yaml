@@ -10,6 +10,7 @@ dependencies:
 
   # Unified React + pywebview dashboard runtime
   - numpy=2.5.2
+  - scipy
   - nibabel=5.4.2
   - matplotlib=3.11.1
   - pillow=12.3.0
