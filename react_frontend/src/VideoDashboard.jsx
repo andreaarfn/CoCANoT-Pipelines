@@ -38,9 +38,9 @@ export default function VideoDashboard() {
       if (!bridge()?.video_pick_files) throw new Error("Open this workflow in the CoCANoT desktop application.");
       const response = await bridge().video_pick_files();
       const items = Array.isArray(response) ? response : [];
-      if (!items.length) return;
+      if (!items.length) {setNotice("No videos selected.");return;}
       const additions = items.map(m => ({ id:id(), path:m.path, name:m.name, duration:m.duration,
-        start:0, end:m.duration, masks:[], width:m.width, height:m.height }));
+        start:0, end:m.duration, masks:[], width:m.width, height:m.height, preview_url:m.preview_url }));
       setProject(p => ({...p, clips:[...p.clips, ...additions]}));
       setSelected(s => s || additions[0].id);
       setReviewed(false);
@@ -75,7 +75,10 @@ export default function VideoDashboard() {
       if (!bridge()?.[action]) throw new Error("Desktop video bridge unavailable.");
       setBusy(true);setNotice("");
       const result = await bridge()[action](action==="video_save_project" ? project : undefined);
-      if (action==="video_load_project" && result) {
+      if (action==="video_load_project" && result?.clips) {
+        const previews = await bridge().video_register_previews(result.clips.map(c => c.path));
+        const previewByPath = new Map(previews.map(item => [item.path, item.preview_url]));
+        result.clips = result.clips.map(c => ({...c,preview_url:previewByPath.get(c.path)}));
         const loaded={...result,clips:result.clips.map(c=>({...c,id:c.id || id(),masks:(c.masks || []).map(m=>({...m,id:m.id || id()}))}))};
         setProject(loaded);setSelected(loaded.clips[0]?.id||null);setCursor(0);setReviewed(false);
       }
@@ -101,7 +104,7 @@ export default function VideoDashboard() {
     <div className="video-steps"><span>1 · Import</span><span>2 · Edit</span><span>3 · Censor</span><span>4 · Review</span><span>5 · Export</span></div>
     <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
       <div className="video-player" ref={frame} onClick={addMask} style={{cursor:maskMode?"crosshair":"default"}}>
-        {clip ? <><video key={clip.id} ref={player} src={`file://${clip.path}`} controls onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}}
+        {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} controls onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}} onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
           onTimeUpdate={event=>{const time=event.currentTarget.currentTime;if(time >=clip.end){event.currentTarget.pause();}setCursor(clamp(time-clip.start,0,duration));}}/>
           <div className="video-mask-overlay">{masks.filter(m=>cursor>=m.start && cursor<=m.end).map(m=><div key={m.id} className="video-mask" style={{left:`${m.x*100}%`,top:`${m.y*100}%`,width:`${m.w*100}%`,height:`${m.h*100}%`}}/>)}</div>
         </> : <div className="video-empty">Import a recording to begin. Original footage is never modified.</div>}
