@@ -9,6 +9,8 @@ $Py = Join-Path $env:CONDA_PREFIX "python.exe"
 if (-not (Test-Path $Py)) { throw "Bundled build Python missing: $Py" }
 if (-not (Get-Command constructor -ErrorAction SilentlyContinue)) { throw "Install conda constructor." }
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw "Install Node.js/npm on the build machine." }
+& $Py (Join-Path $ProjectRoot "packaging/scripts/audit_runtime_dependencies.py") --platform windows
+if ($LASTEXITCODE -ne 0) { throw "Windows pipeline dependency audit failed" }
 Push-Location (Join-Path $ProjectRoot "react_frontend")
 try {
   & npm ci
