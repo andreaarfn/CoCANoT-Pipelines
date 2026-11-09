@@ -15,6 +15,7 @@ import ImagingDashboard from "./ImagingDashboard";
 
 
 import ElectrophysiologyDashboard from "./ElectrophysiologyDashboard";
+import VideoDashboard from "./VideoDashboard";
 
 
 
@@ -1049,6 +1050,9 @@ export default function App() {
     );
 
 
+
+  } else if (page === "video") {
+    content = <VideoDashboard />;
 
   } else if (page === "help-support") {
 
