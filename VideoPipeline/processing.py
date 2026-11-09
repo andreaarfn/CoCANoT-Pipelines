@@ -42,6 +42,14 @@ def inspect_video(path: str) -> dict:
             "audio": any(s.get("codec_type") == "audio" for s in data.get("streams", []))}
 
 
+def _validate_box(region: dict) -> None:
+    values = [float(region.get(k, 0)) for k in ("x", "y", "w", "h")]
+    if (not all(map(math.isfinite, values)) or values[0] < 0 or values[1] < 0
+            or values[2] <= 0 or values[3] <= 0 or values[0]+values[2] > 1.001
+            or values[1]+values[3] > 1.001):
+        raise ValueError("Region geometry must fit within the video frame.")
+
+
 def validate_project(project: dict) -> list[dict]:
     clips = project.get("clips")
     if not isinstance(clips, list) or not clips or len(clips) > 1000:
@@ -66,6 +74,23 @@ def validate_project(project: dict) -> list[dict]:
             b = float(mask.get("end", end - start))
             if not all(map(math.isfinite, (a, b))) or a < 0 or b <= a:
                 raise ValueError("Invalid mask time interval.")
+        background = clip.get("background_blur")
+        if background and background.get("enabled"):
+            _validate_box(background)
+        for mask in masks:
+            points = mask.get("keyframes", [])
+            if points:
+                if not isinstance(points, list) or len(points) > 20000:
+                    raise ValueError("Invalid tracking keyframes.")
+                previous = -1
+                for point in points:
+                    _validate_box(point)
+                    t = float(point["t"])
+                    if not math.isfinite(t) or t <= previous or t < 0 or t > end-start + 0.5:
+                        raise ValueError("Invalid tracking keyframe timestamp.")
+                    previous = t
+                if float(mask.get("tracked_until", -1)) + 0.3 < float(mask.get("end", end-start)):
+                    raise ValueError("Tracking doesn't cover the mask's full interval. Review and shorten it or retrack before export.")
         output.append({**clip, "media": media, "start": start, "end": end})
     return output
 
@@ -81,6 +106,16 @@ def render_project(project: dict, destination: str) -> dict:
     temp = target.with_name(target.stem + ".partial.mp4")
     if temp.exists():
         raise FileExistsError(f"Temporary export already exists: {temp}")
+    if any(c.get("background_blur", {}).get("enabled") or any(m.get("keyframes") for m in c.get("masks", [])) for c in clips):
+        from VideoPipeline.advanced import render_advanced
+        try:
+            render_advanced(clips, temp, _binary("ffmpeg"))
+            temp.replace(target)
+        finally:
+            if temp.exists():
+                temp.unlink()
+        return {"path": str(target), "duration": sum(c["end"] - c["start"] for c in clips),
+                "note": "Moving masks/background blur applied. Audio removed. Human privacy review required."}
     command = [_binary("ffmpeg"), "-hide_banner", "-nostdin", "-y"]
     for clip in clips:
         command += ["-ss", str(clip["start"]), "-t", str(clip["end"] - clip["start"]), "-i", clip["media"]["path"]]
