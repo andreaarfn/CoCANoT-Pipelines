@@ -679,6 +679,11 @@ class CoCANoTAPI:
             output.append(info)
         return output
 
+    def video_polygon_blur_preview(self, clip: dict[str, Any], relative_time: float) -> dict[str, Any]:
+        """Produce on-device preview of user-drawn background blur mask."""
+        from VideoPipeline.person_blur import preview_polygon_frame
+        return preview_polygon_frame(clip, float(relative_time))
+
     def video_person_blur_status(self) -> dict[str, Any]:
         from VideoPipeline.person_blur import status
         return status()
