@@ -25,6 +25,14 @@ if ($ubuntuLine.Count -eq 0) {
 if ($ubuntuLine[0] -notmatch '\s2\s*$') {
   throw 'Ubuntu must use WSL version 2. Run: wsl --set-version Ubuntu 2'
 }
+# The Windows MRI defacing runtime uses the default WSL distribution.
+# Never change the user's WSL configuration silently; explain how to choose Ubuntu.
+$defaultOutput = & $wslPath --list --verbose 2>&1 | Out-String
+$defaultOutput = $defaultOutput -replace [char]0, ''
+$defaultUbuntu = @(($defaultOutput -split '\r?\n') | Where-Object { $_ -match '^\s*\*\s*Ubuntu\s+' })
+if ($defaultUbuntu.Count -eq 0) {
+  throw 'CoCANoT Step 3C currently uses the default WSL distribution. In PowerShell, run: wsl --set-default Ubuntu, then retry this setup.'
+}
 # Avoid interactive first-run prompts in this installer.
 & $wslPath -d Ubuntu --exec bash -lc 'id -u; test -d "$HOME"' 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) {
@@ -45,6 +53,7 @@ Write-Host 'Linux FSL or PyDeface is missing.' -ForegroundColor Yellow
 Write-Host 'Only FSL FLIRT and its required runtime packages will be installed through micromamba.'
 Write-Host 'PyDeface will be installed in ~/cocanot-pydeface (a Linux Python virtual environment).'
 Write-Host 'Installing missing lightweight Linux dependencies as approved.'
+Write-Host 'This can download Linux packages and may ask for your Ubuntu sudo password.'
 $install = @'
 set -e
 # Always verify/install the required Ubuntu packages. A PATH check alone can
@@ -104,7 +113,7 @@ try {
 } finally {
   Remove-Item -LiteralPath $temporaryScript -Force -ErrorAction SilentlyContinue
 }
-if ($installExitCode -ne 0) { throw 'One or more Linux dependencies could not be installed. See the output above.' }
+if ($installExitCode -ne 0) { throw "One or more Linux dependencies could not be installed (Ubuntu exit code $installExitCode). See the output above. You may retry using Start Menu > CoCANoT > Complete MRI defacing setup." }
 & $wslPath -d Ubuntu --exec bash -lc $check
 if ($LASTEXITCODE -ne 0) { throw 'FSL/PyDeface setup returned success but the required Linux tools are not accessible. Step 3C is NOT ready.' }
 Write-Host 'SUCCESS: All Step 3C prerequisites detected. Restart CoCANoT and retry Step 3C.' -ForegroundColor Green
