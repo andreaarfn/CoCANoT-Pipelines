@@ -156,7 +156,7 @@ export default function VideoDashboard() {
         {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} controls onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}} onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
           onTimeUpdate={event=>{const time=event.currentTarget.currentTime;if(time >=clip.end){event.currentTarget.pause();}setCursor(clamp(time-clip.start,0,duration));}}/>
           <div className="video-mask-overlay">
-            {blur.enabled && <>
+            {blur.enabled && blur.mode !== "person" && <>
               <div className="video-blurred-area" style={{left:0,top:0,width:"100%",height:`${blur.y*100}%`}} />
               <div className="video-blurred-area" style={{left:0,top:`${(blur.y+blur.h)*100}%`,width:"100%",height:`${(1-blur.y-blur.h)*100}%`}} />
               <div className="video-blurred-area" style={{left:0,top:`${blur.y*100}%`,width:`${blur.x*100}%`,height:`${blur.h*100}%`}} />
@@ -182,11 +182,14 @@ export default function VideoDashboard() {
         <label>Blur method<select value={blur.mode || "rectangle"} onChange={e=>editBlur("mode",e.target.value)}>
           <option value="rectangle">Preserve rectangle</option>
           <option value="subject">Smart subject selection (GrabCut)</option>
+          <option value="person">Detect people automatically (Zoom-style)</option>
         </select></label>
-        <p>{blur.mode === "subject"
+        <p>{blur.mode === "person"
+          ? "Detects and keeps people sharp while blurring the background. Requires an optional local MediaPipe model. The editor only approximates the effect; review the exported MP4."
+          : blur.mode === "subject"
           ? "The selected rectangle seeds pixel-level segmentation when exporting. The editor only shows an approximate preview; inspect the final output."
           : "Keep the rectangle sharp and blur the remaining background. Blur alone is not validated de-identification."}</p>
-        <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>Preserve {k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(blur[k]*100)} onChange={e=>editBlur(k,clamp(Number(e.target.value)/100,0,k==="x"?1-blur.w:k==="y"?1-blur.h:k==="w"?1-blur.x:1-blur.y))}/></label>)}</div>
+        {blur.mode !== "person" && <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>Preserve {k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(blur[k]*100)} onChange={e=>editBlur(k,clamp(Number(e.target.value)/100,0,k==="x"?1-blur.w:k==="y"?1-blur.h:k==="w"?1-blur.x:1-blur.y))}/></label>)}</div>}
       </>}
       <h3>Censor regions ({masks.length})</h3>{!masks.length && <p>No masks on this clip.</p>}
       {masks.map((m,i)=><div className="video-mask-settings" key={m.id}><div><strong>Region {i+1}</strong><button aria-label="Remove mask" onClick={()=>mutateClip(c=>({...c,masks:c.masks.filter(x=>x.id!==m.id)}))}><Trash2 size={15}/></button></div>
