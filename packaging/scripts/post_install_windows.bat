@@ -15,7 +15,7 @@ if errorlevel 1 exit /b 1
 "%PREFIX%\python.exe" -c "import webview, numpy, nibabel, pyedflib, fitz, openpyxl, clr_loader, cffi, pythonnet"
 if errorlevel 1 exit /b 1
 rem Verify all major Windows application and imaging runtime dependencies were installed.
-"%PREFIX%\python.exe" -c "import flask, yaml, PIL, matplotlib, scipy, scipy.ndimage, requests, networkx, nipype, traits"
+"%PREFIX%\python.exe" -c "import flask, yaml, PIL, matplotlib, scipy, scipy.ndimage, requests, networkx, nipype, traits, tkinter"
 if errorlevel 1 exit /b 1
 if not exist "%PREFIX%\Library\bin\dcm2niix.exe" (echo Bundled dcm2niix.exe missing from Windows Conda runtime & exit /b 1)
 if exist "%PREFIX%\CoCANoT.bat" del /q "%PREFIX%\CoCANoT.bat"
