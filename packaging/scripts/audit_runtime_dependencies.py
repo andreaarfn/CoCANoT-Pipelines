@@ -55,6 +55,9 @@ def packages_in(path: Path) -> set[str]:
         match = re.match(r"^([A-Za-z][A-Za-z0-9_.-]*)\s*(?:[=<>!~].*)?$", line)
         if match:
             names.add(match.group(1).lower().replace("_", "-"))
+    # Conda's matplotlib-base supplies the matplotlib Python import.
+    if "matplotlib-base" in names:
+        names.add("matplotlib")
     return names
 
 def imports_in(path: Path) -> set[str]:
