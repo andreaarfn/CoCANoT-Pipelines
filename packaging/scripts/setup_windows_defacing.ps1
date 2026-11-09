@@ -18,11 +18,11 @@ if ($LASTEXITCODE -ne 0) {
   throw 'Could not query WSL distributions. Verify WSL2 is running with: wsl --list --verbose'
 }
 $cleanList = $listOutput -replace [char]0, ''
-$ubuntuLine = @(($cleanList -split "`r?`n") | Where-Object { $_ -match '^\\s*\\*?\\s*Ubuntu\\s+' } | Select-Object -First 1)
+$ubuntuLine = @(($cleanList -split '\r?\n') | Where-Object { $_ -match '^\s*\*?\s*Ubuntu\s+' } | Select-Object -First 1)
 if ($ubuntuLine.Count -eq 0) {
   throw 'Ubuntu is missing. Install it manually with: wsl --install -d Ubuntu'
 }
-if ($ubuntuLine[0] -notmatch '\\s2\\s*$') {
+if ($ubuntuLine[0] -notmatch '\s2\s*$') {
   throw 'Ubuntu must use WSL version 2. Run: wsl --set-version Ubuntu 2'
 }
 # Avoid interactive first-run prompts in this installer.
