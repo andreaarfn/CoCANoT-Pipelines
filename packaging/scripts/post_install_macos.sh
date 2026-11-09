@@ -68,7 +68,11 @@ fi
 if ! "${COCANOT_PREFIX}/bin/python" - <<'PY'
 import proxy_tools
 import webview
-print("pywebview runtime import: OK")
+import scipy
+import scipy.ndimage
+import numpy, nibabel, matplotlib, PIL, fitz, openpyxl, pyedflib
+import flask, yaml, nipype, requests
+print("CoCANoT macOS imaging and application runtime imports: OK")
 PY
 then
     echo "ERROR: bundled pywebview runtime dependencies failed to import."
