@@ -43,12 +43,16 @@ if ($LASTEXITCODE -ne 0) { throw "proxy-tools wheel build failed" }
 & $Py -m pip download --dest $Wheels --only-binary=:all: --no-deps -r $BinaryRequirements
 if ($LASTEXITCODE -ne 0) { throw "Windows wheel download failed" }
 # Explicitly verify Windows desktop bridge dependencies are bundled for offline installs.
-foreach ($package in @("pythonnet", "clr_loader", "cffi", "pycparser")) {
+foreach ($package in @("pythonnet", "clr_loader", "cffi", "pycparser", "pywebview", "nipype", "requests", "traits", "networkx")) {
   $found = Get-ChildItem $Wheels -File -Filter "*.whl" | Where-Object {
     $_.Name -match ("^" + [regex]::Escape($package) + "-")
   }
   if (-not $found) { throw "Missing Windows installer wheel: $package" }
   Write-Host "Bundled Windows dependency: $package"
+}
+# Fail the GitHub build if required setup scripts or the frontend payload are absent.
+foreach ($required in @("setup_windows_defacing.ps1", "packaging_requirements_pip.txt", "react_frontend/dist/index.html")) {
+  if (-not (Test-Path (Join-Path $Payload $required))) { throw "Missing Windows installer payload file: $required" }
 }
 Compress-Archive -Path (Join-Path $Payload "*") -DestinationPath (Join-Path $Stage "app_payload.zip") -Force
 Compress-Archive -Path (Join-Path $Wheels "*") -DestinationPath (Join-Path $Stage "pip_packages.zip") -Force
