@@ -8,6 +8,8 @@ import csv
 import io
 import hashlib
 import json
+import mimetypes
+import secrets
 import re
 import shutil
 import sqlite3
@@ -30,6 +32,10 @@ from PIL import Image, ImageDraw
 import nibabel as nib
 import numpy as np
 from matplotlib import image as mpl_image
+
+from VideoPipeline.processing import inspect_video, save_project, load_project, render_project
+
+_VIDEO_PREVIEWS: dict[str, Path] = {}
 
 ROOT = Path(__file__).resolve().parent
 
@@ -635,6 +641,82 @@ class CoCANoTAPI:
         self._imaging_cleanup_context: dict[str, Any] | None = None
 
         self._load_initial_state()
+
+
+    def video_pick_files(self) -> list[dict[str, Any]]:
+        """Select local video files and register private preview URLs."""
+        if self._window is None:
+            return []
+        selected = self._window.create_file_dialog(
+            webview.FileDialog.OPEN,
+            allow_multiple=True,
+            file_types=(
+                "Video files (*.mp4;*.mov;*.mkv;*.avi;*.webm;*.m4v)",
+                "All files (*.*)",
+            ),
+        )
+        if not selected:
+            return []
+        if isinstance(selected, str):
+            selected = [selected]
+        videos = []
+        for filename in selected:
+            info = inspect_video(str(filename))
+            token = secrets.token_urlsafe(32)
+            _VIDEO_PREVIEWS[token] = Path(info["path"])
+            info["preview_url"] = "/__cocanot_video_preview/" + token
+            videos.append(info)
+        return videos
+
+    def video_register_previews(self, paths: list[str]) -> list[dict[str, Any]]:
+        """Restore preview access when opening a saved editing project."""
+        output = []
+        for path in paths:
+            info = inspect_video(path)
+            token = secrets.token_urlsafe(32)
+            _VIDEO_PREVIEWS[token] = Path(info["path"])
+            info["preview_url"] = "/__cocanot_video_preview/" + token
+            output.append(info)
+        return output
+
+    def video_save_project(self, project: dict[str, Any]) -> dict[str, Any]:
+        if self._window is None:
+            raise RuntimeError("The application window is unavailable.")
+        selected = self._window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            save_filename="cocanot_video_project.json",
+            file_types=("JSON project (*.json)",),
+        )
+        if not selected:
+            return {}
+        filename = selected if isinstance(selected, str) else selected[0]
+        return {"path": save_project(project, str(filename))}
+
+    def video_load_project(self) -> dict[str, Any] | None:
+        if self._window is None:
+            raise RuntimeError("The application window is unavailable.")
+        selected = self._window.create_file_dialog(
+            webview.FileDialog.OPEN,
+            allow_multiple=False,
+            file_types=("JSON project (*.json)",),
+        )
+        if not selected:
+            return None
+        filename = selected if isinstance(selected, str) else selected[0]
+        return load_project(str(filename))
+
+    def video_export_project(self, project: dict[str, Any]) -> dict[str, Any]:
+        if self._window is None:
+            raise RuntimeError("The application window is unavailable.")
+        selected = self._window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            save_filename="cocanot_video_redacted.mp4",
+            file_types=("MP4 video (*.mp4)",),
+        )
+        if not selected:
+            return {}
+        filename = selected if isinstance(selected, str) else selected[0]
+        return render_project(project, str(filename))
 
     def _load_initial_state(self) -> None:
         try:
@@ -15244,6 +15326,60 @@ class CoCANoTAPI:
 class QuietHandler(
     SimpleHTTPRequestHandler
 ):
+
+    def do_GET(self) -> None:
+        from urllib.parse import urlsplit
+        prefix = "/__cocanot_video_preview/"
+        route = urlsplit(self.path).path
+        if not route.startswith(prefix):
+            return super().do_GET()
+        token = route[len(prefix):]
+        video = _VIDEO_PREVIEWS.get(token)
+        if not video or not video.is_file():
+            self.send_error(404)
+            return
+        size = video.stat().st_size
+        byte_range = self.headers.get("Range", "")
+        start, end = 0, size - 1
+        if byte_range:
+            match = re.fullmatch(r"bytes=(\\d*)-(\\d*)", byte_range)
+            if not match or (not match.group(1) and not match.group(2)):
+                self.send_error(416)
+                return
+            if not match.group(1):
+                count = int(match.group(2))
+                start = max(0, size - count)
+            else:
+                start = int(match.group(1))
+                if match.group(2):
+                    end = min(end, int(match.group(2)))
+            if start >= size or start > end:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return
+        self.send_response(206 if byte_range else 200)
+        self.send_header("Content-Type", mimetypes.guess_type(video.name)[0] or "application/octet-stream")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if byte_range:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        try:
+            with video.open("rb") as handle:
+                handle.seek(start)
+                remaining = end - start + 1
+                while remaining > 0:
+                    chunk = handle.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def log_message(
         self,
         format: str,
