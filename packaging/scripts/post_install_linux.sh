@@ -43,5 +43,14 @@ Exec=$HOME/.local/bin/cocanot
 Terminal=false
 Categories=Science;Education;
 EOF
+# Install a user-facing command for removing CoCANoT without sudo.
+# The uninstaller itself lives inside the bundled runtime.
+test -f "$PREFIX/payload/uninstall_linux.sh"
+cat > "$HOME/.local/bin/cocanot-uninstall" <<EOF
+#!/usr/bin/env bash
+exec /bin/bash "$PREFIX/payload/uninstall_linux.sh" "\$@"
+EOF
+chmod +x "$HOME/.local/bin/cocanot-uninstall"
 echo "CoCANoT installed: $HOME/.local/bin/cocanot"
+echo "To uninstall: $HOME/.local/bin/cocanot-uninstall"
 echo "Linux GUI requires a desktop with GTK 3 and WebKit2GTK 4.1 or a compatible pywebview backend."
