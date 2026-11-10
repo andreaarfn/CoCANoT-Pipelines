@@ -15,4 +15,7 @@ if "%REMOVE_DATA%"=="10" (
 )
 rem The install creates these links outside the Conda runtime.
 "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$programs=[Environment]::GetFolderPath('Programs'); if ($programs) { $folder=Join-Path $programs 'CoCANoT'; Remove-Item -LiteralPath (Join-Path $programs 'CoCANoT.lnk') -Force -ErrorAction SilentlyContinue; foreach ($name in @('CoCANoT.lnk','Complete defacing setup.lnk','Uninstall defacing setup.lnk','Complete MRI defacing setup.lnk')) { Remove-Item -LiteralPath (Join-Path $folder $name) -Force -ErrorAction SilentlyContinue }; if (Test-Path -LiteralPath $folder) { $remaining=Get-ChildItem -LiteralPath $folder -Force; if (-not $remaining) { Remove-Item -LiteralPath $folder -Force } } }"
+rem Remove only CoCANoT-created desktop shortcuts pointing to our VBS launcher.
+rem Preserve unrelated shortcuts and user files.
+"%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$desktop=[Environment]::GetFolderPath('DesktopDirectory'); if ($desktop) { $link=Join-Path $desktop 'CoCANoT.lnk'; if (Test-Path -LiteralPath $link -PathType Leaf) { try { $s=(New-Object -ComObject WScript.Shell).CreateShortcut($link); if ($s.TargetPath -match 'wscript[.]exe$' -and $s.Arguments -like '*CoCANoT.vbs*') { Remove-Item -LiteralPath $link -Force -ErrorAction Stop } } catch { Write-Warning $_.Exception.Message } } }"
 exit /b 0
