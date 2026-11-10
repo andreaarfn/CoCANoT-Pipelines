@@ -34,8 +34,13 @@ if errorlevel 1 exit /b 1
 rem Set up Start Menu links through a standalone PowerShell script to avoid
 rem CMD/PowerShell nested-quote errors and verify created .lnk files.
 if not exist "%APPROOT%\windows_shortcuts.ps1" (echo Windows shortcut helper missing & exit /b 1)
-"%POWERSHELL_EXE%" -NoProfile -STA -ExecutionPolicy Bypass -File "%APPROOT%\windows_shortcuts.ps1" -Prefix "%PREFIX%"
-if errorlevel 1 exit /b 1
+"%POWERSHELL_EXE%" -NoProfile -STA -ExecutionPolicy Bypass -File "%APPROOT%\windows_shortcuts.ps1" -Prefix "%PREFIX%" > "%PREFIX%\shortcut-setup-output.log" 2>&1
+if errorlevel 1 (
+  echo WARNING: Start Menu shortcut setup failed, but CoCANoT runtime installation succeeded.
+  echo Review "%PREFIX%\shortcut-setup-output.log" for details.
+) else (
+  echo Windows shortcuts processed. See "%PREFIX%\shortcut-setup-output.log".
+)
 rem Do not automatically launch the defacing assistant after app installation.
 rem Users can optionally open it through the Start Menu shortcut after installing WSL2 and Ubuntu.
 echo CoCANoT installed. Launch from the optional Start Menu shortcut or "%PREFIX%\CoCANoT.vbs".
