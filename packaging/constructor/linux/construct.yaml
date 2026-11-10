@@ -15,4 +15,5 @@ extra_files:
   - ../../stage-linux/app_payload.tar.gz: payload/app_payload.tar.gz
   - ../../stage-linux/pip_packages.tar.gz: payload/pip_packages.tar.gz
   - ../../scripts/post_install_linux.sh: payload/post_install_linux.sh
+  - ../../scripts/uninstall_linux.sh: payload/uninstall_linux.sh
 post_install: ../../scripts/post_install_linux.sh
