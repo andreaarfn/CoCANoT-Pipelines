@@ -192,9 +192,9 @@ RESULT=\$(/usr/bin/osascript <<'APPLESCRIPT'
 try
     display dialog "Uninstall CoCANoT completely?
 
-This removes the current user's CoCANoT application, private Python/runtime dependencies, local CoCANoT database and settings, caches, logs, preferences, and installer receipts.
+This removes the current user's CoCANoT application, private Python/runtime dependencies, caches, logs, preferences, and installer receipts.
 
-It will NOT delete source DICOM/NIfTI/EDF data or user-selected derivatives/BIDS output folders." buttons {"Cancel", "Uninstall Everything"} default button "Uninstall Everything" cancel button "Cancel" with title "Uninstall CoCANoT"
+It will NOT delete source DICOM/NIfTI/EDF data or user-selected derivatives/BIDS output folders." buttons {"Cancel", "Uninstall CoCANoT"} default button "Uninstall CoCANoT" cancel button "Cancel" with title "Uninstall CoCANoT"
     return button returned of result
 on error number -128
     return "Cancel"
@@ -202,7 +202,7 @@ end try
 APPLESCRIPT
 )
 
-if [ "\${RESULT}" != "Uninstall Everything" ]; then
+if [ "\${RESULT}" != "Uninstall CoCANoT" ]; then
     exit 0
 fi
 
@@ -213,17 +213,36 @@ APPLESCRIPT
     exit 1
 fi
 
+# Ask independently about sensitive local patient records; default to preserve.
+DATA_OPTION=\$(/usr/bin/osascript <<'APPLESCRIPT'
+try
+    display dialog "Also permanently delete the CoCANoT local patient repository (~/.cocanot)?
+
+This includes saved patient records, clinical and surgical metadata, attachments, and settings. This cannot be undone.
+
+Separately selected DICOM, NIfTI, EDF, derivatives, and BIDS directories will not be deleted." buttons {"Keep Patient Data", "Delete Patient Data"} default button "Keep Patient Data" with icon caution with title "CoCANoT Patient Data"
+    return button returned of result
+on error number -128
+    return "Keep Patient Data"
+end try
+APPLESCRIPT
+)
+
 TEMP_SCRIPT=\$(mktemp "/tmp/cocanot-uninstall.XXXXXX")
 cp "\${UNINSTALL_SCRIPT}" "\${TEMP_SCRIPT}"
 chmod 700 "\${TEMP_SCRIPT}"
 
-/bin/bash "\${TEMP_SCRIPT}" --yes --prefix "\${COCANOT_PREFIX}"
+if [ "\${DATA_OPTION}" = "Delete Patient Data" ]; then
+    /bin/bash "\${TEMP_SCRIPT}" --yes --delete-local-data --prefix "\${COCANOT_PREFIX}"
+else
+    /bin/bash "\${TEMP_SCRIPT}" --yes --prefix "\${COCANOT_PREFIX}"
+fi
 STATUS=\$?
 rm -f "\${TEMP_SCRIPT}" 2>/dev/null || true
 
 if [ "\${STATUS}" -eq 0 ]; then
     /usr/bin/osascript <<'APPLESCRIPT'
-display dialog "CoCANoT was removed successfully." buttons {"OK"} default button "OK" with title "CoCANoT Uninstaller"
+display dialog "CoCANoT was removed successfully. Patient data was handled according to your selection." buttons {"OK"} default button "OK" with title "CoCANoT Uninstaller"
 APPLESCRIPT
 else
     /usr/bin/osascript <<'APPLESCRIPT'
