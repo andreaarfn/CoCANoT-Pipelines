@@ -26,8 +26,32 @@ if [ -d "$HOME/fsl" ]; then printf '%s\n' "$HOME/fsl"; else printf 'not found\n'
 printf 'CoCANoT micromamba cache: '
 if [ -d "$HOME/.local/share/cocanot-mamba" ]; then printf '%s\n' "$HOME/.local/share/cocanot-mamba"; else printf 'not found\n'; fi
 '@
-& $wslPath -d Ubuntu --exec bash -lc $inspect
-if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect Ubuntu defacing installations. No changes made.' }
+# Pass the inspection script as a UTF-8/LF file rather than via bash -lc.
+# PowerShell/WSL argument quoting can corrupt multiline shell programs.
+function Invoke-CoCANoTUbuntuScript {
+    param([Parameter(Mandatory = $true)][string]$ScriptText)
+    $temporaryScript = Join-Path $env:TEMP ('cocanot-defacing-' + [guid]::NewGuid().ToString('N') + '.sh')
+    try {
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        $normalized = ($ScriptText -replace "`r`n", "`n" -replace "`r", "`n").TrimEnd() + "`n"
+        [System.IO.File]::WriteAllText($temporaryScript, $normalized, $utf8)
+        $linuxPath = (& $wslPath -d Ubuntu --exec wslpath -a -u $temporaryScript | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $linuxPath) {
+            throw 'Could not translate temporary script path for Ubuntu.'
+        }
+        & $wslPath -d Ubuntu --exec bash $linuxPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Ubuntu script failed (exit code $LASTEXITCODE)."
+        }
+    } finally {
+        Remove-Item -LiteralPath $temporaryScript -Force -ErrorAction SilentlyContinue
+    }
+}
+try {
+    Invoke-CoCANoTUbuntuScript -ScriptText $inspect
+} catch {
+    throw "Cannot inspect Ubuntu defacing installations. No changes made. $($_.Exception.Message)"
+}
 $answer = Read-Host 'Delete the CoCANoT defacing directories and cache shown above from Ubuntu? Type REMOVE to confirm'
 if ($answer -cne 'REMOVE') {
     Write-Host 'Cancelled. Nothing was removed.'
@@ -58,16 +82,6 @@ for relative in cocanot-pydeface fsl .local/share/cocanot-mamba; do
 done
 echo 'CoCANoT Linux defacing directories removed; Ubuntu and WSL retained.'
 '@
-$temporaryScript = Join-Path $env:TEMP ('cocanot-remove-defacing-' + [guid]::NewGuid().ToString('N') + '.sh')
-try {
-    $utf8 = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($temporaryScript, ($removeScript -replace "`r`n", "`n").TrimEnd() + "`n", $utf8)
-    $linuxScript = (& $wslPath -d Ubuntu --exec wslpath -a -u $temporaryScript | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $linuxScript) { throw 'Failed to translate temporary script path; no changes made.' }
-    & $wslPath -d Ubuntu --exec bash $linuxScript
-    if ($LASTEXITCODE -ne 0) { throw 'Ubuntu defacing cleanup failed; inspect errors above.' }
-} finally {
-    Remove-Item -LiteralPath $temporaryScript -Force -ErrorAction SilentlyContinue
-}
+Invoke-CoCANoTUbuntuScript -ScriptText $removeScript
 Write-Host 'SUCCESS: CoCANoT defacing dependency removal completed.' -ForegroundColor Green
 Write-Host 'You can reinstall later using Start Menu > CoCANoT > Complete defacing setup.'
