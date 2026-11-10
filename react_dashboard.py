@@ -3611,7 +3611,7 @@ class CoCANoTAPI:
                             stages["defaced"] / relative.parent / f"{base}_defaced.nii.gz",
                             stages["defaced"] / relative.parent / f"{base}_defaced.nii",
                         )
-                        if not any(p.is_file() and p.stat().st_size > 0 for p in options):
+                        if not any(self._verified_defaced_metadata(p) for p in options):
                             break
                     else:
                         if recorded.get("deface") == "complete":
@@ -3773,6 +3773,8 @@ class CoCANoTAPI:
                     output_root / relative.parent / f"{base}_{suffix}.nii",
                 ) if p.is_file() and p.stat().st_size > 0), None)
                 if match is None:
+                    return []
+                if suffix == "defaced" and not self._verified_defaced_metadata(match):
                     return []
                 result.append(match)
             return result
@@ -3967,7 +3969,7 @@ class CoCANoTAPI:
         for path in scrubbed:
             relative = path.relative_to(stages["scrubbed"])
             base = self._strip_nifti_suffix(path)
-            if not any(p.is_file() and p.stat().st_size > 0 for p in (
+            if not any(self._verified_defaced_metadata(p) for p in (
                 stages["defaced"] / relative.parent / f"{base}_defaced.nii.gz",
                 stages["defaced"] / relative.parent / f"{base}_defaced.nii",
             )):
@@ -4180,6 +4182,25 @@ class CoCANoTAPI:
 
         return True
 
+    @staticmethod
+    def _verified_defaced_metadata(nifti_path: Path) -> bool:
+        """Step 3C is only complete with a nonempty NIfTI and true output JSON."""
+        if not nifti_path.is_file() or nifti_path.stat().st_size == 0:
+            return False
+        sidecar = nifti_path.with_name(
+            f"{CoCANoTAPI._strip_nifti_suffix(nifti_path)}.json"
+        )
+        try:
+            with sidecar.open("r", encoding="utf-8") as handle:
+                metadata = json.load(handle)
+        except (OSError, ValueError, json.JSONDecodeError):
+            return False
+        return (
+            isinstance(metadata, dict)
+            and metadata.get("Defaced") is True
+            and bool(metadata.get("DefacingSoftware"))
+        )
+
     def _verify_deface_outputs(
         self,
         stages: dict[str, Path],
@@ -4201,7 +4222,7 @@ class CoCANoTAPI:
                 / relative.parent
                 / f"{base}_defaced.nii",
             ]
-            if not any(candidate.is_file() for candidate in candidates):
+            if not any(self._verified_defaced_metadata(candidate) for candidate in candidates):
                 return False
 
         return True
@@ -4589,6 +4610,19 @@ class CoCANoTAPI:
         if self.imaging_stage_state.get(operation) == "stopped":
             return
 
+        if operation == "deface" and return_code == 0:
+            try:
+                stages = self._imaging_stage_paths(load_imaging_config())
+                if not self._verify_deface_outputs(stages):
+                    self._imaging_log(
+                        "ERROR: Step 3C is not complete: defaced outputs are "
+                        "missing NIfTI files or matching JSON with Defaced=true. "
+                        "Inspect scrubbed_defaced, not scrubbed_header."
+                    )
+                    return_code = 1
+            except (OSError, ValueError, RuntimeError) as exc:
+                self._imaging_log(f"ERROR: Step 3C output validation failed: {exc}")
+                return_code = 1
         self.imaging_stage_state[operation] = (
             "complete"
             if return_code == 0
