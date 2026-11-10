@@ -50,8 +50,31 @@ jobs:
         run: bash packaging/scripts/build_macos.sh
       - name: Check PKG
         run: |
-          test -s packaging/constructor/macos/CoCANoT-Mac-arm64.pkg
-          shasum -a 256 packaging/constructor/macos/CoCANoT-Mac-arm64.pkg > packaging/constructor/macos/CoCANoT-Mac-arm64.pkg.sha256
+          set -euo pipefail
+          echo "Job ref: ${GITHUB_REF}; commit: ${GITHUB_SHA}"
+          echo "Runner architecture: $(uname -m)"
+          test "$(uname -m)" = "arm64" || { echo "::error::Wrong macOS runner architecture"; exit 1; }
+          directory="packaging/constructor/macos"
+          expected="$directory/CoCANoT-Mac-arm64.pkg"
+          echo "macOS constructor outputs:"
+          find "$directory" -maxdepth 2 -type f \( -name '*.pkg' -o -name '*.pkg.sha256' \) -print
+          if [ ! -s "$expected" ]; then
+            # Constructor versions may leave an installer at its configured
+            # original filename. Normalize ONLY that known filename.
+            original="$directory/CoCANoT-Mac-0.1-Test.pkg"
+            if [ -s "$original" ]; then
+              mv -f "$original" "$expected"
+              echo "Normalized constructor output to $expected"
+            fi
+          fi
+          if [ ! -s "$expected" ]; then
+            echo "::error::Expected macOS installer missing or empty: $expected"
+            echo "Other candidate packages:"
+            find packaging -type f -name '*.pkg' -print
+            exit 1
+          fi
+          shasum -a 256 "$expected" > "$expected.sha256"
+          ls -lh "$expected" "$expected.sha256"
       - uses: actions/upload-artifact@v6
         with:
           name: CoCANoT-Mac-arm64
@@ -88,8 +111,31 @@ jobs:
         run: bash packaging/scripts/build_macos.sh
       - name: Check PKG
         run: |
-          test -s packaging/constructor/macos/CoCANoT-Mac-x86_64.pkg
-          shasum -a 256 packaging/constructor/macos/CoCANoT-Mac-x86_64.pkg > packaging/constructor/macos/CoCANoT-Mac-x86_64.pkg.sha256
+          set -euo pipefail
+          echo "Job ref: ${GITHUB_REF}; commit: ${GITHUB_SHA}"
+          echo "Runner architecture: $(uname -m)"
+          test "$(uname -m)" = "x86_64" || { echo "::error::Wrong macOS runner architecture"; exit 1; }
+          directory="packaging/constructor/macos"
+          expected="$directory/CoCANoT-Mac-x86_64.pkg"
+          echo "macOS constructor outputs:"
+          find "$directory" -maxdepth 2 -type f \( -name '*.pkg' -o -name '*.pkg.sha256' \) -print
+          if [ ! -s "$expected" ]; then
+            # Constructor versions may leave an installer at its configured
+            # original filename. Normalize ONLY that known filename.
+            original="$directory/CoCANoT-Mac-0.1-Test.pkg"
+            if [ -s "$original" ]; then
+              mv -f "$original" "$expected"
+              echo "Normalized constructor output to $expected"
+            fi
+          fi
+          if [ ! -s "$expected" ]; then
+            echo "::error::Expected macOS installer missing or empty: $expected"
+            echo "Other candidate packages:"
+            find packaging -type f -name '*.pkg' -print
+            exit 1
+          fi
+          shasum -a 256 "$expected" > "$expected.sha256"
+          ls -lh "$expected" "$expected.sha256"
       - uses: actions/upload-artifact@v6
         with:
           name: CoCANoT-Mac-x86_64
