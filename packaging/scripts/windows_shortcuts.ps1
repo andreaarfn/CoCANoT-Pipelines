@@ -16,13 +16,13 @@ foreach ($file in @($icon, $launcher, $setup, $uninstallSetup)) {
 # relying on [Environment]::GetFolderPath('Programs') alone can write links
 # into the administrator's Start Menu instead of the signed-in user's.
 $profileMatch = [regex]::Match(
-  $Prefix.TrimEnd('\\', '/'),
+  $Prefix.TrimEnd([char]92, [char]47),
   '^(?<profile>.+?)[\\/]+AppData[\\/]+Local[\\/]+CoCANoT[\\/]+runtime$',
   [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
 )
 if ($profileMatch.Success) {
-  $profile = $profileMatch.Groups['profile'].Value
-  $programs = Join-Path $profile 'AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs'
+  $userHome = $profileMatch.Groups['profile'].Value
+  $programs = Join-Path $userHome 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs'
 } else {
   $programs = [Environment]::GetFolderPath('Programs')
 }
