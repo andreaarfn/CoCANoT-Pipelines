@@ -11,6 +11,23 @@ if (-not (Get-Command constructor -ErrorAction SilentlyContinue)) { throw "Insta
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw "Install Node.js/npm on the build machine." }
 & $Py (Join-Path $ProjectRoot "packaging/scripts/audit_runtime_dependencies.py") --platform windows
 if ($LASTEXITCODE -ne 0) { throw "Windows pipeline dependency audit failed" }
+# Validate the packaging scripts before downloading dependencies or compiling
+# the Windows installer. This detects errors earlier than user installation.
+foreach ($scriptName in @("setup_windows_defacing.ps1", "uninstall_windows_defacing.ps1", "windows_shortcuts.ps1")) {
+  $scriptPath = Join-Path $ProjectRoot "packaging/scripts/$scriptName"
+  $parseTokens = $null
+  $parseErrors = $null
+  [void][System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$parseTokens, [ref]$parseErrors)
+  if ($parseErrors.Count -gt 0) {
+    throw "Invalid PowerShell syntax in $scriptName : $($parseErrors | Out-String)"
+  }
+  Write-Host "Validated PowerShell syntax: $scriptName"
+}
+$mainPython = Join-Path $ProjectRoot "react_dashboard.py"
+& $Py -c "import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))" $mainPython
+if ($LASTEXITCODE -ne 0) { throw "Main dashboard Python syntax check failed." }
+Write-Host "Validated dashboard Python syntax."
+
 Push-Location (Join-Path $ProjectRoot "react_frontend")
 try {
   & npm ci
