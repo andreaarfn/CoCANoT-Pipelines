@@ -53,9 +53,11 @@ readme_text: |
 
   An "Uninstall CoCANoT" application is also installed for the current user.
   It removes the
-  CoCANoT application, its private runtime, local CoCANoT application data,
-  caches, preferences, logs, and installer receipts. User-selected source,
-  derivatives, and BIDS output folders are not deleted.
+  CoCANoT application, its private runtime, caches, preferences, logs, and
+  installer receipts. A separate confirmation controls whether the local
+  patient repository (~/.cocanot), including records and settings, is deleted.
+  The default is to retain patient data. User-selected source, derivatives,
+  and BIDS output folders are not deleted.
 
 conclusion_text: |
   CoCANoT was installed successfully.
