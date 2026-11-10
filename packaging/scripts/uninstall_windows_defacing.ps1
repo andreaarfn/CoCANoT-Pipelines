@@ -2,7 +2,7 @@
 # WSL, Ubuntu and shared system packages are deliberately left untouched.
 $ErrorActionPreference = 'Stop'
 Write-Host 'CoCANoT defacing dependency removal' -ForegroundColor Cyan
-Write-Host 'This removes the dedicated Ubuntu directories ~/cocanot-pydeface and ~/fsl.'
+Write-Host 'This removes ~/cocanot-pydeface, ~/fsl, and the CoCANoT micromamba cache.'
 Write-Host 'It does NOT uninstall WSL2, Ubuntu, apt packages or other Linux environments.'
 Write-Host 'WARNING: If you also use ~/fsl outside CoCANoT, do not proceed.'
 $wslPath = Join-Path $env:WINDIR 'System32\wsl.exe'
@@ -23,18 +23,20 @@ printf 'PyDeface virtual environment: '
 if [ -d "$HOME/cocanot-pydeface" ]; then printf '%s\n' "$HOME/cocanot-pydeface"; else printf 'not found\n'; fi
 printf 'FSL environment: '
 if [ -d "$HOME/fsl" ]; then printf '%s\n' "$HOME/fsl"; else printf 'not found\n'; fi
+printf 'CoCANoT micromamba cache: '
+if [ -d "$HOME/.local/share/cocanot-mamba" ]; then printf '%s\n' "$HOME/.local/share/cocanot-mamba"; else printf 'not found\n'; fi
 '@
 & $wslPath -d Ubuntu --exec bash -lc $inspect
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect Ubuntu defacing installations. No changes made.' }
-$answer = Read-Host 'Delete BOTH dedicated directories shown above from Ubuntu? Type REMOVE to confirm'
+$answer = Read-Host 'Delete the CoCANoT defacing directories and cache shown above from Ubuntu? Type REMOVE to confirm'
 if ($answer -cne 'REMOVE') {
     Write-Host 'Cancelled. Nothing was removed.'
     exit 0
 }
 $removeScript = @'
 set -eu
-for name in cocanot-pydeface fsl; do
-  candidate="$HOME/$name"
+for relative in cocanot-pydeface fsl .local/share/cocanot-mamba; do
+  candidate="$HOME/$relative"
   # Refuse symlinked paths and prevent any chance of targeting HOME itself.
   if [ -L "$candidate" ]; then
     echo "ERROR: Refusing symbolic link: $candidate" >&2
@@ -45,8 +47,8 @@ for name in cocanot-pydeface fsl; do
     exit 1
   fi
 done
-for name in cocanot-pydeface fsl; do
-  candidate="$HOME/$name"
+for relative in cocanot-pydeface fsl .local/share/cocanot-mamba; do
+  candidate="$HOME/$relative"
   if [ -d "$candidate" ]; then
     rm -rf -- "$candidate"
     echo "Removed $candidate"
