@@ -15331,6 +15331,11 @@ def _apply_windows_window_icon() -> None:
     user32.SendMessageW.argtypes = (
         wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
     )
+    user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+    user32.GetWindowTextLengthW.argtypes = (wintypes.HWND,)
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
+    user32.GetWindowTextW.restype = ctypes.c_int
     small = user32.LoadImageW(None, str(icon_file), IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
     large = user32.LoadImageW(None, str(icon_file), IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
     if not small and not large:
@@ -15355,6 +15360,8 @@ def _apply_windows_window_icon() -> None:
             user32.SendMessageW(hwnd, WM_SETICON, 1, large)
         return True
     callback = callback_type(apply)
+    user32.EnumWindows.argtypes = (callback_type, wintypes.LPARAM)
+    user32.EnumWindows.restype = wintypes.BOOL
     user32.EnumWindows(callback, 0)
 
 
