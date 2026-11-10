@@ -266,11 +266,8 @@ def scrub_json_metadata(
     ] = extract_imaging_file_metadata(
         nifti_path
     )
-    cleaned["Defaced"] = False
-    cleaned["PHIScrubbed"] = True
-    cleaned[
-        "PHIScrubbedBy"
-    ] = "scrub_nifti_header.py"
+    # Step 3B is a header-scrubbing operation, not a defacing decision.
+    # The output sidecar contains acquisition and imaging metadata only.
 
     return cleaned
 
@@ -381,11 +378,6 @@ def create_json_without_input_sidecar(
                 input_nifti
             )
         ),
-        "Defaced": False,
-        "PHIScrubbed": True,
-        "PHIScrubbedBy": (
-            "scrub_nifti_header.py"
-        ),
     }
 
     output_json.parent.mkdir(
@@ -474,8 +466,31 @@ def process_one_file(
                     sidecar = json.load(handle)
                 valid_existing = (
                     isinstance(sidecar, dict)
-                    and sidecar.get("PHIScrubbed") is True
+                    and isinstance(sidecar.get("imaging_file"), dict)
                 )
+                if valid_existing and any(
+                    key in sidecar
+                    for key in ("Defaced", "PHIScrubbed", "PHIScrubbedBy")
+                ):
+                    # Refresh only the JSON, not an already-valid NIfTI.
+                    # Rebuild from the original DICOM-conversion sidecar
+                    # so the same PHI filtering still runs during repair.
+                    input_json = matching_json_path(input_path)
+                    if input_json is not None:
+                        copy_and_scrub_json(
+                            input_json=input_json,
+                            input_nifti=input_path,
+                            output_json=output_json,
+                        )
+                    else:
+                        create_json_without_input_sidecar(
+                            input_nifti=input_path,
+                            output_json=output_json,
+                        )
+                    print(
+                        "Refreshed legacy Step 3B sidecar without defacing "
+                        f"or PHI status fields: {output_json}"
+                    )
         except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
             valid_existing = False
 
