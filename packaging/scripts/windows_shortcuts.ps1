@@ -5,61 +5,68 @@ $ErrorActionPreference = 'Stop'
 $root = Join-Path $Prefix 'app'
 $icon = Join-Path $root 'cocanot.ico'
 $launcher = Join-Path $Prefix 'CoCANoT.vbs'
+$diagnostics = Join-Path $Prefix 'CoCANoT-Diagnostics.bat'
 $setup = Join-Path $root 'setup_windows_defacing.ps1'
 $uninstallSetup = Join-Path $root 'uninstall_windows_defacing.ps1'
-foreach ($file in @($icon, $launcher, $setup, $uninstallSetup)) {
-  if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing shortcut target: $file" }
-}
+$logFile = Join-Path $Prefix 'shortcut-install.log'
 
-# Constructor may run post-install under an elevated account. Derive the user
-# profile from CoCANoT's standard per-user install directory when possible;
-# relying on [Environment]::GetFolderPath('Programs') alone can write links
-# into the administrator's Start Menu instead of the signed-in user's.
+# Constructor can execute as a different Windows account. For a standard
+# CoCANoT install, derive the target user's Start Menu from the actual prefix.
 $profileMatch = [regex]::Match(
   $Prefix.TrimEnd([char]92, [char]47),
   '^(?<profile>.+?)[\\/]+AppData[\\/]+Local[\\/]+CoCANoT[\\/]+runtime$',
   [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
 )
+$programs = [Environment]::GetFolderPath('Programs')
 if ($profileMatch.Success) {
   $userHome = $profileMatch.Groups['profile'].Value
-  $programs = Join-Path $userHome 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs'
-} else {
-  $programs = [Environment]::GetFolderPath('Programs')
+  $candidate = Join-Path $userHome 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs'
+  if (Test-Path -LiteralPath (Split-Path $candidate -Parent) -PathType Container) {
+    $programs = $candidate
+  }
 }
-if (-not $programs) { throw 'Could not resolve the destination Start Menu.' }
+if (-not $programs) { throw 'Could not determine the Windows Start Menu location.' }
 $folder = Join-Path $programs 'CoCANoT'
 New-Item -ItemType Directory -Force -Path $folder | Out-Null
-$logFile = Join-Path $Prefix 'shortcut-install.log'
-"CoCANoT shortcut installation; Programs: $programs; Prefix: $Prefix" | Set-Content -LiteralPath $logFile -Encoding UTF8
+"CoCANoT shortcut creation. Prefix=$Prefix; Programs=$programs" | Set-Content -LiteralPath $logFile -Encoding UTF8
 $shell = New-Object -ComObject WScript.Shell
-$oldShortcut = Join-Path $folder 'Complete MRI defacing setup.lnk'
-Remove-Item -LiteralPath $oldShortcut -Force -ErrorAction SilentlyContinue
 
-# The defacing setup must remain accessible even when the application shortcut
-# is declined; this avoids making Step 3C impossible to configure.
-$defacingLink = Join-Path $folder 'Complete defacing setup.lnk'
-$defacing = $shell.CreateShortcut($defacingLink)
-$defacing.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$defacing.Arguments = '-NoProfile -ExecutionPolicy Bypass -NoExit -File "' + $setup + '"'
-$defacing.WorkingDirectory = $root
-$defacing.Description = 'Install Linux PyDeface and FSL FLIRT for CoCANoT MRI defacing'
-$defacing.IconLocation = "$icon,0"
-$defacing.Save()
-if (-not (Test-Path -LiteralPath $defacingLink -PathType Leaf)) { throw 'Defacing setup shortcut creation failed.' }
+function Write-Link {
+  param(
+    [Parameter(Mandatory=$true)][string]$Path,
+    [Parameter(Mandatory=$true)][string]$Target,
+    [string]$Arguments = '',
+    [string]$Description = '',
+    [string]$WorkingDirectory = $Prefix
+  )
+  if (-not (Test-Path -LiteralPath $Target -PathType Leaf)) {
+    "WARNING: Skipping $Path because target is missing: $Target" | Add-Content -LiteralPath $logFile
+    return $false
+  }
+  try {
+    $link = $shell.CreateShortcut($Path)
+    $link.TargetPath = $Target
+    $link.Arguments = $Arguments
+    $link.WorkingDirectory = $WorkingDirectory
+    $link.Description = $Description
+    if (Test-Path -LiteralPath $icon -PathType Leaf) {
+      $link.IconLocation = "$icon,0"
+    }
+    $link.Save()
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+      throw "Shortcut file was not created: $Path"
+    }
+    "Created: $Path -> $Target $Arguments" | Add-Content -LiteralPath $logFile
+    Write-Host "Created Start Menu shortcut: $Path"
+    return $true
+  } catch {
+    "WARNING: Could not create $Path : $($_.Exception.Message)" | Add-Content -LiteralPath $logFile
+    Write-Warning "Could not create Start Menu shortcut $Path : $($_.Exception.Message)"
+    return $false
+  }
+}
 
-# Separate optional cleanup utility. Do not remove Linux tools automatically
-# when CoCANoT is uninstalled because FSL may be useful to other programs.
-$uninstallLink = Join-Path $folder 'Uninstall defacing setup.lnk'
-$cleanup = $shell.CreateShortcut($uninstallLink)
-$cleanup.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$cleanup.Arguments = '-NoProfile -ExecutionPolicy Bypass -NoExit -File "' + $uninstallSetup + '"'
-$cleanup.WorkingDirectory = $root
-$cleanup.Description = 'Remove CoCANoT PyDeface and FSL installations from Ubuntu after confirmation'
-$cleanup.IconLocation = "$icon,0"
-$cleanup.Save()
-if (-not (Test-Path -LiteralPath $uninstallLink -PathType Leaf)) { throw 'Defacing removal shortcut creation failed.' }
-
-# Silent installs cannot display an interactive confirmation.
+# The main application does not depend on the optional WSL setup scripts.
 $unattended = $env:INSTALLER_UNATTENDED -eq '1'
 $selected = $true
 if (-not $unattended) {
@@ -73,30 +80,33 @@ if (-not $unattended) {
   )
   $selected = $response -eq [System.Windows.Forms.DialogResult]::Yes
 }
-# Put the app itself at the top-level Programs folder, where Windows All apps
-# indexes it directly. Keep the setup tools in the CoCANoT subfolder.
-$appLink = Join-Path $programs 'CoCANoT.lnk'
-$oldAppLink = Join-Path $folder 'CoCANoT.lnk'
+$appLink = Join-Path $folder 'CoCANoT.lnk'
+$rootLink = Join-Path $programs 'CoCANoT.lnk'
 if ($selected) {
-  $shortcut = $shell.CreateShortcut($appLink)
-  $shortcut.TargetPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
-  $shortcut.Arguments = '"' + $launcher + '"'
-  $shortcut.WorkingDirectory = $Prefix
-  $shortcut.Description = 'Launch CoCANoT'
-  $shortcut.IconLocation = "$icon,0"
-  $shortcut.Save()
-  if (-not (Test-Path -LiteralPath $appLink -PathType Leaf)) { throw "CoCANoT shortcut not created: $appLink" }
-  Remove-Item -LiteralPath $oldAppLink -Force -ErrorAction SilentlyContinue
-  "Application shortcut created: $appLink" | Add-Content -LiteralPath $logFile
-  Write-Host "Created application shortcut: $appLink"
+  $wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
+  if ((Test-Path -LiteralPath $launcher -PathType Leaf) -and
+      (Test-Path -LiteralPath $diagnostics -PathType Leaf)) {
+    $success = Write-Link -Path $appLink -Target $wscript -Arguments ('"' + $launcher + '"') -Description 'Launch CoCANoT'
+    if ($success) {
+      # Also make the application easy to find in the Windows All apps list.
+      [void](Write-Link -Path $rootLink -Target $wscript -Arguments ('"' + $launcher + '"') -Description 'Launch CoCANoT')
+    }
+  } else {
+    "WARNING: CoCANoT launcher files missing. Expected $launcher and $diagnostics" | Add-Content -LiteralPath $logFile
+    Write-Warning 'Main CoCANoT launchers do not exist; no invalid app shortcut created.'
+  }
 } else {
-  Remove-Item -LiteralPath $appLink -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $oldAppLink -Force -ErrorAction SilentlyContinue
-  'Application shortcut declined' | Add-Content -LiteralPath $logFile
-  Write-Host 'Application shortcut declined; defacing setup shortcut remains installed.'
+  Remove-Item -LiteralPath $appLink, $rootLink -Force -ErrorAction SilentlyContinue
+  'Application Start Menu shortcut declined.' | Add-Content -LiteralPath $logFile
 }
-Write-Host "Created defacing setup shortcut: $defacingLink"
-Write-Host "Created defacing removal shortcut: $uninstallLink"
 
-"Defacing setup: $defacingLink" | Add-Content -LiteralPath $logFile
-"Defacing removal: $uninstallLink" | Add-Content -LiteralPath $logFile
+# Optional tools are independent of the application shortcut and each other.
+$powershellExe = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
+if (Test-Path -LiteralPath $setup -PathType Leaf) {
+  [void](Write-Link -Path (Join-Path $folder 'Complete defacing setup.lnk') -Target $powershellExe -Arguments ('-NoProfile -ExecutionPolicy Bypass -NoExit -File "' + $setup + '"') -WorkingDirectory $root -Description 'Install CoCANoT PyDeface and FSL in Ubuntu')
+}
+if (Test-Path -LiteralPath $uninstallSetup -PathType Leaf) {
+  [void](Write-Link -Path (Join-Path $folder 'Uninstall defacing setup.lnk') -Target $powershellExe -Arguments ('-NoProfile -ExecutionPolicy Bypass -NoExit -File "' + $uninstallSetup + '"') -WorkingDirectory $root -Description 'Remove CoCANoT Linux defacing components after confirmation')
+}
+Remove-Item -LiteralPath (Join-Path $folder 'Complete MRI defacing setup.lnk') -Force -ErrorAction SilentlyContinue
+Write-Host "Shortcut details saved to: $logFile"
