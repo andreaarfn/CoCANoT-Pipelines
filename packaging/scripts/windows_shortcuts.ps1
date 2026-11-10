@@ -11,12 +11,26 @@ foreach ($file in @($icon, $launcher, $setup, $uninstallSetup)) {
   if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing shortcut target: $file" }
 }
 
-# Resolve the actual interactive user's Start Menu path, not the installer process's
-# possibly elevated APPDATA directory.
-$programs = [Environment]::GetFolderPath('Programs')
-if (-not $programs) { throw 'Could not resolve the current user Start Menu.' }
+# Constructor may run post-install under an elevated account. Derive the user
+# profile from CoCANoT's standard per-user install directory when possible;
+# relying on [Environment]::GetFolderPath('Programs') alone can write links
+# into the administrator's Start Menu instead of the signed-in user's.
+$profileMatch = [regex]::Match(
+  $Prefix.TrimEnd('\\', '/'),
+  '^(?<profile>.+?)[\\/]+AppData[\\/]+Local[\\/]+CoCANoT[\\/]+runtime$',
+  [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+)
+if ($profileMatch.Success) {
+  $profile = $profileMatch.Groups['profile'].Value
+  $programs = Join-Path $profile 'AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs'
+} else {
+  $programs = [Environment]::GetFolderPath('Programs')
+}
+if (-not $programs) { throw 'Could not resolve the destination Start Menu.' }
 $folder = Join-Path $programs 'CoCANoT'
 New-Item -ItemType Directory -Force -Path $folder | Out-Null
+$logFile = Join-Path $Prefix 'shortcut-install.log'
+"CoCANoT shortcut installation; Programs: $programs; Prefix: $Prefix" | Set-Content -LiteralPath $logFile -Encoding UTF8
 $shell = New-Object -ComObject WScript.Shell
 $oldShortcut = Join-Path $folder 'Complete MRI defacing setup.lnk'
 Remove-Item -LiteralPath $oldShortcut -Force -ErrorAction SilentlyContinue
@@ -59,7 +73,10 @@ if (-not $unattended) {
   )
   $selected = $response -eq [System.Windows.Forms.DialogResult]::Yes
 }
-$appLink = Join-Path $folder 'CoCANoT.lnk'
+# Put the app itself at the top-level Programs folder, where Windows All apps
+# indexes it directly. Keep the setup tools in the CoCANoT subfolder.
+$appLink = Join-Path $programs 'CoCANoT.lnk'
+$oldAppLink = Join-Path $folder 'CoCANoT.lnk'
 if ($selected) {
   $shortcut = $shell.CreateShortcut($appLink)
   $shortcut.TargetPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
@@ -69,10 +86,17 @@ if ($selected) {
   $shortcut.IconLocation = "$icon,0"
   $shortcut.Save()
   if (-not (Test-Path -LiteralPath $appLink -PathType Leaf)) { throw "CoCANoT shortcut not created: $appLink" }
+  Remove-Item -LiteralPath $oldAppLink -Force -ErrorAction SilentlyContinue
+  "Application shortcut created: $appLink" | Add-Content -LiteralPath $logFile
   Write-Host "Created application shortcut: $appLink"
 } else {
   Remove-Item -LiteralPath $appLink -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $oldAppLink -Force -ErrorAction SilentlyContinue
+  'Application shortcut declined' | Add-Content -LiteralPath $logFile
   Write-Host 'Application shortcut declined; defacing setup shortcut remains installed.'
 }
 Write-Host "Created defacing setup shortcut: $defacingLink"
 Write-Host "Created defacing removal shortcut: $uninstallLink"
+
+"Defacing setup: $defacingLink" | Add-Content -LiteralPath $logFile
+"Defacing removal: $uninstallLink" | Add-Content -LiteralPath $logFile
