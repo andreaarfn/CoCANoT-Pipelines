@@ -2,10 +2,15 @@
 set -euo pipefail
 
 ASSUME_YES=false
+DELETE_LOCAL_DATA=false
 INSTALLED_PREFIX=""
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        --delete-local-data)
+            DELETE_LOCAL_DATA=true
+            shift
+            ;;
         --yes)
             ASSUME_YES=true
             shift
@@ -56,7 +61,7 @@ remove_owned_path() {
 }
 
 if [ "${ASSUME_YES}" != true ]; then
-    echo "This removes CoCANoT and all CoCANoT-owned local application data for this user."
+    echo "This removes the CoCANoT application and its private runtime for this user."
     printf "Continue? [y/N]: "
     read -r REPLY
     case "${REPLY}" in
@@ -65,12 +70,25 @@ if [ "${ASSUME_YES}" != true ]; then
     esac
 fi
 
+if [ "${ASSUME_YES}" != true ]; then
+    printf "Also permanently delete local CoCANoT patient records, attachments, and settings (~/.cocanot)? [y/N]: "
+    read -r DATA_REPLY
+    case "${DATA_REPLY}" in
+        y|Y|yes|YES) DELETE_LOCAL_DATA=true ;;
+        *) DELETE_LOCAL_DATA=false ;;
+    esac
+fi
+
 # Apps installed only for this macOS user.
 remove_owned_path "${USER_HOME}/Applications/CoCANoT.app" "CoCANoT application"
 
 # CoCANoT-owned per-user state. This intentionally removes the local metadata
 # database and saved pipeline settings as part of a full uninstall.
-remove_owned_path "${USER_HOME}/.cocanot" "CoCANoT local database and settings"
+if [ "${DELETE_LOCAL_DATA}" = true ]; then
+    remove_owned_path "${USER_HOME}/.cocanot" "CoCANoT local patient repository and settings"
+else
+    echo "Preserved CoCANoT local patient repository: ${USER_HOME}/.cocanot"
+fi
 remove_owned_path "${USER_HOME}/Library/Application Support/CoCANoT" "CoCANoT application support"
 remove_owned_path "${USER_HOME}/Library/Caches/org.cocanot.app" "CoCANoT cache"
 remove_owned_path "${USER_HOME}/Library/Caches/CoCANoT" "CoCANoT cache"
@@ -98,6 +116,6 @@ done < <(/usr/sbin/pkgutil --pkgs 2>/dev/null | /usr/bin/grep -i 'cocanot' || tr
 # Remove the current user's uninstaller app last.
 remove_owned_path "${USER_HOME}/Applications/Uninstall CoCANoT.app" "CoCANoT uninstaller"
 
-echo "CoCANoT was completely removed for this user."
+echo "CoCANoT application and private runtime removed for this user."
 echo "User-selected source, derivatives, and BIDS output folders were not modified."
 exit 0
