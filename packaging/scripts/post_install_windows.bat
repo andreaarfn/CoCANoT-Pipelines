@@ -82,4 +82,7 @@ exit /b 0
 echo ERROR: CoCANoT post-install failed during "%STEP%".
 echo Inspect installation log: "%LOG%"
 >> "%LOG%" echo ERROR: Post-install failed during "%STEP%".
+rem Constructor may remove PREFIX on rollback, so copy failure details outside it.
+copy /y "%LOG%" "%TEMP%\CoCANoT-post-install-failed.log" >nul 2>&1
+echo Failure log copy: "%TEMP%\CoCANoT-post-install-failed.log"
 exit /b 1
