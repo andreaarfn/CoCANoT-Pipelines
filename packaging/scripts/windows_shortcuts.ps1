@@ -55,28 +55,50 @@ function Write-Link {
       throw "Shortcut file was not created: $Path"
     }
     "Created: $Path -> $Target $Arguments" | Add-Content -LiteralPath $logFile
-    Write-Host "Created Start Menu shortcut: $Path"
+    Write-Host "Created CoCANoT shortcut: $Path"
     return $true
   } catch {
     "WARNING: Could not create $Path : $($_.Exception.Message)" | Add-Content -LiteralPath $logFile
-    Write-Warning "Could not create Start Menu shortcut $Path : $($_.Exception.Message)"
+    Write-Warning "Could not create CoCANoT shortcut $Path : $($_.Exception.Message)"
     return $false
   }
 }
 
-# Do not offer or create a main application Start Menu shortcut.
-# Remove only the CoCANoT app links from earlier versions; leave the optional
-# defacing setup utilities available in the CoCANoT subfolder.
-$appLinks = @(
-  (Join-Path $folder 'CoCANoT.lnk'),
-  (Join-Path $programs 'CoCANoT.lnk')
-)
-foreach ($appLink in $appLinks) {
-  if (Test-Path -LiteralPath $appLink -PathType Leaf) {
-    Remove-Item -LiteralPath $appLink -Force -ErrorAction SilentlyContinue
+# Create main application shortcuts automatically, with no confirmation dialog.
+# Use the same tested VBS launcher as before. The desktop path may be redirected
+# to OneDrive, so use the Windows shell's known Desktop location when running as
+# the intended user, otherwise inspect the installation owner's profile.
+$launcher = Join-Path $Prefix 'CoCANoT.vbs'
+$diagnostics = Join-Path $Prefix 'CoCANoT-Diagnostics.bat'
+$wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
+$desktop = [Environment]::GetFolderPath('DesktopDirectory')
+if ($profileMatch.Success) {
+  $userHome = $profileMatch.Groups['profile'].Value
+  $installedUserHome = [IO.Path]::GetFullPath($userHome).TrimEnd([char]92)
+  $processUserHome = [IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd([char]92)
+  if (-not $installedUserHome.Equals($processUserHome, [StringComparison]::OrdinalIgnoreCase)) {
+    # Avoid writing to an administrator's desktop when setup was elevated.
+    $desktop = Join-Path $userHome 'Desktop'
+    $oneDriveDesktop = Join-Path $userHome 'OneDrive\Desktop'
+    if (Test-Path -LiteralPath $oneDriveDesktop -PathType Container) {
+      $desktop = $oneDriveDesktop
+    }
   }
 }
-'Main application Start Menu shortcut intentionally disabled.' | Add-Content -LiteralPath $logFile
+if ((Test-Path -LiteralPath $launcher -PathType Leaf) -and
+    (Test-Path -LiteralPath $diagnostics -PathType Leaf)) {
+  [void](Write-Link -Path (Join-Path $folder 'CoCANoT.lnk') -Target $wscript -Arguments ('"' + $launcher + '"') -Description 'Launch CoCANoT')
+  [void](Write-Link -Path (Join-Path $programs 'CoCANoT.lnk') -Target $wscript -Arguments ('"' + $launcher + '"') -Description 'Launch CoCANoT')
+  if ($desktop -and (Test-Path -LiteralPath $desktop -PathType Container)) {
+    [void](Write-Link -Path (Join-Path $desktop 'CoCANoT.lnk') -Target $wscript -Arguments ('"' + $launcher + '"') -Description 'Launch CoCANoT')
+  } else {
+    "WARNING: Desktop folder not found: $desktop" | Add-Content -LiteralPath $logFile
+    Write-Warning "CoCANoT desktop shortcut skipped because desktop folder does not exist: $desktop"
+  }
+} else {
+  "WARNING: Application launchers missing. Expected $launcher and $diagnostics" | Add-Content -LiteralPath $logFile
+  Write-Warning 'Main CoCANoT launcher files missing; application shortcuts skipped.'
+}
 
 # Optional tools are independent of the application shortcut and each other.
 $powershellExe = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
