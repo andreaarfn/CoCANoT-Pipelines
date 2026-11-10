@@ -15292,7 +15292,74 @@ def start_frontend_server() -> ThreadingHTTPServer:
 
     return server
 
+def _set_windows_app_identity() -> None:
+    """Use a stable Windows taskbar identity for the native CoCANoT window."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "org.cocanot.pipelines"
+        )
+    except (AttributeError, OSError):
+        pass
+
+
+def _apply_windows_window_icon() -> None:
+    """Set small and large native window icons; pywebview's icon option is not
+    supported by its Windows backend when launched through plain Python.
+    """
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    icon_file = Path(__file__).resolve().parent / "cocanot.ico"
+    if not icon_file.is_file():
+        return
+
+    user32 = ctypes.windll.user32
+    IMAGE_ICON, LR_LOADFROMFILE, WM_SETICON = 1, 0x10, 0x80
+    pid = os.getpid()
+    user32.LoadImageW.restype = wintypes.HANDLE
+    user32.LoadImageW.argtypes = (
+        wintypes.HINSTANCE, wintypes.LPCWSTR,
+        wintypes.UINT, ctypes.c_int, ctypes.c_int, wintypes.UINT
+    )
+    user32.SendMessageW.restype = wintypes.LPARAM
+    user32.SendMessageW.argtypes = (
+        wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
+    )
+    small = user32.LoadImageW(None, str(icon_file), IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+    large = user32.LoadImageW(None, str(icon_file), IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
+    if not small and not large:
+        return
+
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def apply(hwnd, _):
+        owner_pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner_pid))
+        if owner_pid.value != pid:
+            return True
+        size = user32.GetWindowTextLengthW(hwnd)
+        if size == 0:
+            return True
+        title = ctypes.create_unicode_buffer(size + 1)
+        user32.GetWindowTextW(hwnd, title, size + 1)
+        if "CoCANoT" not in title.value:
+            return True
+        if small:
+            user32.SendMessageW(hwnd, WM_SETICON, 0, small)
+        if large:
+            user32.SendMessageW(hwnd, WM_SETICON, 1, large)
+        return True
+    callback = callback_type(apply)
+    user32.EnumWindows(callback, 0)
+
+
 def main() -> None:
+    _set_windows_app_identity()
     api = CoCANoTAPI()
 
     server = start_frontend_server()
@@ -15310,7 +15377,7 @@ def main() -> None:
     api._window = window
 
     try:
-        webview.start(debug=False)
+        webview.start(_apply_windows_window_icon, debug=False)
     finally:
         server.shutdown()
         server.server_close()
