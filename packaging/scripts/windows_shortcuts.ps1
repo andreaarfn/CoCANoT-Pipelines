@@ -6,7 +6,8 @@ $root = Join-Path $Prefix 'app'
 $icon = Join-Path $root 'cocanot.ico'
 $launcher = Join-Path $Prefix 'CoCANoT.vbs'
 $setup = Join-Path $root 'setup_windows_defacing.ps1'
-foreach ($file in @($icon, $launcher, $setup)) {
+$uninstallSetup = Join-Path $root 'uninstall_windows_defacing.ps1'
+foreach ($file in @($icon, $launcher, $setup, $uninstallSetup)) {
   if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing shortcut target: $file" }
 }
 
@@ -31,6 +32,18 @@ $defacing.Description = 'Install Linux PyDeface and FSL FLIRT for CoCANoT MRI de
 $defacing.IconLocation = "$icon,0"
 $defacing.Save()
 if (-not (Test-Path -LiteralPath $defacingLink -PathType Leaf)) { throw 'Defacing setup shortcut creation failed.' }
+
+# Separate optional cleanup utility. Do not remove Linux tools automatically
+# when CoCANoT is uninstalled because FSL may be useful to other programs.
+$uninstallLink = Join-Path $folder 'Uninstall defacing setup.lnk'
+$cleanup = $shell.CreateShortcut($uninstallLink)
+$cleanup.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$cleanup.Arguments = '-NoProfile -ExecutionPolicy Bypass -NoExit -File "' + $uninstallSetup + '"'
+$cleanup.WorkingDirectory = $root
+$cleanup.Description = 'Remove CoCANoT PyDeface and FSL installations from Ubuntu after confirmation'
+$cleanup.IconLocation = "$icon,0"
+$cleanup.Save()
+if (-not (Test-Path -LiteralPath $uninstallLink -PathType Leaf)) { throw 'Defacing removal shortcut creation failed.' }
 
 # Silent installs cannot display an interactive confirmation.
 $unattended = $env:INSTALLER_UNATTENDED -eq '1'
@@ -62,3 +75,4 @@ if ($selected) {
   Write-Host 'Application shortcut declined; defacing setup shortcut remains installed.'
 }
 Write-Host "Created defacing setup shortcut: $defacingLink"
+Write-Host "Created defacing removal shortcut: $uninstallLink"
