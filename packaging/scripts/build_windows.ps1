@@ -39,6 +39,7 @@ Write-Host "Prepared Windows application icon: $IconIco"
 Copy-Item (Join-Path $ProjectRoot "react_dashboard.py") $Payload
 Copy-Item (Join-Path $ProjectRoot "pipeline_config.py") $Payload
 Copy-Item (Join-Path $ProjectRoot "packaging/scripts/setup_windows_defacing.ps1") (Join-Path $Payload "setup_windows_defacing.ps1")
+Copy-Item (Join-Path $ProjectRoot "packaging/scripts/uninstall_windows_defacing.ps1") (Join-Path $Payload "uninstall_windows_defacing.ps1")
 Copy-Item (Join-Path $ProjectRoot "packaging/scripts/windows_shortcuts.ps1") (Join-Path $Payload "windows_shortcuts.ps1")
 Copy-Item (Join-Path $ProjectRoot "packaging/environment/requirements-pip-windows.txt") (Join-Path $Payload "packaging_requirements_pip.txt")
 foreach ($dir in @("app","config","MetadataPipeline")) {
@@ -68,7 +69,7 @@ foreach ($package in @("pythonnet", "clr_loader", "cffi", "pycparser", "pywebvie
   Write-Host "Bundled Windows dependency: $package"
 }
 # Fail the GitHub build if required setup scripts or the frontend payload are absent.
-foreach ($required in @("setup_windows_defacing.ps1", "windows_shortcuts.ps1", "packaging_requirements_pip.txt", "react_frontend/dist/index.html", "cocanot.ico")) {
+foreach ($required in @("setup_windows_defacing.ps1", "uninstall_windows_defacing.ps1", "windows_shortcuts.ps1", "packaging_requirements_pip.txt", "react_frontend/dist/index.html", "cocanot.ico")) {
   if (-not (Test-Path (Join-Path $Payload $required))) { throw "Missing Windows installer payload file: $required" }
 }
 Compress-Archive -Path (Join-Path $Payload "*") -DestinationPath (Join-Path $Stage "app_payload.zip") -Force
