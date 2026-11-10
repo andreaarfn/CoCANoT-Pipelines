@@ -162,6 +162,25 @@ def copy_and_update_json(
     return "JSON sidecar copied and updated."
 
 
+def require_defaced_sidecar(output_json: Path) -> None:
+    """Never report successful defacing with a missing or false output sidecar."""
+    if not output_json.is_file():
+        raise RuntimeError(
+            f"Defaced image JSON sidecar was not created: {output_json}. "
+            "The source scrubbed_header JSON stays Defaced: false."
+        )
+    try:
+        with output_json.open("r", encoding="utf-8") as handle:
+            metadata = json.load(handle)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Unable to read defaced JSON sidecar: {output_json}") from exc
+    if not isinstance(metadata, dict) or metadata.get("Defaced") is not True:
+        raise RuntimeError(
+            f"Defaced output JSON was not marked true: {output_json}. "
+            "Check the Step 3C output, not the scrubbed_header JSON."
+        )
+
+
 def windows_wsl_pydeface(command: list[str]) -> list[str]:
     """Dispatch PyDeface through WSL on Windows while keeping output on Windows."""
     if sys.platform != "win32" or not command or command[0] != "pydeface":
@@ -557,12 +576,9 @@ def main() -> None:
                         input_dir=input_dir,
                         source_hash=source_hash,
                     )
-                    if not output_json.is_file():
-                        raise RuntimeError(sidecar_message)
-                    updated_metadata = json.loads(output_json.read_text(encoding="utf-8"))
-                    if not isinstance(updated_metadata, dict) or updated_metadata.get("Defaced") is not True:
-                        raise RuntimeError("Defaced output JSON was not marked true.")
+                    require_defaced_sidecar(output_json)
                     print("Existing defaced sidecar verified/updated:", sidecar_message)
+                    print("Verified Defaced=true in:", output_json)
                 except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
                     print("ERROR: Could not refresh the existing defaced JSON sidecar:", exc)
                     results.append({
@@ -573,7 +589,14 @@ def main() -> None:
                     })
                     continue
             else:
-                print("WARNING: No source JSON sidecar; cannot create defacing metadata.")
+                print("ERROR: Source JSON sidecar missing; defaced metadata cannot be created.")
+                results.append({
+                    "input": str(relative_path),
+                    "size": input_size_text,
+                    "status": "failed",
+                    "elapsed": None,
+                })
+                continue
             completed_hashes[source_hash] = output_nifti
             print("Skipping: matching defaced output already exists and passed validation.")
             results.append(
@@ -667,6 +690,9 @@ def main() -> None:
                 input_dir=input_dir,
                 source_hash=source_hash or sha256_file(nifti_path),
             )
+            require_defaced_sidecar(output_json)
+            print("Verified Defaced=true in:", output_json)
+            print("Source scrubbed_header JSON remains unchanged:", input_json)
             if not args.overwrite:
                 completed_hashes[source_hash] = output_nifti
             append_json_log(log_path, json_message)
