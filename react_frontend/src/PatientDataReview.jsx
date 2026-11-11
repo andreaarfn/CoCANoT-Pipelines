@@ -100,7 +100,7 @@ export default function PatientDataReview({
     return (
 
       <>
-      <RelatedVideoRecords patientId={patientId} tableName={"Surgical"} recordId={record?.record_id}/>
+      {tableName === "Surgical" && <RelatedVideoRecords patientId={patientId} tableName="Surgical" recordId={record?.record_id}/>}
       <MetadataDocumentPatientReview
 
         patientId={patientId}
