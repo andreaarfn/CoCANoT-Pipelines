@@ -164,3 +164,11 @@
 .video-review-note{font-size:12px;color:#60758a;margin:10px 0 0}
 .video-review-error{color:#a12828;margin:9px 0 0;font-size:13px}
 @container (max-width:480px){.video-review-controls input[type="range"]{order:3;flex-basis:100%}}
+
+/* Keep editing actions in the tools panel, separate from video playback. */
+.video-edit-action{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid #e0e8ef;min-width:0}
+.video-edit-action>strong{font-size:13px;color:#273e55}
+.video-edit-action>button{max-width:100%;white-space:normal;text-align:center}
+.video-edit-action+.video-trim-editor{margin-top:14px}
+.video-edit-action+h3{margin-top:14px}
+@container (max-width: 460px){.video-edit-action{align-items:stretch;flex-direction:column}.video-edit-action>button{align-self:flex-start}}
