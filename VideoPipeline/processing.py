@@ -61,6 +61,8 @@ def validate_project(project: dict) -> list[dict]:
         end = float(clip.get("end", media["duration"]))
         if not all(map(math.isfinite, (start, end))) or start < 0 or end <= start or end > media["duration"] + 0.01:
             raise ValueError(f"Invalid clip trim boundaries: {media['name']}")
+        if not isinstance(clip.get("remove_audio", False), bool):
+            raise ValueError("Remove audio must be a checkbox setting.")
         masks = clip.get("masks", [])
         if not isinstance(masks, list) or len(masks) > 500:
             raise ValueError("Invalid redaction regions.")
@@ -92,6 +94,57 @@ def validate_project(project: dict) -> list[dict]:
     return output
 
 
+
+def _mux_selected_audio(clips: list[dict], silent_video: Path, ffmpeg_binary: str) -> None:
+    """Preserve source audio unless explicitly removed for a clip.
+
+    Silence fills muted clips and sources without audio, keeping audio segments
+    aligned with the final trimmed video sequence.
+    """
+    if not any(c["media"]["audio"] and not c.get("remove_audio", False) for c in clips):
+        return
+
+    output = silent_video.with_name(silent_video.stem + ".audio.mp4")
+    if output.exists():
+        raise FileExistsError(f"Temporary audio export already exists: {output}")
+    command = [ffmpeg_binary, "-hide_banner", "-nostdin", "-y", "-i", str(silent_video)]
+    chains = []
+    for index, clip in enumerate(clips):
+        length = clip["end"] - clip["start"]
+        if clip["media"]["audio"] and not clip.get("remove_audio", False):
+            command += ["-i", clip["media"]["path"]]
+            source = f"[{index + 1}:a:0]atrim=start={clip['start']:.6f}:end={clip['end']:.6f},asetpts=PTS-STARTPTS"
+        else:
+            command += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+            source = f"[{index + 1}:a:0]asetpts=PTS-STARTPTS"
+        chains.append(
+            f"{source},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+            f"apad,atrim=duration={length:.6f},asetpts=PTS-STARTPTS[a{index}]"
+        )
+    if len(clips) > 1:
+        chains.append(
+            "".join(f"[a{i}]" for i in range(len(clips)))
+            + f"concat=n={len(clips)}:v=0:a=1[outa]"
+        )
+    else:
+        chains.append("[a0]anull[outa]")
+    command += [
+        "-filter_complex", ";".join(chains), "-map", "0:v:0", "-map", "[outa]",
+        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+        str(output),
+    ]
+    try:
+        finished = subprocess.run(command, capture_output=True, text=True, timeout=7200)
+        if finished.returncode != 0:
+            raise RuntimeError((finished.stderr or "Audio export failed.")[-2500:])
+        if not output.is_file() or output.stat().st_size == 0:
+            raise RuntimeError("Audio export did not produce a valid MP4.")
+        output.replace(silent_video)
+    finally:
+        if output.exists():
+            output.unlink()
+
+
 def render_project(project: dict, destination: str) -> dict:
     clips = validate_project(project)
     target = Path(destination).expanduser().resolve()
@@ -106,13 +159,15 @@ def render_project(project: dict, destination: str) -> dict:
     if any(any(m.get("keyframes") for m in c.get("masks", [])) for c in clips):
         from VideoPipeline.advanced import render_advanced
         try:
-            render_advanced(clips, temp, _binary("ffmpeg"))
+            ffmpeg = _binary("ffmpeg")
+            render_advanced(clips, temp, ffmpeg)
+            _mux_selected_audio(clips, temp, ffmpeg)
             temp.replace(target)
         finally:
             if temp.exists():
                 temp.unlink()
         return {"path": str(target), "duration": sum(c["end"] - c["start"] for c in clips),
-                "note": "Moving censor masks applied. Audio removed. Human privacy review required."}
+                "note": "Moving censor masks applied. Audio follows clip settings. Human privacy review required."}
     command = [_binary("ffmpeg"), "-hide_banner", "-nostdin", "-y"]
     for clip in clips:
         command += ["-ss", str(clip["start"]), "-t", str(clip["end"] - clip["start"]), "-i", clip["media"]["path"]]
@@ -142,12 +197,13 @@ def render_project(project: dict, destination: str) -> dict:
         finished = subprocess.run(command, capture_output=True, text=True, timeout=7200)
         if finished.returncode != 0:
             raise RuntimeError((finished.stderr or "FFmpeg export failed.")[-2500:])
+        _mux_selected_audio(clips, temp, _binary("ffmpeg"))
         temp.replace(target)
     finally:
         if temp.exists():
             temp.unlink()
     return {"path": str(target), "duration": sum(c["end"] - c["start"] for c in clips),
-            "note": "Audio intentionally removed. Human privacy review required before sharing."}
+            "note": "Audio follows clip settings. Human privacy review required before sharing."}
 
 
 def save_project(project: dict, path: str) -> str:
