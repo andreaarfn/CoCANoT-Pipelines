@@ -99,6 +99,8 @@ export default function PatientDataReview({
 
     return (
 
+      <>
+      <RelatedVideoRecords patientId={patientId} tableName={"Surgical"} recordId={record?.record_id}/>
       <MetadataDocumentPatientReview
 
         patientId={patientId}
@@ -113,6 +115,7 @@ export default function PatientDataReview({
 
       />
 
+      </>
     );
 
   }
@@ -135,6 +138,8 @@ export default function PatientDataReview({
 
 
 
+      <>
+      <RelatedVideoRecords patientId={patientId} tableName={"Imaging"} recordId={record?.record_id}/>
       <ImagingPatientReview
 
 
@@ -153,6 +158,7 @@ export default function PatientDataReview({
 
       />
 
+      </>
 
 
     );
@@ -175,6 +181,8 @@ export default function PatientDataReview({
 
 
 
+      <>
+      <RelatedVideoRecords patientId={patientId} tableName={"Electrophysiology"} recordId={record?.record_id}/>
       <EphysPatientReview
 
 
@@ -193,6 +201,7 @@ export default function PatientDataReview({
 
       />
 
+      </>
 
 
     );
@@ -218,6 +227,32 @@ export default function PatientDataReview({
 
 
 
+
+function RelatedVideoRecords({patientId, tableName, recordId}) {
+  const [videos,setVideos] = useState([]);
+  const [error,setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    if (!patientId || !recordId) return () => {active=false;};
+    async function fetchRelated() {
+      try {
+        const exports = await api()?.video_get_patient_exports?.(patientId);
+        if (active) setVideos((exports || []).filter(v => v.linked_table === tableName && String(v.linked_record_id) === String(recordId)));
+      } catch(e) { if(active) setError(String(e)); }
+    }
+    fetchRelated();
+    return () => {active=false;};
+  },[patientId,tableName,recordId]);
+  if (!videos.length && !error) return null;
+  return <section style={{margin:"12px 0",padding:16,border:"1px solid #d8e3eb",borderRadius:12}}>
+    <h3>Related video exports</h3>
+    {videos.map(v=><div key={v.record_id} style={{padding:"8px 0",overflowWrap:"anywhere"}}>
+      <strong>{v.file_name}</strong> · {v.exists ? "Stored locally; final privacy review required" : "File missing"}
+      <div style={{fontSize:12,color:"#536982"}}>{v.path}</div>
+    </div>)}
+    {error && <p role="alert">Related video lookup unavailable: {error}</p>}
+  </section>;
+}
 
 function VideoPatientReview({ patientId, record, onBack }) {
   const [previewUrl, setPreviewUrl] = useState("");
