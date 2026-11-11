@@ -277,7 +277,8 @@ export default function VideoDashboard() {
     {step===2 && <section className="video-panel video-stage"><h2>Process Video</h2></section>}
     {step===3 && <section className="video-panel video-stage"><h2>Review</h2></section>}
     {step===4 && <section className="video-panel video-stage"><h2>Export</h2></section>}
-    {[2,3].includes(step) && <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
+    {step===3 && <CombinedVideoReview clips={project.clips} trackedRegion={trackedRegion} />}
+    {step===2 && <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
       <div className="video-player" ref={frame} style={{cursor:maskMode?"crosshair":"default"}}>
         {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} controls onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}} onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
           onTimeUpdate={event=>{const time=event.currentTarget.currentTime;if(time >=clip.end){event.currentTarget.pause();}setCursor(clamp(time-clip.start,0,duration));}}/>
@@ -314,7 +315,7 @@ export default function VideoDashboard() {
         <div className="video-fields">{["start","end"].map(k=><label key={k}>{k} (s)<input type="number" step="0.01" min="0" max={duration} value={seconds(m[k])} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value),0,duration)}:x)}))}/></label>)}</div>
       </div>)}
       </> : <p>Select a clip to inspect and edit.</p>}</aside>}</div>}
-    {[2,3].includes(step) && <section className="video-panel video-timeline">
+    {step===2 && <section className="video-panel video-timeline">
       <div className="video-panel-title">Timeline <small>{project.clips.length} clips · {seconds(combinedDuration)} seconds</small></div>
       {step===2 && <div className="video-timeline-toolbar"><button onClick={addVideos} disabled={busy}><Plus size={15}/> Add clips</button></div>}
       <div className="video-clips">
@@ -356,4 +357,132 @@ export default function VideoDashboard() {
     {step>1 && step<4 && <div className="video-stage-navigation"><button onClick={()=>setStep(step-1)}>← Previous step</button><button className="video-primary" onClick={()=>{player.current?.pause();setMaskMode(false);setStep(step+1);}}>Continue →</button></div>}
     {notice && <div className="video-notice" role="status">{notice}</div>}
   </div>;
+}
+
+/**
+ * Preview the exported sequence using original local preview URLs and saved edits.
+ * A single project-wide playhead controls consecutive, trimmed clips.
+ * This is a preview, not the rendered export, which still requires final validation.
+ */
+function CombinedVideoReview({ clips, trackedRegion }) {
+  const player = useRef(null);
+  const shouldPlay = useRef(false);
+  const pendingLocalTime = useRef(0);
+  const [clipIndex, setClipIndex] = useState(0);
+  const [position, setPosition] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+
+  const segments = useMemo(() => {
+    let offset = 0;
+    return clips.map((clip) => {
+      const length = Math.max(0, Number(clip.end) - Number(clip.start));
+      const segment = {clip, offset, length};
+      offset += length;
+      return segment;
+    });
+  }, [clips]);
+  const total = segments.reduce((sum, segment) => sum + segment.length, 0);
+  const active = segments[clipIndex];
+  const activeClip = active?.clip;
+  const localTime = active ? clamp(position - active.offset, 0, active.length) : 0;
+
+  function stop() {
+    shouldPlay.current = false;
+    setPlaying(false);
+    player.current?.pause();
+  }
+
+  function goTo(globalTime, keepPlaying = shouldPlay.current) {
+    if (!segments.length) return;
+    const nextTime = clamp(Number(globalTime) || 0, 0, total);
+    const nextIndex = segments.findIndex((segment, index) =>
+      nextTime < segment.offset + segment.length || index === segments.length - 1);
+    const index = Math.max(0, nextIndex);
+    const segment = segments[index];
+    const nextLocal = clamp(nextTime - segment.offset, 0, segment.length);
+    pendingLocalTime.current = nextLocal;
+    shouldPlay.current = keepPlaying && nextTime < total;
+    setPlaying(shouldPlay.current);
+    setPosition(nextTime);
+    if (index !== clipIndex) {
+      setClipIndex(index);
+    } else if (player.current) {
+      player.current.currentTime = segment.clip.start + nextLocal;
+      if (shouldPlay.current) player.current.play().catch(() => { stop(); });
+      else player.current.pause();
+    }
+  }
+
+  function advance() {
+    if (clipIndex + 1 >= segments.length) {
+      goTo(total, false);
+      return;
+    }
+    goTo(segments[clipIndex + 1].offset, true);
+  }
+
+  function updateTime(event) {
+    const segment = segments[clipIndex];
+    if (!segment) return;
+    const videoTime = Number(event.currentTarget.currentTime);
+    if (!Number.isFinite(videoTime)) return;
+    if (videoTime >= segment.clip.end - 0.035) {
+      if (shouldPlay.current) advance();
+      else setPosition(segment.offset + segment.length);
+      return;
+    }
+    setPosition(segment.offset + clamp(videoTime - segment.clip.start, 0, segment.length));
+  }
+
+  function togglePlayback() {
+    if (shouldPlay.current) {
+      stop();
+      return;
+    }
+    if (position >= total - 0.035) {
+      goTo(0, true);
+      return;
+    }
+    shouldPlay.current = true;
+    setPlaying(true);
+    if (player.current) player.current.play().catch(() => stop());
+  }
+
+  return <section className="video-panel video-combined-review">
+    <div className="video-panel-title"><Video size={18}/> Combined video <small>{clips.length} clips · {seconds(total)} seconds</small></div>
+    <div className="video-player">
+      {activeClip ? <>
+        <video key={activeClip.id} ref={player} src={activeClip.preview_url || ""}
+          preload="auto" playsInline muted
+          onLoadedMetadata={event => {
+            const segment = segments[clipIndex];
+            if (!segment) return;
+            event.currentTarget.currentTime = segment.clip.start + pendingLocalTime.current;
+            if (shouldPlay.current) event.currentTarget.play().catch(() => stop());
+          }}
+          onTimeUpdate={updateTime}
+          onEnded={() => { if (shouldPlay.current) advance(); }}
+          onError={() => { stop(); setPreviewError("Preview unavailable for this clip. Check the video codec."); }}
+          aria-label="Combined video review preview"
+        />
+        <div className="video-mask-overlay">
+          {(activeClip.masks || []).filter(mask => localTime >= mask.start && localTime <= mask.end).map(mask => {
+            const region = trackedRegion(mask, localTime);
+            return <div className="video-mask" key={mask.id}
+              style={{left:`${region.x*100}%`,top:`${region.y*100}%`,width:`${region.w*100}%`,height:`${region.h*100}%`}} />;
+          })}
+        </div>
+      </> : <div className="video-empty">No video selected.</div>}
+    </div>
+    <div className="video-review-controls">
+      <button type="button" onClick={togglePlayback} disabled={!activeClip}>{playing ? "Pause" : position >= total ? "Replay" : "Play"}</button>
+      <input aria-label="Combined video position" type="range" min="0" max={total || 1}
+        step="0.033" value={position} disabled={!activeClip}
+        onChange={event => goTo(Number(event.target.value))} />
+      <span>{seconds(position)} / {seconds(total)} s</span>
+    </div>
+    {previewError && <p className="video-review-error" role="alert">{previewError}</p>}
+    <p className="video-review-note">Preview of the combined edit. Review the rendered MP4 before sharing.</p>
+  </section>;
 }
