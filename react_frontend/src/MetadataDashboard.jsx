@@ -59,6 +59,7 @@ import {
 
 
   Upload,
+  Video,
 
 
 
@@ -95,6 +96,7 @@ const api = () => window.pywebview?.api ?? null;
 
 
 const SECTION_CONFIG = {
+  Video: { title: "Video Data", icon: Video, addLabel: "Process Video" },
 
 
 
@@ -605,6 +607,7 @@ export default function MetadataDashboard({
 
 
       Electrophysiology: [],
+      Video: [],
 
 
 
@@ -1979,6 +1982,7 @@ export default function MetadataDashboard({
 
 
 
+    if (tableName === "Video") return summary.video ?? [];
     return summary.electrophysiology ?? [];
 
 
@@ -2028,6 +2032,7 @@ export default function MetadataDashboard({
 
 
       tableName === "Electrophysiology" ||
+      tableName === "Video" ||
 
 
 
@@ -2116,6 +2121,19 @@ export default function MetadataDashboard({
 
 
   function deleteSelected(tableName) {
+    if (tableName === "Video") {
+      const ids = selected.Video ?? [];
+      if (!ids.length) { setMessage("Select video records first."); return; }
+      if (!window.confirm("Remove selected video links from this patient? The MP4 files will remain on disk.")) return;
+      (async () => {
+        try {
+          for (const recordId of ids) await api()?.video_delete_patient_export?.(loadedPatientId,recordId);
+          await loadPatient(loadedPatientId);
+          setMessage("Video record link(s) removed. Files were not deleted.");
+        } catch(error) { setMessage(String(error)); }
+      })();
+      return;
+    }
 
 
 
@@ -2316,6 +2334,7 @@ export default function MetadataDashboard({
 
 
   async function addFor(tableName) {
+    if (tableName === "Video") { onNavigate("video"); return; }
 
 
 
@@ -3114,6 +3133,7 @@ export default function MetadataDashboard({
 
 
             "Electrophysiology",
+            "Video",
 
 
 
@@ -3289,7 +3309,7 @@ export default function MetadataDashboard({
 
 
 
-                tableName === "Electrophysiology"
+                tableName === "Electrophysiology" || tableName === "Video"
 
 
 
@@ -4884,7 +4904,7 @@ function PatientRecordSection({
 
 
 
-                      {needsReview ? (
+                      {tableName === "Video" ? <span className={styles.needsReviewBadge}>{row.exists ? "Final privacy review required" : "File missing"}</span> : needsReview ? (
 
 
 
@@ -5140,6 +5160,7 @@ function summarizeRecord(
 
 
 
+  if (tableName === "Video") return row.file_name + (row.exists ? " · Stored locally" : " · File missing");
   if (tableName === "Clinical") {
 
 
