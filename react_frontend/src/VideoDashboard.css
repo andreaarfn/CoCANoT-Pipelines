@@ -154,3 +154,13 @@
   .video-workspace .video-steps{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))}
   .video-workspace .video-step-name{overflow-wrap:anywhere}
 }
+
+/* Whole-project review, not a per-clip editor. */
+.video-combined-review{width:100%;max-width:100%;box-sizing:border-box}
+.video-combined-review .video-player{max-width:100%;margin:0 auto}
+.video-review-controls{display:flex;align-items:center;gap:12px;margin-top:14px;min-width:0;flex-wrap:wrap}
+.video-review-controls input[type="range"]{flex:1 1 220px;min-width:120px;accent-color:#317a9c}
+.video-review-controls>span{font-size:12px;color:#536982;font-variant-numeric:tabular-nums;white-space:nowrap}
+.video-review-note{font-size:12px;color:#60758a;margin:10px 0 0}
+.video-review-error{color:#a12828;margin:9px 0 0;font-size:13px}
+@container (max-width:480px){.video-review-controls input[type="range"]{order:3;flex-basis:100%}}
