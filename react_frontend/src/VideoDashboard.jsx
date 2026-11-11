@@ -292,9 +292,10 @@ export default function VideoDashboard() {
         </> : <div className="video-empty">Import a recording to begin. Original footage is never modified.</div>}
       </div>
       <div className="video-scrub"><input type="range" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
-      {step===2 && <div className="video-actions"><button disabled={!clip || busy || cursor <= .05 || cursor >= duration-.05} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>}
       
-      </section>{step===2 && <aside className="video-panel video-properties"><h2>Edit & Censor</h2>{clip ? <>
+      
+      </section>{step===2 && <aside className="video-panel video-properties"><h2>Editing Tools</h2>{clip ? <>
+      <div className="video-edit-action"><strong>Split clip</strong><button disabled={!clip || busy || cursor <= .05 || cursor >= duration-.05} onClick={split}><Scissors size={16}/> Split at playhead</button></div>
       <div className="video-trim-editor">
         <div className="video-trim-heading"><strong>Trim selected clip</strong><button title="Restore full clip length" disabled={busy || (clip.start===0 && clip.end===clip.duration)} onClick={()=>{const oldStart=clip.start;mutateClip(c=>({...c,start:0,end:c.duration,masks:c.masks.map(m=>({...m,start:m.start+oldStart,end:m.end+oldStart,keyframes:[],tracked_until:null,tracking_complete:null}))}));setCursor(0);if(player.current){player.current.pause();player.current.currentTime=0;}}}><RotateCcw size={14}/> Reset</button></div>
         
@@ -303,6 +304,7 @@ export default function VideoDashboard() {
         <label>End <strong>{seconds(clip.end)}s</strong><input aria-label="Trim clip end" type="range" min={Math.min(clip.duration,clip.start+.1)} max={clip.duration} step=".05" value={clip.end} disabled={busy} onChange={e=>trimClip("end",e.target.value)}/></label>
         <div className="video-trim-result">Kept: {seconds(duration)}s of {seconds(clip.duration)}s</div>
       </div>
+      <div className="video-edit-action"><strong>Censor boxes</strong><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
       <h3>Censor regions ({masks.length})</h3>
       {masks.map((m,i)=><div className="video-mask-settings" key={m.id}><div><strong>Region {i+1}</strong><button aria-label="Remove mask" onClick={()=>mutateClip(c=>({...c,masks:c.masks.filter(x=>x.id!==m.id)}))}><Trash2 size={15}/></button></div>
         <div className="video-actions"><button disabled={busy} onClick={()=>trackMask(m)}>Track censor interval</button></div>
