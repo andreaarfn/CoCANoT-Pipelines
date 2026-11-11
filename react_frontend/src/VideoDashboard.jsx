@@ -26,6 +26,7 @@ export default function VideoDashboard() {
   const [linkedTable, setLinkedTable] = useState("");
   const [linkedRecordId, setLinkedRecordId] = useState("");
   const [exportRecord, setExportRecord] = useState(null);
+  const [outputFolder, setOutputFolder] = useState("");
   useEffect(() => {
     let live = true;
     async function loadPatients() {
@@ -247,6 +248,13 @@ export default function VideoDashboard() {
       if (result) setNotice(action==="video_save_project" ? "Project saved." : action==="video_load_project" ? "Project opened." : String(result?.path || "Complete."));
     } catch(e){setNotice(String(e.message || e));}finally{setBusy(false);}
   }
+  async function pickOutputFolder() {
+    try {
+      if (!bridge()?.video_pick_output_folder) throw new Error("Output folder picker is unavailable in this desktop build.");
+      const folder = await bridge().video_pick_output_folder();
+      if (folder) { setOutputFolder(folder); setExportRecord(null); setNotice(""); }
+    } catch (error) { setNotice("Could not select output folder: " + String(error.message || error)); }
+  }
   async function exportVideo() {
     if (!project.clips.length) return;
     try {
@@ -256,7 +264,7 @@ export default function VideoDashboard() {
       if (linkedTable && (!linkedRecordId || !linkedRecords.some(r => String(r.record_id) === linkedRecordId))) {
         throw new Error("Choose a valid record from the selected category.");
       }
-      const result=await bridge().video_export_project(project, patientId, linkedTable, linkedRecordId);
+      const result=await bridge().video_export_project(project, patientId, linkedTable, linkedRecordId, outputFolder);
       if (result?.error) throw new Error(result.error);
       if (result?.registered && result?.path) {setExportRecord(result);setNotice("MP4 registered to patient " + patientId + " in Patient Data Review. Review final footage before sharing.");setReviewed(false);}
       else setNotice("Export cancelled.");
@@ -355,7 +363,7 @@ export default function VideoDashboard() {
       </div>
       
     </section>}
-    {step===4 && <section className="video-panel video-export"><div><h2>Patient association</h2><div className="video-output-summary"><strong>Output folder</strong><code>~/.cocanot/video_exports</code></div><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label>
+    {step===4 && <section className="video-panel video-export"><div><h2>Patient association</h2><div className="video-output-picker"><div className="video-output-summary"><strong>Output folder</strong><code title={outputFolder || "~/.cocanot/video_exports"}>{outputFolder || "~/.cocanot/video_exports (default)"}</code></div><div className="video-output-actions"><button type="button" disabled={busy} onClick={pickOutputFolder}>Choose Output Folder</button>{outputFolder && <button type="button" disabled={busy} onClick={()=>{setOutputFolder("");setExportRecord(null);}}>Use default</button>}</div></div><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label>
       {patientId && <div className="video-link-fields">
         <label>Link video to
           <select value={linkedTable} disabled={!patientRecords} onChange={e=>{setLinkedTable(e.target.value);setLinkedRecordId("");setReviewed(false);}}>
