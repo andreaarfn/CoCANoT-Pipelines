@@ -124,15 +124,7 @@ export default function PatientDataReview({
 
 
   if (tableName === "Video") {
-    return <div style={{padding:24,maxWidth:900}}>
-      <button onClick={onBack} type="button">← Back to Patient Data Review</button>
-      <h2>Video data review</h2>
-      <p><strong>Patient:</strong> {patientId}</p>
-      <p><strong>File:</strong> {record.file_name}</p>
-      <p><strong>Local export path:</strong> <code style={{overflowWrap:"anywhere"}}>{record.path}</code></p>
-      <p><strong>Status:</strong> {record.exists ? "Exported — final privacy review required" : "Missing local MP4 file"}</p>
-      <p>This file is stored only on this computer. Play the exported MP4 locally and inspect every frame containing identifying information before sharing. A successful export does not establish that the footage is de-identified.</p>
-    </div>;
+    return <VideoPatientReview patientId={patientId} record={record} onBack={onBack}/>;
   }
 
   if (tableName === "Imaging") {
@@ -226,6 +218,33 @@ export default function PatientDataReview({
 
 
 
+
+function VideoPatientReview({ patientId, record, onBack }) {
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      if (!record.exists) return;
+      try {
+        const paths = await api()?.video_register_previews?.([record.path]);
+        if (active) setPreviewUrl(paths?.[0]?.preview_url || "");
+      } catch (err) { if (active) setError(String(err)); }
+    }
+    load();
+    return () => { active = false; };
+  }, [record.path,record.exists]);
+  return <section style={{padding:24,maxWidth:1000,display:"grid",gap:14}}>
+    <div><button type="button" onClick={onBack}>← Back to Patient Data Review</button></div>
+    <h2 style={{margin:0}}>Video data review</h2>
+    <p><strong>Patient:</strong> {patientId} · <strong>MP4:</strong> {record.file_name}</p>
+    {previewUrl && <video src={previewUrl} controls preload="metadata" style={{maxWidth:"100%",width:800,background:"#111",borderRadius:10}}/>}
+    {!record.exists && <p role="alert">The exported MP4 is missing from its saved location.</p>}
+    {error && <p role="alert">Video preview unavailable: {error}</p>}
+    <p><strong>Stored locally:</strong> <code style={{overflowWrap:"anywhere"}}>{record.path}</code></p>
+    <p><strong>Status:</strong> Final privacy review required. Scrub through and inspect the exported footage in full, including clip transitions and tracked censor regions, before sharing. Export completion alone is not de-identification validation.</p>
+  </section>;
+}
 
 function MetadataDocumentPatientReview({
 
