@@ -726,18 +726,86 @@ class CoCANoTAPI:
         filename = selected if isinstance(selected, str) else selected[0]
         return load_project(str(filename))
 
-    def video_export_project(self, project: dict[str, Any]) -> dict[str, Any]:
-        if self._window is None:
-            raise RuntimeError("The application window is unavailable.")
-        selected = self._window.create_file_dialog(
-            webview.FileDialog.SAVE,
-            save_filename="cocanot_video_redacted.mp4",
-            file_types=("MP4 video (*.mp4)",),
-        )
-        if not selected:
-            return {}
-        filename = selected if isinstance(selected, str) else selected[0]
-        return render_project(project, str(filename))
+    def _video_records_connection(self):
+        """Use the same local metadata SQLite database, without storing videos in it."""
+        connection = sqlite3.connect(self.store.database_path)
+        connection.row_factory = sqlite3.Row
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS patient_video_exports (
+                site_id TEXT NOT NULL,
+                patient_id TEXT NOT NULL,
+                record_id TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(site_id, patient_id, record_id)
+            )
+        """)
+        return connection
+
+    def video_get_patient_exports(self, patient_id: str) -> list[dict[str, Any]]:
+        site_id = str(self.get_site_id() or "").strip().upper()
+        patient_id = normalize_patient_id(patient_id)
+        if not site_id or not patient_id:
+            return []
+        with self._video_records_connection() as connection:
+            rows = connection.execute(
+                """SELECT record_id, file_path, created_at FROM patient_video_exports
+                   WHERE site_id = ? AND patient_id = ? ORDER BY created_at DESC""",
+                (site_id, patient_id),
+            ).fetchall()
+        return [
+            {"record_id": row["record_id"], "path": row["file_path"],
+             "file_name": Path(row["file_path"]).name,
+             "updated_at": row["created_at"],
+             "review_status": "Exported — requires final privacy review",
+             "exists": Path(row["file_path"]).is_file()}
+            for row in rows
+        ]
+
+    def video_delete_patient_export(self, patient_id: str, record_id: str) -> dict[str, Any]:
+        """Remove a video association, never delete the actual recording."""
+        site_id = str(self.get_site_id() or "").strip().upper()
+        patient_id = normalize_patient_id(patient_id)
+        if not site_id or not patient_id or not record_id:
+            raise ValueError("Site, patient and video record are required.")
+        with self._video_records_connection() as connection:
+            removed = connection.execute(
+                """DELETE FROM patient_video_exports
+                   WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                (site_id, patient_id, str(record_id)),
+            )
+        return {"deleted": removed.rowcount > 0}
+
+    def video_export_project(self, project: dict[str, Any], patient_id: str = "") -> dict[str, Any]:
+        """Render locally and register a patient-linked MP4 only after successful export."""
+        site_id = str(self.get_site_id() or "").strip().upper()
+        patient_id = normalize_patient_id(patient_id)
+        if not site_id:
+            raise ValueError("Sign in to a CoCANoT site before exporting video.")
+        if not patient_id or not self.store.patient_exists(site_id, patient_id):
+            raise ValueError("Select an existing patient before exporting video.")
+        # Avoid inserting identifiers into output filenames or directory names.
+        output_dir = Path.home() / ".cocanot" / "video_exports"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        record_id = uuid.uuid4().hex
+        filename = output_dir / f"video_{record_id}.mp4"
+        try:
+            result = render_project(project, str(filename))
+            if not filename.is_file() or filename.stat().st_size == 0:
+                raise RuntimeError("Video renderer did not produce a valid MP4 file.")
+            with self._video_records_connection() as connection:
+                connection.execute(
+                    """INSERT INTO patient_video_exports
+                       (site_id, patient_id, record_id, file_path, created_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (site_id, patient_id, record_id, str(filename),
+                     datetime.now(timezone.utc).isoformat()),
+                )
+            return {**(result or {}), "path": str(filename),
+                    "record_id": record_id, "patient_id": patient_id, "registered": True}
+        except Exception:
+            filename.unlink(missing_ok=True)
+            raise
 
     def _load_initial_state(self) -> None:
         try:
