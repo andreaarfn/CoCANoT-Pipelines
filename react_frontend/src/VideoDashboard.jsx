@@ -43,7 +43,7 @@ export default function VideoDashboard() {
     setPatientRecords(null);
     setLinkedTable("");
     setLinkedRecordId("");
-    if (!patientId || step !== 5) return () => {active=false;};
+    if (!patientId || step !== 4) return () => {active=false;};
     async function loadRecords() {
       try {
         const site = await bridge()?.get_site_id?.();
@@ -251,17 +251,16 @@ export default function VideoDashboard() {
   }
   const combinedDuration=useMemo(()=>project.clips.reduce((t,c)=>t+c.end-c.start,0),[project]);
   return <div className="video-workspace">
-    <header className="video-header"><div><div className="video-eyebrow">COCANOT PIPELINES / VIDEO</div><h1>Video de-identification</h1><p>Non-destructive editing and opaque masking. Processing stays on your device.</p></div>
+    <header className="video-header"><div><div className="video-eyebrow">COCANOT PIPELINES / VIDEO</div><h1>Video de-identification</h1></div>
       <div className="video-actions"><button onClick={addVideos} disabled={busy}><Plus size={16}/> Import video</button><button onClick={()=>projectAction("video_load_project")} disabled={busy}><FolderOpen size={16}/> Open project</button><button onClick={()=>projectAction("video_save_project")} disabled={busy || !clip}><Save size={16}/> Save project</button></div></header>
     <nav className="video-steps" aria-label="Video processing steps">
-      {["Import", "Edit", "Censor", "Review", "Export"].map((name,i)=><button type="button" key={name} className={step===i+1?"video-step-active":""} aria-current={step===i+1?"step":undefined} disabled={(i>0&&!project.clips.length)||busy} onClick={()=>{setStep(i+1);setMaskMode(false);player.current?.pause();}}>{i+1}. {name}</button>)}
+      {["Import", "Edit & Censor", "Review", "Export"].map((name,i)=><button type="button" key={name} className={step===i+1?"video-step-active":""} aria-current={step===i+1?"step":undefined} disabled={(i>0&&!project.clips.length)||busy} onClick={()=>{setStep(i+1);setMaskMode(false);player.current?.pause();}}>{i+1}. {name}</button>)}
     </nav>
-    {step===1 && <section className="video-panel video-stage"><h2>Step 1 — Import</h2><p>Import recordings locally. Original files are never modified.</p><button className="video-primary" onClick={addVideos} disabled={busy}><Plus size={16}/> Import video files</button>{project.clips.length>0 && <button onClick={()=>setStep(2)}>Continue to Edit →</button>}</section>}
-    {step===2 && <section className="video-panel video-stage"><h2>Step 2 — Edit</h2><p>Trim, split, add, and reorder clips using the timeline.</p></section>}
-    {step===3 && <section className="video-panel video-stage"><h2>Step 3 — Censor</h2><p>Draw opaque boxes over identifiers and track them over their selected intervals.</p></section>}
-    {step===4 && <section className="video-panel video-stage"><h2>Step 4 — Review</h2><p>Inspect every censor region across all clips, including tracking failures and transitions. A final review of the exported file is also required.</p></section>}
-    {step===5 && <section className="video-panel video-stage"><h2>Step 5 — Export</h2><p>Export the censored MP4 locally and link it to an existing patient for Patient Data Review.</p></section>}
-    {[2,3,4].includes(step) && <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
+    {step===1 && <section className="video-panel video-stage"><h2>Import</h2><button className="video-primary" onClick={addVideos} disabled={busy}><Plus size={16}/> Import files</button>{project.clips.length>0 && <button onClick={()=>setStep(2)}>Continue</button>}</section>}
+    {step===2 && <section className="video-panel video-stage"><h2>Edit & Censor</h2></section>}
+    {step===3 && <section className="video-panel video-stage"><h2>Review</h2></section>}
+    {step===4 && <section className="video-panel video-stage"><h2>Export</h2></section>}
+    {[2,3].includes(step) && <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
       <div className="video-player" ref={frame} style={{cursor:maskMode?"crosshair":"default"}}>
         {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} controls onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}} onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
           onTimeUpdate={event=>{const time=event.currentTarget.currentTime;if(time >=clip.end){event.currentTarget.pause();}setCursor(clamp(time-clip.start,0,duration));}}/>
@@ -275,18 +274,18 @@ export default function VideoDashboard() {
         </> : <div className="video-empty">Import a recording to begin. Original footage is never modified.</div>}
       </div>
       <div className="video-scrub"><input type="range" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
-      <div className="video-actions"><button disabled={!clip || busy || cursor <= .05 || cursor >= duration-.05} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
-      <p className="video-hint">Censor boxes are solid black. Tracking is approximate; inspect the rendered file before releasing it. Audio is removed from exports.</p>
-      </section>{step===3 && <aside className="video-panel video-properties"><h2>Clip and censor settings</h2>{clip ? <>
+      {step===2 && <div className="video-actions"><button disabled={!clip || busy || cursor <= .05 || cursor >= duration-.05} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>}
+      
+      </section>{step===2 && <aside className="video-panel video-properties"><h2>Clip tools</h2>{clip ? <>
       <div className="video-trim-editor">
         <div className="video-trim-heading"><strong>Trim selected clip</strong><button title="Restore full clip length" disabled={busy || (clip.start===0 && clip.end===clip.duration)} onClick={()=>{const oldStart=clip.start;mutateClip(c=>({...c,start:0,end:c.duration,masks:c.masks.map(m=>({...m,start:m.start+oldStart,end:m.end+oldStart,keyframes:[],tracked_until:null,tracking_complete:null}))}));setCursor(0);if(player.current){player.current.pause();player.current.currentTime=0;}}}><RotateCcw size={14}/> Reset</button></div>
-        <p>Drag the handles to trim the beginning or end without changing the original recording.</p>
+        
         <div className="video-trim-track" aria-hidden="true"><div style={{left:`${clip.start / (clip.duration||1)*100}%`,right:`${(1-clip.end/(clip.duration||1))*100}%`}} /></div>
         <label>Start <strong>{seconds(clip.start)}s</strong><input aria-label="Trim clip start" type="range" min="0" max={Math.max(0,clip.end-.1)} step=".05" value={clip.start} disabled={busy} onChange={e=>trimClip("start",e.target.value)}/></label>
         <label>End <strong>{seconds(clip.end)}s</strong><input aria-label="Trim clip end" type="range" min={Math.min(clip.duration,clip.start+.1)} max={clip.duration} step=".05" value={clip.end} disabled={busy} onChange={e=>trimClip("end",e.target.value)}/></label>
         <div className="video-trim-result">Kept: {seconds(duration)}s of {seconds(clip.duration)}s</div>
       </div>
-      <h3>Censor regions ({masks.length})</h3>{!masks.length && <p>No masks on this clip.</p>}
+      <h3>Censor regions ({masks.length})</h3>
       {masks.map((m,i)=><div className="video-mask-settings" key={m.id}><div><strong>Region {i+1}</strong><button aria-label="Remove mask" onClick={()=>mutateClip(c=>({...c,masks:c.masks.filter(x=>x.id!==m.id)}))}><Trash2 size={15}/></button></div>
         <div className="video-actions"><button disabled={busy} onClick={()=>trackMask(m)}>Track censor interval</button></div>
         {m.keyframes?.length>0 && <p role="status">
@@ -298,12 +297,12 @@ export default function VideoDashboard() {
         <div className="video-fields">{["start","end"].map(k=><label key={k}>{k} (s)<input type="number" step="0.01" min="0" max={duration} value={seconds(m[k])} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value),0,duration)}:x)}))}/></label>)}</div>
       </div>)}
       </> : <p>Select a clip to inspect and edit.</p>}</aside>}</div>}
-    {[2,3,4].includes(step) && <section className="video-panel video-timeline">
+    {[2,3].includes(step) && <section className="video-panel video-timeline">
       <div className="video-panel-title">Timeline <small>{project.clips.length} clips · {seconds(combinedDuration)} seconds</small></div>
-      <div className="video-timeline-toolbar"><span>Select a clip to edit. Drag a clip to change its order. Split at the playhead to make two clips.</span><button onClick={addVideos} disabled={busy}><Plus size={15}/> Add clips</button></div>
+      <div className="video-timeline-toolbar">{step===2 && <button onClick={addVideos} disabled={busy}><Plus size={15}/> Add clips</button>}</div>
       <div className="video-clips">
         {project.clips.map((c,i)=><div key={c.id} className={`video-clip ${clip?.id===c.id?"video-selected":""}`}
-          draggable={!busy} onDragStart={e=>{draggedClip.current=c.id;e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",c.id);}}
+          draggable={!busy && step===2} onDragStart={e=>{draggedClip.current=c.id;e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",c.id);}}
           onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect="move";}}
           onDrop={e=>{e.preventDefault();const source=draggedClip.current;draggedClip.current=null;reorderClip(source,c.id);}}
           onDragEnd={()=>{draggedClip.current=null;}}
@@ -312,13 +311,13 @@ export default function VideoDashboard() {
           <div className="video-clip-art"><GripVertical size={17}/><Video size={23}/><span>Clip {i+1}</span></div>
           <strong title={c.name}>{c.name}</strong>
           <small>{seconds(c.end-c.start)}s · {c.masks.length} censor boxes</small>
-          <div className="video-clip-buttons"><button title="Remove clip" aria-label={`Remove ${c.name}`} onClick={e=>{e.stopPropagation();setProject(p=>({...p,clips:p.clips.filter(x=>x.id!==c.id)}));if(selected===c.id)setSelected(null);setReviewed(false);}}><Trash2 size={15}/></button></div>
+          {step===2 && <div className="video-clip-buttons"><button title="Remove clip" aria-label={`Remove ${c.name}`} onClick={e=>{e.stopPropagation();setProject(p=>({...p,clips:p.clips.filter(x=>x.id!==c.id)}));if(selected===c.id)setSelected(null);setReviewed(false);}}><Trash2 size={15}/></button></div>}
         </div>)}
-        <button className="video-add-tile" onClick={addVideos} disabled={busy}><Plus size={24}/><span>Add another clip</span></button>
+        {step===2 && <button className="video-add-tile" onClick={addVideos} disabled={busy}><Plus size={24}/><span>Add another clip</span></button>}
       </div>
-      <div className="video-timeline-footnote">Clips play in this left-to-right order in the exported video. Trimming and splitting do not alter source files.</div>
+      
     </section>}
-    {step===5 && <section className="video-panel video-export"><div><h2>Review & export</h2><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label>
+    {step===4 && <section className="video-panel video-export"><div><h2>Patient association</h2><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label>
       {patientId && <div className="video-link-fields">
         <label>Link video to
           <select value={linkedTable} disabled={!patientRecords} onChange={e=>{setLinkedTable(e.target.value);setLinkedRecordId("");setReviewed(false);}}>
@@ -335,9 +334,9 @@ export default function VideoDashboard() {
           </select>
           {linkedRecords.length===0 && <small>No {linkedTable.toLowerCase()} records exist for this patient. Add one in Patient Data Review or choose patient only.</small>}
         </label>}
-      </div>}<p>Export creates a 720p MP4 with solid black censor regions; audio is removed. Tracking is fallible and does not validate privacy.</p><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the censor positions and time intervals.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !patientId || !patientRecords || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
-    {step===5 && exportRecord && <div className="video-notice" role="status"><strong>Linked to patient {exportRecord.patient_id}</strong><p>MP4: {exportRecord.path}</p><p>{exportRecord.linked_table ? `Linked to ${exportRecord.linked_table} record ${exportRecord.linked_record_id}. ` : ""}Find the record in Patient Data Review. Check the exported footage before sharing.</p></div>}
-    {step>1 && step<5 && <div className="video-stage-navigation"><button onClick={()=>setStep(step-1)}>← Previous step</button><button className="video-primary" onClick={()=>{player.current?.pause();setMaskMode(false);setStep(step+1);}}>Continue →</button></div>}
+      </div>}<p>Export removes audio. Review the final MP4 before sharing.</p><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the censor positions and time intervals.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !patientId || !patientRecords || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
+    {step===4 && exportRecord && <div className="video-notice" role="status"><strong>Linked to patient {exportRecord.patient_id}</strong><p>MP4: {exportRecord.path}</p><p>{exportRecord.linked_table ? `Linked to ${exportRecord.linked_table} record ${exportRecord.linked_record_id}. ` : ""}Find the record in Patient Data Review. Check the exported footage before sharing.</p></div>}
+    {step>1 && step<4 && <div className="video-stage-navigation"><button onClick={()=>setStep(step-1)}>← Previous step</button><button className="video-primary" onClick={()=>{player.current?.pause();setMaskMode(false);setStep(step+1);}}>Continue →</button></div>}
     {notice && <div className="video-notice" role="status">{notice}</div>}
   </div>;
 }
