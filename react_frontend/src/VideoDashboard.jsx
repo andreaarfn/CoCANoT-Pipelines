@@ -255,7 +255,6 @@ export default function VideoDashboard() {
       {["Select Video", "Process Video", "Review", "Export"].map((name,i)=><button type="button" key={name} className={`video-step ${step===i+1?"video-step-active":""}`} aria-current={step===i+1?"step":undefined} disabled={(i>0&&!project.clips.length)||busy} onClick={()=>{setStep(i+1);setMaskMode(false);player.current?.pause();}}>
         <span className="video-step-number">{i+1}</span>
         <span className="video-step-name">{name}</span>
-        {step===i+1 && <span className="video-step-current">Current</span>}
       </button>)}
     </nav>
     {step===1 && <section className="video-panel video-stage">
