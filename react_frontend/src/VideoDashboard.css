@@ -184,3 +184,10 @@
 .video-output-picker .video-output-summary{display:flex;align-items:flex-start;flex-direction:column;gap:6px;max-width:100%;min-width:0;margin:0}
 .video-output-picker .video-output-summary code{max-width:100%;box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
 .video-output-actions{display:flex;flex-wrap:wrap;gap:8px;max-width:100%}
+
+/* Match the folder path and Browse pattern used in Process Imaging. */
+.video-folder-field{display:flex;flex-direction:column;gap:8px;min-width:0;max-width:100%;margin:0 0 18px;color:#3a526a;font-size:13px;font-weight:650}
+.video-folder-control{display:flex;align-items:stretch;gap:8px;min-width:0;max-width:100%;width:min(100%,650px)}
+.video-folder-control input{flex:1 1 auto;min-width:0;width:100%;box-sizing:border-box;padding:10px 12px;font:inherit;font-size:13px;color:#203854;background:#fff;border:1px solid #c8d5e1;border-radius:8px}
+.video-folder-control button{flex:0 0 auto;white-space:nowrap}
+@container (max-width:470px){.video-folder-control{flex-wrap:wrap}.video-folder-control input{flex:1 1 100%}}
