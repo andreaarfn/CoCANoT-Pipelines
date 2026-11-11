@@ -273,7 +273,7 @@ export default function VideoDashboard() {
         <div className="video-fields">{["start","end"].map(k=><label key={k}>{k} (s)<input type="number" step="0.01" min="0" max={duration} value={seconds(m[k])} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value),0,duration)}:x)}))}/></label>)}</div>
       </div>)}
       </> : <p>Select a clip to inspect and edit.</p>}</aside>}</div>}
-    {step===2 && <section className="video-panel video-timeline">
+    {[2,3,4].includes(step) && <section className="video-panel video-timeline">
       <div className="video-panel-title">Timeline <small>{project.clips.length} clips · {seconds(combinedDuration)} seconds</small></div>
       <div className="video-timeline-toolbar"><span>Select a clip to edit. Drag a clip to change its order. Split at the playhead to make two clips.</span><button onClick={addVideos} disabled={busy}><Plus size={15}/> Add clips</button></div>
       <div className="video-clips">
