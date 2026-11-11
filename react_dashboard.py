@@ -823,13 +823,11 @@ class CoCANoTAPI:
             if not matched:
                 raise ValueError("Selected record does not belong to this patient or no longer exists.")
         # Avoid inserting identifiers into output filenames or directory names.
-        if str(output_folder or "").strip():
-            output_dir = Path(str(output_folder)).expanduser().resolve()
-            if not output_dir.is_dir():
-                raise ValueError("The selected output folder does not exist. Choose another folder.")
-        else:
-            output_dir = Path.home() / ".cocanot" / "video_exports"
-            output_dir.mkdir(parents=True, exist_ok=True)
+        if not str(output_folder or "").strip():
+            raise ValueError("Select an output folder before exporting video.")
+        output_dir = Path(str(output_folder)).expanduser().resolve()
+        if not output_dir.is_dir():
+            raise ValueError("The selected output folder does not exist. Choose another folder.")
         record_id = uuid.uuid4().hex
         filename = output_dir / f"video_{record_id}.mp4"
         try:
