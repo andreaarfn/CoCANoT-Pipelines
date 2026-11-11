@@ -251,8 +251,8 @@ export default function VideoDashboard() {
   }
   const combinedDuration=useMemo(()=>project.clips.reduce((t,c)=>t+c.end-c.start,0),[project]);
   return <div className="video-workspace">
-    <header className="video-header"><div><div className="video-eyebrow">COCANOT PIPELINES / VIDEO</div><h1>Video de-identification</h1></div>
-      <div className="video-actions"><button onClick={addVideos} disabled={busy}><Plus size={16}/> Import video</button><button onClick={()=>projectAction("video_load_project")} disabled={busy}><FolderOpen size={16}/> Open project</button><button onClick={()=>projectAction("video_save_project")} disabled={busy || !clip}><Save size={16}/> Save project</button></div></header>
+    <header className="video-header"><div><h1>Video de-identification</h1></div>
+      <div className="video-actions"><button onClick={()=>projectAction("video_load_project")} disabled={busy}><FolderOpen size={16}/> Open project</button><button onClick={()=>projectAction("video_save_project")} disabled={busy || !clip}><Save size={16}/> Save project</button></div></header>
     <nav className="video-steps" aria-label="Video processing steps">
       {["Import", "Edit & Censor", "Review", "Export"].map((name,i)=><button type="button" key={name} className={step===i+1?"video-step-active":""} aria-current={step===i+1?"step":undefined} disabled={(i>0&&!project.clips.length)||busy} onClick={()=>{setStep(i+1);setMaskMode(false);player.current?.pause();}}>{i+1}. {name}</button>)}
     </nav>
@@ -299,7 +299,7 @@ export default function VideoDashboard() {
       </> : <p>Select a clip to inspect and edit.</p>}</aside>}</div>}
     {[2,3].includes(step) && <section className="video-panel video-timeline">
       <div className="video-panel-title">Timeline <small>{project.clips.length} clips · {seconds(combinedDuration)} seconds</small></div>
-      <div className="video-timeline-toolbar">{step===2 && <button onClick={addVideos} disabled={busy}><Plus size={15}/> Add clips</button>}</div>
+      {step===2 && <div className="video-timeline-toolbar"><button onClick={addVideos} disabled={busy}><Plus size={15}/> Add clips</button></div>}
       <div className="video-clips">
         {project.clips.map((c,i)=><div key={c.id} className={`video-clip ${clip?.id===c.id?"video-selected":""}`}
           draggable={!busy && step===2} onDragStart={e=>{draggedClip.current=c.id;e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",c.id);}}
@@ -308,7 +308,7 @@ export default function VideoDashboard() {
           onDragEnd={()=>{draggedClip.current=null;}}
           onClick={()=>selectClip(c)} role="button" tabIndex={0}
           onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();selectClip(c);}}}>
-          <div className="video-clip-art"><GripVertical size={17}/><Video size={23}/><span>Clip {i+1}</span></div>
+          <div className="video-clip-art">{step===2 && <GripVertical size={17}/>}<Video size={23}/><span>Clip {i+1}</span></div>
           <strong title={c.name}>{c.name}</strong>
           <small>{seconds(c.end-c.start)}s · {c.masks.length} censor boxes</small>
           {step===2 && <div className="video-clip-buttons"><button title="Remove clip" aria-label={`Remove ${c.name}`} onClick={e=>{e.stopPropagation();setProject(p=>({...p,clips:p.clips.filter(x=>x.id!==c.id)}));if(selected===c.id)setSelected(null);setReviewed(false);}}><Trash2 size={15}/></button></div>}
