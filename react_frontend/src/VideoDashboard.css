@@ -191,3 +191,9 @@
 .video-folder-control input{flex:1 1 auto;min-width:0;width:100%;box-sizing:border-box;padding:10px 12px;font:inherit;font-size:13px;color:#203854;background:#fff;border:1px solid #c8d5e1;border-radius:8px}
 .video-folder-control button{flex:0 0 auto;white-space:nowrap}
 @container (max-width:470px){.video-folder-control{flex-wrap:wrap}.video-folder-control input{flex:1 1 100%}}
+
+/* Keep the optional audio setting compact in Editing Tools. */
+.video-edit-action .video-audio-option{display:flex;flex-direction:row;align-items:center;gap:9px;margin:0;min-width:0;font-size:13px;font-weight:500;cursor:pointer;color:#273e55}
+.video-edit-action .video-audio-option input{flex:0 0 auto;accent-color:#317a9c;width:16px;height:16px}
+.video-edit-action .video-audio-option span{overflow-wrap:anywhere}
+@container (max-width:560px){.video-edit-action .video-audio-option{width:100%}}
