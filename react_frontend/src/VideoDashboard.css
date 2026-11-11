@@ -99,3 +99,8 @@
 .video-patient-field{display:flex;flex-direction:column;gap:7px;margin-bottom:13px;font-size:13px;font-weight:700}
 .video-patient-field select{font:inherit;padding:10px 12px;border:1px solid #c8d5e1;border-radius:8px;max-width:360px;background:#fff;color:#203854}
 @media(max-width:700px){.video-steps{grid-template-columns:repeat(3,minmax(0,1fr))}.video-stage-navigation{flex-wrap:wrap}}
+
+.video-link-fields{display:grid;gap:12px;padding:12px 14px;background:#f5f9fc;border:1px solid #d9e6ee;border-radius:10px;margin-bottom:14px;max-width:470px}
+.video-link-fields label{display:flex;flex-direction:column;gap:7px;font-size:13px;font-weight:650;color:#3a526a}
+.video-link-fields select{padding:10px 12px;border:1px solid #c8d5e1;border-radius:8px;width:100%;background:white;color:#203854;font:inherit}
+.video-link-fields small{font-size:12px;font-weight:400;color:#65798c;line-height:1.5}
