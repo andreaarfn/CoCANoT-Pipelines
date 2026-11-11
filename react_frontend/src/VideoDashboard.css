@@ -47,8 +47,6 @@
 @media(max-width:1000px){.video-layout{grid-template-columns:1fr}.video-properties{max-height:none}}
 @media(max-width:650px){.video-header h1{font-size:24px}.video-panel{padding:12px}.video-export{align-items:stretch;flex-direction:column}}
 
-.video-blurred-area{position:absolute;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);pointer-events:none}
-.video-preserve-outline{position:absolute;border:2px dashed #a7dfff;box-sizing:border-box;pointer-events:none}
 .video-properties .video-checkbox{display:flex;flex-direction:row;align-items:center;gap:8px}
 .video-properties .video-checkbox input{width:auto}
 
@@ -57,15 +55,7 @@
 
 .video-mask-capture{position:absolute;inset:0;z-index:5;touch-action:none;background:transparent}
 
-.video-person-blur-preview{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;pointer-events:none}
 .video-mask-overlay{z-index:2}
-.video-person-tools{display:flex;flex-direction:column;gap:9px;padding:12px;background:#f4f8fb;border:1px solid #d8e5ef;border-radius:10px;margin:9px 0}
-.video-person-tools code{display:block;padding:9px;background:#e9f0f6;border-radius:6px;white-space:normal;overflow-wrap:anywhere;font-size:12px}
-.video-person-tools button{align-self:flex-start}
 
-.video-polygon-outline{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
 .video-player{isolation:isolate}
 .video-mask-capture{user-select:none}
-.video-person-tools .video-mask-settings{width:100%;box-sizing:border-box;margin:0}
-.video-person-tools .video-actions{display:flex;flex-wrap:wrap}
-.video-person-tools .video-fields input{max-width:100%}
