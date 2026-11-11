@@ -235,138 +235,14 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict,
         cap.release()
 
 
-def _subject_aware_blur(frame, region, cv2):
-    """GrabCut foreground separation from a user-selected subject rectangle.
-
-    On failure, blur the entire frame instead of leaving a potentially
-    identifying background unredacted. This is not privacy certification.
-    """
-    import numpy as np
-    height, width = frame.shape[:2]
-    preview_width = 480
-    preview_height = max(1, round(height * preview_width / width))
-    small = cv2.resize(frame, (preview_width, preview_height))
-    x, y, w, h = region
-    sx, sy = preview_width / width, preview_height / height
-    rx = max(1, min(preview_width - 4, round(x * sx)))
-    ry = max(1, min(preview_height - 4, round(y * sy)))
-    rw = max(3, min(preview_width - rx - 1, round(w * sx)))
-    rh = max(3, min(preview_height - ry - 1, round(h * sy)))
-    blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=26)
-    try:
-        labels = np.zeros((preview_height, preview_width), np.uint8)
-        background_model = np.zeros((1, 65), np.float64)
-        foreground_model = np.zeros((1, 65), np.float64)
-        cv2.grabCut(small, labels, (rx, ry, rw, rh), background_model,
-                    foreground_model, 2, cv2.GC_INIT_WITH_RECT)
-        foreground = np.isin(labels, [cv2.GC_FGD, cv2.GC_PR_FGD]).astype("float32")
-        foreground = cv2.resize(foreground, (width, height), interpolation=cv2.INTER_LINEAR)
-        foreground = cv2.GaussianBlur(foreground, (0, 0), sigmaX=3)
-        alpha = np.clip(foreground, 0, 1)[:, :, None]
-        return np.clip(frame * alpha + blurred * (1 - alpha), 0, 255).astype("uint8")
-    except cv2.error:
-        return blurred
-
-
-def apply_polygon_background_blur(frame, polygons, cv2, feather=9, sigma=24):
-    """Preserve user-selected polygon subjects; blur all pixels outside.
-
-    Polygon vertices use 0..1 coordinates on the normalized 1280x720 frame.
-    Multiple polygons preserve multiple separate people or objects. A missing
-    or invalid selection fails loudly rather than exporting unblurred footage.
-    """
-    import numpy as np
-    if not isinstance(polygons, list) or not polygons:
-        raise ValueError("Draw at least one subject outline before exporting polygon blur.")
-    height, width = frame.shape[:2]
-    keep = np.zeros((height, width), dtype=np.uint8)
-    for polygon in polygons:
-        vertices = polygon.get("points", [])
-        if len(vertices) < 3:
-            raise ValueError("Each preserved-area mask requires at least three points.")
-        coords = np.array([
-            [round(float(p["x"]) * (width - 1)), round(float(p["y"]) * (height - 1))]
-            for p in vertices
-        ], dtype=np.int32)
-        cv2.fillPoly(keep, [coords], 255)
-    # A soft boundary avoids hard cutout artifacts but cannot certify privacy.
-    keep = cv2.GaussianBlur(keep, (0, 0), sigmaX=max(0.1, feather))
-    alpha = (keep.astype(np.float32) / 255.0)[:, :, None]
-    blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=max(1.0, sigma))
-    return np.clip(frame.astype(np.float32) * alpha +
-                   blurred.astype(np.float32) * (1 - alpha), 0, 255).astype(np.uint8)
-
-
-class PersonBackgroundSegmenter:
-    """Local MediaPipe person/background segmentation for a Zoom-style blur."""
-
-    def __init__(self):
-        try:
-            import mediapipe as mp
-        except ImportError as exc:
-            raise RuntimeError(
-                "Person-aware blur requires MediaPipe. Install with: python -m pip install mediapipe"
-            ) from exc
-        import os
-        from pathlib import Path
-        model = Path(os.environ.get(
-            "COCANOT_PERSON_SEGMENTATION_MODEL",
-            str(Path.home() / ".cocanot" / "models" / "selfie_segmenter.tflite")
-        )).expanduser()
-        if not model.is_file():
-            raise RuntimeError(
-                "Person segmentation model missing. Download MediaPipe Selfie Segmenter "
-                f"to {model}. No patient video is uploaded."
-            )
-        self.mp = mp
-        self.segmenter = mp.tasks.vision.ImageSegmenter.create_from_options(
-            mp.tasks.vision.ImageSegmenterOptions(
-                base_options=mp.tasks.BaseOptions(model_asset_path=str(model)),
-                running_mode=mp.tasks.vision.RunningMode.VIDEO,
-                output_confidence_masks=True,
-                output_category_mask=False,
-            )
-        )
-        self.timestamp = -1
-        self.smooth_mask = None
-
-    def apply(self, frame, cv2, time_seconds):
-        import numpy as np
-        image = self.mp.Image(
-            image_format=self.mp.ImageFormat.SRGB,
-            data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        )
-        timestamp = max(self.timestamp + 1, round(time_seconds * 1000))
-        self.timestamp = timestamp
-        result = self.segmenter.segment_for_video(image, timestamp)
-        if len(result.confidence_masks or []) < 2:
-            # Fail closed: if no person mask is returned, blur the full frame.
-            return cv2.GaussianBlur(frame, (0, 0), sigmaX=28)
-        confidence = result.confidence_masks[1].numpy_view().astype(np.float32)
-        confidence = cv2.resize(confidence, (frame.shape[1], frame.shape[0]))
-        # Temporal smoothing reduces visible flicker at edges.
-        if self.smooth_mask is None:
-            self.smooth_mask = confidence
-        else:
-            self.smooth_mask = self.smooth_mask * 0.45 + confidence * 0.55
-        alpha = np.clip((self.smooth_mask - 0.30) / 0.40, 0, 1)
-        alpha = cv2.GaussianBlur(alpha, (0, 0), sigmaX=2.5)[:, :, None]
-        blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=28)
-        return np.clip(frame * alpha + blurred * (1-alpha), 0, 255).astype(np.uint8)
-
-    def close(self):
-        self.segmenter.close()
-
-
 def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
-    """Render with moving masks and background blur; video audio is removed."""
+    """Render motion-tracked solid censor masks; remove all audio."""
     cv2 = _cv2()
     command = [ffmpeg_binary, "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
                "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", "1280x720", "-r", "30",
                "-i", "pipe:0", "-an", "-c:v", "libx264", "-preset", "veryfast",
                "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(temp)]
     proc = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-    person_segmenter = None
     try:
         for clip in clips:
             cap = cv2.VideoCapture(clip["media"]["path"])
@@ -389,25 +265,6 @@ def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
                         current_frame = frame
                         read_index += 1
                     image = _canvas(current_frame, cv2)
-                    background = clip.get("background_blur")
-                    if background and background.get("enabled"):
-                        # Apply the selected method without assuming a rectangle.
-                        if background.get("mode") == "polygon":
-                            image = apply_polygon_background_blur(
-                                image, background.get("polygons", []), cv2,
-                                feather=background.get("feather", 9),
-                                sigma=background.get("strength", 24))
-                        elif background.get("mode") == "person":
-                            if person_segmenter is None:
-                                person_segmenter = PersonBackgroundSegmenter()
-                            image = person_segmenter.apply(image, cv2, idx / 30)
-                        elif background.get("mode") == "subject":
-                            image = _subject_aware_blur(image, _rect(background), cv2)
-                        else:
-                            blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=24)
-                            x, y, w, h = _rect(background)
-                            blurred[y:y+h, x:x+w] = image[y:y+h, x:x+w]
-                            image = blurred
                     for mask in clip.get("masks", []):
                         if float(mask.get("start", 0)) <= time <= float(mask.get("end", clip["end"] - clip["start"])):
                             region = _interpolate(mask, time)
@@ -418,17 +275,12 @@ def render_advanced(clips: list[dict], temp: Path, ffmpeg_binary: str) -> None:
                     proc.stdin.write(image.tobytes())
             finally:
                 cap.release()
-                if person_segmenter is not None:
-                    person_segmenter.close()
-                    person_segmenter = None
         proc.stdin.close()
         message = proc.stderr.read().decode("utf-8", "replace") if proc.stderr else ""
         result = proc.wait(timeout=600)
         if result:
             raise RuntimeError(f"FFmpeg encoding failed: {message[-1500:]}")
     except Exception:
-        if person_segmenter is not None:
-            person_segmenter.close()
         if proc.poll() is None:
             proc.kill()
             proc.wait()
