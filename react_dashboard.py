@@ -679,25 +679,6 @@ class CoCANoTAPI:
             output.append(info)
         return output
 
-    def video_polygon_blur_preview(self, clip: dict[str, Any], relative_time: float) -> dict[str, Any]:
-        """Produce on-device preview of user-drawn background blur mask."""
-        from VideoPipeline.person_blur import preview_polygon_frame
-        return preview_polygon_frame(clip, float(relative_time))
-
-    def video_person_blur_status(self) -> dict[str, Any]:
-        from VideoPipeline.person_blur import status
-        return status()
-
-    def video_person_blur_install_model(self) -> dict[str, Any]:
-        """Download public model weights only after the user's click."""
-        from VideoPipeline.person_blur import download_model
-        return download_model()
-
-    def video_person_blur_preview(self, clip: dict[str, Any], relative_time: float) -> dict[str, Any]:
-        """Generate an on-device preview; never send footage to a remote API."""
-        from VideoPipeline.person_blur import preview_frame
-        return preview_frame(clip, float(relative_time))
-
     def video_track_region(self, clip: dict[str, Any], region: dict[str, Any], start_time: float, end_time: float) -> dict[str, Any]:
         """Track a censor box exclusively over its configured clip-relative interval."""
         from VideoPipeline.advanced import track_region
