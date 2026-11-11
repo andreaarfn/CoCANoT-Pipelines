@@ -123,6 +123,18 @@ export default function PatientDataReview({
 
 
 
+  if (tableName === "Video") {
+    return <div style={{padding:24,maxWidth:900}}>
+      <button onClick={onBack} type="button">← Back to Patient Data Review</button>
+      <h2>Video data review</h2>
+      <p><strong>Patient:</strong> {patientId}</p>
+      <p><strong>File:</strong> {record.file_name}</p>
+      <p><strong>Local export path:</strong> <code style={{overflowWrap:"anywhere"}}>{record.path}</code></p>
+      <p><strong>Status:</strong> {record.exists ? "Exported — final privacy review required" : "Missing local MP4 file"}</p>
+      <p>This file is stored only on this computer. Play the exported MP4 locally and inspect every frame containing identifying information before sharing. A successful export does not establish that the footage is de-identified.</p>
+    </div>;
+  }
+
   if (tableName === "Imaging") {
 
 
