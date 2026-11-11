@@ -21,6 +21,9 @@ export default function VideoDashboard() {
   const [step, setStep] = useState(1);
   const [patients, setPatients] = useState([]);
   const [patientId, setPatientId] = useState("");
+  const [patientRecords, setPatientRecords] = useState(null);
+  const [linkedTable, setLinkedTable] = useState("");
+  const [linkedRecordId, setLinkedRecordId] = useState("");
   const [exportRecord, setExportRecord] = useState(null);
   useEffect(() => {
     let live = true;
@@ -35,6 +38,25 @@ export default function VideoDashboard() {
     loadPatients();
     return () => { live = false; };
   }, [step]);
+  useEffect(() => {
+    let active = true;
+    setPatientRecords(null);
+    setLinkedTable("");
+    setLinkedRecordId("");
+    if (!patientId || step !== 5) return () => {active=false;};
+    async function loadRecords() {
+      try {
+        const site = await bridge()?.get_site_id?.();
+        const result = await bridge()?.metadata_get_patient?.(site,patientId);
+        if (active) setPatientRecords(result);
+      } catch(e) { if (active) setNotice("Could not load this patient's linked sessions: "+String(e)); }
+    }
+    loadRecords();
+    return () => {active=false;};
+  }, [patientId,step]);
+  const linkedRecords = linkedTable && patientRecords
+    ? patientRecords[linkedTable === "Surgical" ? "surgical" : linkedTable === "Imaging" ? "imaging" : "electrophysiology"] || []
+    : [];
   const player = useRef(null);
   const frame = useRef(null);
   const clip = project.clips.find(c => c.id === selected) || project.clips[0];
@@ -218,7 +240,10 @@ export default function VideoDashboard() {
       if (!bridge()?.video_export_project) throw new Error("Desktop video bridge unavailable.");
       setBusy(true);setNotice("Rendering locally. This can take time for long recordings.");
       if (!patientId) throw new Error("Choose an existing patient before exporting.");
-      const result=await bridge().video_export_project(project, patientId);
+      if (linkedTable && (!linkedRecordId || !linkedRecords.some(r => String(r.record_id) === linkedRecordId))) {
+        throw new Error("Choose a valid record from the selected category.");
+      }
+      const result=await bridge().video_export_project(project, patientId, linkedTable, linkedRecordId);
       if (result?.error) throw new Error(result.error);
       if (result?.registered && result?.path) {setExportRecord(result);setNotice("MP4 registered to patient " + patientId + " in Patient Data Review. Review final footage before sharing.");setReviewed(false);}
       else setNotice("Export cancelled.");
@@ -293,8 +318,25 @@ export default function VideoDashboard() {
       </div>
       <div className="video-timeline-footnote">Clips play in this left-to-right order in the exported video. Trimming and splitting do not alter source files.</div>
     </section>}
-    {step===5 && <section className="video-panel video-export"><div><h2>Review & export</h2><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label><p>Export creates a 720p MP4 with solid black censor regions; audio is removed. Tracking is fallible and does not validate privacy.</p><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the censor positions and time intervals.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !patientId}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>
-    {step===5 && exportRecord && <div className="video-notice" role="status"><strong>Linked to patient {exportRecord.patient_id}</strong><p>MP4: {exportRecord.path}</p><p>Find the record in Patient Data Review. Check the exported footage before sharing.</p></div>}
+    {step===5 && <section className="video-panel video-export"><div><h2>Review & export</h2><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label>
+      {patientId && <div className="video-link-fields">
+        <label>Link video to
+          <select value={linkedTable} disabled={!patientRecords} onChange={e=>{setLinkedTable(e.target.value);setLinkedRecordId("");setReviewed(false);}}>
+            <option value="">Patient only (no specific session)</option>
+            <option value="Surgical">Surgical record</option>
+            <option value="Imaging">Imaging study</option>
+            <option value="Electrophysiology">Electrophysiology session</option>
+          </select>
+        </label>
+        {linkedTable && <label>Choose {linkedTable === "Surgical" ? "surgery" : linkedTable === "Imaging" ? "image" : "recording"}
+          <select value={linkedRecordId} onChange={e=>{setLinkedRecordId(e.target.value);setReviewed(false);}}>
+            <option value="">Choose an existing {linkedTable.toLowerCase()} record…</option>
+            {linkedRecords.map(r=><option key={r.record_id} value={String(r.record_id)}>{r.record_id}{r.metadata?.["Surgery ID"] ? " · "+r.metadata["Surgery ID"] : r.metadata?.["Image ID"] ? " · "+r.metadata["Image ID"] : r.metadata?.["Recording ID"] ? " · "+r.metadata["Recording ID"] : ""}</option>)}
+          </select>
+          {linkedRecords.length===0 && <small>No {linkedTable.toLowerCase()} records exist for this patient. Add one in Patient Data Review or choose patient only.</small>}
+        </label>}
+      </div>}<p>Export creates a 720p MP4 with solid black censor regions; audio is removed. Tracking is fallible and does not validate privacy.</p><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the censor positions and time intervals.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !patientId || !patientRecords || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>
+    {step===5 && exportRecord && <div className="video-notice" role="status"><strong>Linked to patient {exportRecord.patient_id}</strong><p>MP4: {exportRecord.path}</p><p>{exportRecord.linked_table ? `Linked to ${exportRecord.linked_table} record ${exportRecord.linked_record_id}. ` : ""}Find the record in Patient Data Review. Check the exported footage before sharing.</p></div>}
     {step>1 && step<5 && <div className="video-stage-navigation"><button onClick={()=>setStep(step-1)}>← Previous step</button><button className="video-primary" onClick={()=>{player.current?.pause();setMaskMode(false);setStep(step+1);}}>Continue →</button></div>}
     {notice && <div className="video-notice" role="status">{notice}</div>}
   </div>;
