@@ -504,7 +504,7 @@ function CombinedVideoReview({ clips, trackedRegion }) {
       </> : <div className="video-empty">No video selected.</div>}
     </div>
     <div className="video-review-controls">
-      <button type="button" onClick={togglePlayback} disabled={!activeClip}>{playing ? "Pause" : position >= total ? "Replay" : "Play"}</button>
+      <button type="button" onClick={togglePlayback} disabled={!activeClip}>{playing ? <Pause size={16}/> : <Play size={16}/>} {playing ? "Pause" : position >= total ? "Replay" : "Play"}</button>
       <input aria-label="Combined video position" type="range" min="0" max={total || 1}
         step="0.033" value={position} disabled={!activeClip}
         onChange={event => goTo(Number(event.target.value))} />
