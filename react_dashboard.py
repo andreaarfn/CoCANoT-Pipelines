@@ -782,7 +782,7 @@ class CoCANoTAPI:
         patient_id = normalize_patient_id(patient_id)
         if not site_id:
             raise ValueError("Sign in to a CoCANoT site before exporting video.")
-        if not patient_id or not self.store.patient_exists(site_id, patient_id):
+        if not patient_id or patient_id not in self.repository.patient_ids_for_site(site_id):
             raise ValueError("Select an existing patient before exporting video.")
         # Avoid inserting identifiers into output filenames or directory names.
         output_dir = Path.home() / ".cocanot" / "video_exports"
