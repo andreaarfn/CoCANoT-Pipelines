@@ -74,31 +74,6 @@ def validate_project(project: dict) -> list[dict]:
             b = float(mask.get("end", end - start))
             if not all(map(math.isfinite, (a, b))) or a < 0 or b <= a:
                 raise ValueError("Invalid mask time interval.")
-        background = clip.get("background_blur")
-        if background and background.get("enabled"):
-            mode = background.get("mode", "rectangle")
-            if mode not in ("rectangle", "subject", "person", "polygon"):
-                raise ValueError("Unsupported background blur mode.")
-            if mode == "polygon":
-                polygons = background.get("polygons")
-                if not isinstance(polygons, list) or not (1 <= len(polygons) <= 30):
-                    raise ValueError("Draw at least one subject outline to preserve for background blur.")
-                for polygon in polygons:
-                    points = polygon.get("points") if isinstance(polygon, dict) else None
-                    if not isinstance(points, list) or not (3 <= len(points) <= 100):
-                        raise ValueError("Each subject outline needs 3 to 100 points.")
-                    for point in points:
-                        if not isinstance(point, dict):
-                            raise ValueError("Invalid polygon vertex.")
-                        x, y = float(point.get("x", -1)), float(point.get("y", -1))
-                        if not math.isfinite(x) or not math.isfinite(y) or not (0 <= x <= 1 and 0 <= y <= 1):
-                            raise ValueError("Preserved-area vertices must be inside the video frame.")
-                for prop, lower, upper in (("feather", 0, 50), ("strength", 1, 70)):
-                    val = float(background.get(prop, 9 if prop == "feather" else 24))
-                    if not math.isfinite(val) or not lower <= val <= upper:
-                        raise ValueError(f"Invalid polygon blur {prop} setting.")
-            else:
-                _validate_box(background)
         for mask in masks:
             points = mask.get("keyframes", [])
             if points:
@@ -113,7 +88,7 @@ def validate_project(project: dict) -> list[dict]:
                     previous = t
                 if float(mask.get("tracked_until", -1)) + 0.3 < float(mask.get("end", end-start)):
                     raise ValueError("Tracking doesn't cover the mask's full interval. Review and shorten it or retrack before export.")
-        output.append({**clip, "media": media, "start": start, "end": end})
+        output.append({**{k:v for k,v in clip.items() if k != "background_blur"}, "media": media, "start": start, "end": end})
     return output
 
 
@@ -128,7 +103,7 @@ def render_project(project: dict, destination: str) -> dict:
     temp = target.with_name(target.stem + ".partial.mp4")
     if temp.exists():
         raise FileExistsError(f"Temporary export already exists: {temp}")
-    if any(c.get("background_blur", {}).get("enabled") or any(m.get("keyframes") for m in c.get("masks", [])) for c in clips):
+    if any(any(m.get("keyframes") for m in c.get("masks", [])) for c in clips):
         from VideoPipeline.advanced import render_advanced
         try:
             render_advanced(clips, temp, _binary("ffmpeg"))
@@ -137,7 +112,7 @@ def render_project(project: dict, destination: str) -> dict:
             if temp.exists():
                 temp.unlink()
         return {"path": str(target), "duration": sum(c["end"] - c["start"] for c in clips),
-                "note": "Moving masks/background blur applied. Audio removed. Human privacy review required."}
+                "note": "Moving censor masks applied. Audio removed. Human privacy review required."}
     command = [_binary("ffmpeg"), "-hide_banner", "-nostdin", "-y"]
     for clip in clips:
         command += ["-ss", str(clip["start"]), "-t", str(clip["end"] - clip["start"]), "-i", clip["media"]["path"]]
@@ -180,7 +155,8 @@ def save_project(project: dict, path: str) -> str:
     target = Path(path).expanduser().resolve()
     if target.suffix.lower() != ".json":
         raise ValueError("Project file must be JSON.")
-    payload = json.dumps({"schema_version": 1, **project}, indent=2)
+    clean = {**project, "clips": [{k: v for k, v in clip.items() if k != "background_blur"} for clip in project["clips"]]}
+    payload = json.dumps({"schema_version": 1, **clean}, indent=2)
     if len(payload.encode("utf-8")) > MAX_PROJECT_BYTES:
         raise ValueError("Project exceeds size limit.")
     target.write_text(payload, encoding="utf-8")
@@ -195,4 +171,4 @@ def load_project(path: str) -> dict:
     if project.get("schema_version") != 1:
         raise ValueError("Unsupported video project version.")
     validate_project(project)
-    return project
+    return {**project, "clips": [{k: v for k, v in clip.items() if k != "background_blur"} for clip in project["clips"]]}
