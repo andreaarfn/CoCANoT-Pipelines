@@ -172,3 +172,9 @@
 .video-edit-action+.video-trim-editor{margin-top:14px}
 .video-edit-action+h3{margin-top:14px}
 @container (max-width: 460px){.video-edit-action{align-items:stretch;flex-direction:column}.video-edit-action>button{align-self:flex-start}}
+
+/* A single playback timeline controls video position and splitting. */
+.video-scrub{min-width:0;flex-wrap:wrap}
+.video-scrub input[type="range"]{accent-color:#317a9c;min-width:100px}
+.video-scrub button{flex:0 0 auto}
+@container (max-width:440px){.video-scrub input[type="range"]{order:3;flex:1 1 100%}}
