@@ -135,7 +135,7 @@ export default function VideoDashboard() {
       const items = Array.isArray(response) ? response : [];
       if (!items.length) {setNotice("No videos selected.");return;}
       const additions = items.map(m => ({ id:id(), path:m.path, name:m.name, duration:m.duration,
-        start:0, end:m.duration, masks:[], width:m.width, height:m.height, preview_url:m.preview_url }));
+        start:0, end:m.duration, masks:[], remove_audio:false, audio:Boolean(m.audio), width:m.width, height:m.height, preview_url:m.preview_url }));
       setProject(p => ({...p, clips:[...p.clips, ...additions]}));
       setSelected(s => s || additions[0].id);
       setReviewed(false);
@@ -303,7 +303,7 @@ export default function VideoDashboard() {
     {step===3 && <CombinedVideoReview clips={project.clips} trackedRegion={trackedRegion} />}
     {step===2 && <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
       <div className="video-player" ref={frame} style={{cursor:maskMode?"crosshair":"pointer"}}>
-        {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} playsInline preload="metadata"
+        {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} playsInline preload="metadata" muted={Boolean(clip.remove_audio)}
           onClick={toggleClipPlayback}
           onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;setIsPlaying(false);}}
           onPlay={()=>setIsPlaying(true)} onPause={()=>setIsPlaying(false)}
@@ -322,6 +322,7 @@ export default function VideoDashboard() {
       
       
       </section>{step===2 && <aside className="video-panel video-properties"><h2>Editing Tools</h2>{clip ? <>
+      <div className="video-edit-action"><strong>Audio</strong><label className="video-audio-option"><input type="checkbox" checked={Boolean(clip.remove_audio)} disabled={busy || clip.audio === false} onChange={e=>mutateClip(c=>({...c,remove_audio:e.target.checked}))}/><span>{clip.audio === false ? "No audio in this clip" : "Remove audio from this clip"}</span></label></div>
       <div className="video-edit-action"><strong>Split clip</strong><button disabled={!clip || busy || cursor <= .05 || cursor >= duration-.05} onClick={split}><Scissors size={16}/> Split at playhead</button></div>
       <div className="video-trim-editor">
         <div className="video-trim-heading"><strong>Trim selected clip</strong><button title="Restore full clip length" disabled={busy || (clip.start===0 && clip.end===clip.duration)} onClick={()=>{const oldStart=clip.start;mutateClip(c=>({...c,start:0,end:c.duration,masks:c.masks.map(m=>({...m,start:m.start+oldStart,end:m.end+oldStart,keyframes:[],tracked_until:null,tracking_complete:null}))}));setCursor(0);if(player.current){player.current.pause();player.current.currentTime=0;}}}><RotateCcw size={14}/> Reset</button></div>
@@ -381,7 +382,7 @@ export default function VideoDashboard() {
           </select>
           {linkedRecords.length===0 && <small>No {linkedTable.toLowerCase()} records exist for this patient. Add one in Patient Data Review or choose patient only.</small>}
         </label>}
-      </div>}<p>Export removes audio. Review the final MP4 before sharing.</p><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the censor positions and time intervals.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !outputFolder.trim() || !patientId || !patientRecords || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
+      </div>}<p>Audio is retained unless removed in Editing Tools. Review the final MP4 before sharing.</p><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the censor positions and time intervals.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !outputFolder.trim() || !patientId || !patientRecords || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
     {step===4 && exportRecord && <div className="video-notice" role="status"><strong>Linked to patient {exportRecord.patient_id}</strong><p>MP4: {exportRecord.path}</p><p>{exportRecord.linked_table ? `Linked to ${exportRecord.linked_table} record ${exportRecord.linked_record_id}. ` : ""}Find the record in Patient Data Review. Check the exported footage before sharing.</p></div>}
     {step>1 && step<4 && <div className="video-stage-navigation"><button onClick={()=>setStep(step-1)}>← Previous step</button><button className="video-primary" onClick={()=>{player.current?.pause();setMaskMode(false);setStep(step+1);}}>Continue →</button></div>}
     {notice && <div className="video-notice" role="status">{notice}</div>}
@@ -483,7 +484,7 @@ function CombinedVideoReview({ clips, trackedRegion }) {
     <div className="video-player">
       {activeClip ? <>
         <video key={activeClip.id} ref={player} src={activeClip.preview_url || ""}
-          preload="auto" playsInline muted
+          preload="auto" playsInline muted={Boolean(activeClip.remove_audio)}
           onLoadedMetadata={event => {
             const segment = segments[clipIndex];
             if (!segment) return;
