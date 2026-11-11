@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Scissors, ShieldCheck, Trash2, Video, GripVertical, RotateCcw } from "lucide-react";
+import { Plus, Scissors, ShieldCheck, Trash2, Video, GripVertical, RotateCcw, Play, Pause } from "lucide-react";
 import "./VideoDashboard.css";
 
 const bridge = () => window.pywebview?.api;
@@ -12,6 +12,7 @@ export default function VideoDashboard() {
   const [project, setProject] = useState(initial);
   const [selected, setSelected] = useState(null);
   const [cursor, setCursor] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [maskMode, setMaskMode] = useState(false);
   const dragAnchor = useRef(null);
   const draggedClip = useRef(null);
@@ -124,6 +125,7 @@ export default function VideoDashboard() {
     setCursor(0);
     setMaskMode(false);
     if (player.current) player.current.pause();
+    setIsPlaying(false);
   }
   async function addVideos() {
     try {
@@ -141,6 +143,8 @@ export default function VideoDashboard() {
   }
   function split() {
     if (!clip || cursor <= 0.05 || cursor >= duration - 0.05) return;
+    player.current?.pause();
+    setIsPlaying(false);
     const splitAt = clip.start + cursor;
     const left = {...clip, end:splitAt, masks:clip.masks.map(m => ({...m, keyframes:[], tracked_until:null, end:Math.min(m.end,cursor)})).filter(m => m.end > m.start)};
     const right = {...clip, id:id(), start:splitAt, masks:clip.masks.map(m => ({...m, keyframes:[], tracked_until:null, start:Math.max(0,m.start-cursor), end:m.end-cursor})).filter(m => m.end > m.start)};
@@ -187,6 +191,16 @@ export default function VideoDashboard() {
     if(index < 0 || next<0 || next>=project.clips.length) return;
     setProject(p=>{const clips=[...p.clips];[clips[index], clips[next]]=[clips[next],clips[index]];return {...p,clips};});
     setReviewed(false);
+  }
+  function toggleClipPlayback() {
+    if (!clip || !player.current || maskMode) return;
+    const video = player.current;
+    if (!video.paused) { video.pause(); return; }
+    if (video.currentTime >= clip.end - 0.05 || video.currentTime < clip.start) {
+      video.currentTime = clip.start;
+      setCursor(0);
+    }
+    video.play().catch(() => { setIsPlaying(false); setNotice("Unable to play this video."); });
   }
   function startMaskDrag(event) {
     if (!maskMode || !clip || !frame.current || event.button !== 0) return;
@@ -279,9 +293,13 @@ export default function VideoDashboard() {
     {step===4 && <section className="video-panel video-stage"><h2>Export</h2></section>}
     {step===3 && <CombinedVideoReview clips={project.clips} trackedRegion={trackedRegion} />}
     {step===2 && <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
-      <div className="video-player" ref={frame} style={{cursor:maskMode?"crosshair":"default"}}>
-        {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} controls onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;}} onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
-          onTimeUpdate={event=>{const time=event.currentTarget.currentTime;if(time >=clip.end){event.currentTarget.pause();}setCursor(clamp(time-clip.start,0,duration));}}/>
+      <div className="video-player" ref={frame} style={{cursor:maskMode?"crosshair":"pointer"}}>
+        {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} playsInline preload="metadata"
+          onClick={toggleClipPlayback}
+          onLoadedMetadata={event=>{event.currentTarget.currentTime=clip.start;setIsPlaying(false);}}
+          onPlay={()=>setIsPlaying(true)} onPause={()=>setIsPlaying(false)}
+          onError={()=>setNotice("Video preview could not play this codec. Try an H.264 MP4 recording.")}
+          onTimeUpdate={event=>{const video=event.currentTarget;const time=video.currentTime;if(time>=clip.end){video.pause();setCursor(duration);}else{setCursor(clamp(time-clip.start,0,duration));}}}/>
           <div className="video-mask-capture" aria-label="Draw censor region" onMouseDown={startMaskDrag} onMouseUp={finishMaskDrag} onClick={event=>{event.preventDefault();event.stopPropagation();}} style={{pointerEvents:maskMode?"auto":"none",cursor:maskMode?"crosshair":"default"}} />
           <div className="video-mask-overlay">
             {masks.filter(m=>cursor>=m.start && cursor<=m.end).map(m=>{
@@ -291,7 +309,7 @@ export default function VideoDashboard() {
           </div>
         </> : <div className="video-empty">Import a recording to begin. Original footage is never modified.</div>}
       </div>
-      <div className="video-scrub"><input type="range" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
+      <div className="video-scrub"><button type="button" aria-label={isPlaying?"Pause video":"Play video"} onClick={toggleClipPlayback} disabled={!clip || busy || maskMode}>{isPlaying?<Pause size={16}/>:<Play size={16}/>} {isPlaying?"Pause":"Play"}</button><input type="range" aria-label="Video playhead, also used for Split at playhead" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip || busy} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
       
       
       </section>{step===2 && <aside className="video-panel video-properties"><h2>Editing Tools</h2>{clip ? <>
