@@ -136,7 +136,7 @@ export default function VideoDashboard() {
       setProject(p => ({...p, clips:[...p.clips, ...additions]}));
       setSelected(s => s || additions[0].id);
       setReviewed(false);
-      setNotice(`Imported ${additions.length} recording(s).`);
+      setNotice("");
     } catch (e) { setNotice(String(e.message || e)); }
   }
   function split() {
