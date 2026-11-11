@@ -252,13 +252,17 @@ export default function VideoDashboard() {
   return <div className="video-workspace">
     <header className="video-header"><h1>Video de-identification</h1></header>
     <nav className="video-steps" aria-label="Video processing steps">
-      {["Import", "Edit & Censor", "Review", "Export"].map((name,i)=><button type="button" key={name} className={step===i+1?"video-step-active":""} aria-current={step===i+1?"step":undefined} disabled={(i>0&&!project.clips.length)||busy} onClick={()=>{setStep(i+1);setMaskMode(false);player.current?.pause();}}>{i+1}. {name}</button>)}
+      {["Select Video", "Process Video", "Review", "Export"].map((name,i)=><button type="button" key={name} className={`video-step ${step===i+1?"video-step-active":""}`} aria-current={step===i+1?"step":undefined} disabled={(i>0&&!project.clips.length)||busy} onClick={()=>{setStep(i+1);setMaskMode(false);player.current?.pause();}}>
+        <span className="video-step-number">{i+1}</span>
+        <span className="video-step-name">{name}</span>
+        {step===i+1 && <span className="video-step-current">Current</span>}
+      </button>)}
     </nav>
     {step===1 && <section className="video-panel video-stage">
-      <h2>Import</h2>
+      <h2>Select Video</h2>
       <div className="video-import-actions">
         <button className="video-primary" onClick={addVideos} disabled={busy}><Plus size={16}/> Add files</button>
-        <button onClick={()=>setStep(2)} disabled={busy || project.clips.length===0}>Continue</button>
+        <button onClick={()=>setStep(2)} disabled={busy || project.clips.length===0}>Continue to Process Video</button>
       </div>
       {project.clips.length>0 && <div className="video-import-list" aria-label="Imported recordings">
         <strong>{project.clips.length} recording{project.clips.length===1?"":"s"} selected</strong>
@@ -271,7 +275,7 @@ export default function VideoDashboard() {
         </div>)}
       </div>}
     </section>}
-    {step===2 && <section className="video-panel video-stage"><h2>Edit & Censor</h2></section>}
+    {step===2 && <section className="video-panel video-stage"><h2>Process Video</h2></section>}
     {step===3 && <section className="video-panel video-stage"><h2>Review</h2></section>}
     {step===4 && <section className="video-panel video-stage"><h2>Export</h2></section>}
     {[2,3].includes(step) && <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
@@ -290,7 +294,7 @@ export default function VideoDashboard() {
       <div className="video-scrub"><input type="range" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
       {step===2 && <div className="video-actions"><button disabled={!clip || busy || cursor <= .05 || cursor >= duration-.05} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>}
       
-      </section>{step===2 && <aside className="video-panel video-properties"><h2>Clip tools</h2>{clip ? <>
+      </section>{step===2 && <aside className="video-panel video-properties"><h2>Edit & Censor</h2>{clip ? <>
       <div className="video-trim-editor">
         <div className="video-trim-heading"><strong>Trim selected clip</strong><button title="Restore full clip length" disabled={busy || (clip.start===0 && clip.end===clip.duration)} onClick={()=>{const oldStart=clip.start;mutateClip(c=>({...c,start:0,end:c.duration,masks:c.masks.map(m=>({...m,start:m.start+oldStart,end:m.end+oldStart,keyframes:[],tracked_until:null,tracking_complete:null}))}));setCursor(0);if(player.current){player.current.pause();player.current.currentTime=0;}}}><RotateCcw size={14}/> Reset</button></div>
         
@@ -331,7 +335,7 @@ export default function VideoDashboard() {
       </div>
       
     </section>}
-    {step===4 && <section className="video-panel video-export"><div><h2>Patient association</h2><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label>
+    {step===4 && <section className="video-panel video-export"><div><h2>Patient association</h2><div className="video-output-summary"><strong>Output folder</strong><code>~/.cocanot/video_exports</code></div><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label>
       {patientId && <div className="video-link-fields">
         <label>Link video to
           <select value={linkedTable} disabled={!patientRecords} onChange={e=>{setLinkedTable(e.target.value);setLinkedRecordId("");setReviewed(false);}}>
