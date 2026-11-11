@@ -10860,6 +10860,7 @@ class CoCANoTAPI:
             ),
         )
 
+        result["video"] = self.video_get_patient_exports(patient_id)
         return result
 
     @staticmethod
