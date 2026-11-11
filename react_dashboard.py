@@ -668,6 +668,19 @@ class CoCANoTAPI:
             videos.append(info)
         return videos
 
+    def video_pick_output_folder(self) -> str:
+        """Choose an existing local directory for the video MP4 export."""
+        if self._window is None:
+            raise RuntimeError("The application window is unavailable.")
+        selected = self._window.create_file_dialog(webview.FileDialog.FOLDER)
+        if not selected:
+            return ""
+        directory = selected if isinstance(selected, str) else selected[0]
+        folder = Path(str(directory)).expanduser().resolve()
+        if not folder.is_dir():
+            raise ValueError("Choose an existing output folder.")
+        return str(folder)
+
     def video_register_previews(self, paths: list[str]) -> list[dict[str, Any]]:
         """Restore preview access when opening a saved editing project."""
         output = []
@@ -786,7 +799,8 @@ class CoCANoTAPI:
         return {"deleted": removed.rowcount > 0}
 
     def video_export_project(self, project: dict[str, Any], patient_id: str = "",
-                             linked_table: str = "", linked_record_id: str = "") -> dict[str, Any]:
+                             linked_table: str = "", linked_record_id: str = "",
+                             output_folder: str = "") -> dict[str, Any]:
         """Render locally and register a patient-linked MP4 only after successful export."""
         site_id = str(self.get_site_id() or "").strip().upper()
         patient_id = normalize_patient_id(patient_id)
@@ -809,8 +823,13 @@ class CoCANoTAPI:
             if not matched:
                 raise ValueError("Selected record does not belong to this patient or no longer exists.")
         # Avoid inserting identifiers into output filenames or directory names.
-        output_dir = Path.home() / ".cocanot" / "video_exports"
-        output_dir.mkdir(parents=True, exist_ok=True)
+        if str(output_folder or "").strip():
+            output_dir = Path(str(output_folder)).expanduser().resolve()
+            if not output_dir.is_dir():
+                raise ValueError("The selected output folder does not exist. Choose another folder.")
+        else:
+            output_dir = Path.home() / ".cocanot" / "video_exports"
+            output_dir.mkdir(parents=True, exist_ok=True)
         record_id = uuid.uuid4().hex
         filename = output_dir / f"video_{record_id}.mp4"
         try:
