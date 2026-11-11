@@ -87,3 +87,15 @@
 .video-add-tile{flex:0 0 155px;min-height:132px;display:flex!important;flex-direction:column;gap:9px!important;border:2px dashed #9dbbcd!important;color:#326d8c!important;background:#f6fbfe!important}
 .video-timeline-footnote{margin-top:4px}
 @media(max-width:650px){.video-timeline-toolbar{align-items:stretch}.video-timeline-toolbar button{align-self:flex-start}.video-clip{flex-basis:155px;min-width:155px}}
+
+/* Five-step workflow, in line with the Imaging / Electrophysiology dashboards */
+.video-steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.video-steps button{background:#edf3f7;border:1px solid #cddfea;border-radius:11px;color:#355b74;padding:13px 7px;min-width:0;white-space:normal;font-size:13px}
+.video-steps button.video-step-active{background:#317a9c;border-color:#317a9c;color:#fff;box-shadow:0 2px 6px rgba(20,65,90,.15)}
+.video-stage{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.video-stage h2{font-size:18px;margin:0;width:100%}
+.video-stage p{font-size:13px;color:#5f7388;line-height:1.6;margin:0;flex:1 1 100%}
+.video-stage-navigation{display:flex;justify-content:space-between;gap:12px}
+.video-patient-field{display:flex;flex-direction:column;gap:7px;margin-bottom:13px;font-size:13px;font-weight:700}
+.video-patient-field select{font:inherit;padding:10px 12px;border:1px solid #c8d5e1;border-radius:8px;max-width:360px;background:#fff;color:#203854}
+@media(max-width:700px){.video-steps{grid-template-columns:repeat(3,minmax(0,1fr))}.video-stage-navigation{flex-wrap:wrap}}
