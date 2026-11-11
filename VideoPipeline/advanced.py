@@ -1,4 +1,4 @@
-"""Optical template tracking and frame-accurate mask/blur rendering.
+"""Optical-flow tracking and frame-accurate opaque censor-mask rendering.
 
 For research prototyping only: manual inspection of the final output is mandatory.
 """
@@ -14,7 +14,7 @@ def _cv2():
         import cv2
         return cv2
     except ImportError as exc:
-        raise RuntimeError("Motion tracking and background blur require OpenCV: python -m pip install opencv-python") from exc
+        raise RuntimeError("Motion-tracked censor rendering requires OpenCV: python -m pip install opencv-python") from exc
 
 
 def _canvas(frame, cv2):
