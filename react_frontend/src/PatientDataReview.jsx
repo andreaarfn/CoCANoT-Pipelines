@@ -241,6 +241,8 @@ function VideoPatientReview({ patientId, record, onBack }) {
     {previewUrl && <video src={previewUrl} controls preload="metadata" style={{maxWidth:"100%",width:800,background:"#111",borderRadius:10}}/>}
     {!record.exists && <p role="alert">The exported MP4 is missing from its saved location.</p>}
     {error && <p role="alert">Video preview unavailable: {error}</p>}
+    {record.linked_table && record.linked_record_id && <p><strong>Associated {record.linked_table} record:</strong> {record.linked_record_id}</p>}
+    {!record.linked_table && <p><strong>Association:</strong> Patient only</p>}
     <p><strong>Stored locally:</strong> <code style={{overflowWrap:"anywhere"}}>{record.path}</code></p>
     <p><strong>Status:</strong> Final privacy review required. Scrub through and inspect the exported footage in full, including clip transitions and tracked censor regions, before sharing. Export completion alone is not de-identification validation.</p>
   </section>;
