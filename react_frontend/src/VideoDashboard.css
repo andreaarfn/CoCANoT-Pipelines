@@ -104,3 +104,11 @@
 .video-link-fields label{display:flex;flex-direction:column;gap:7px;font-size:13px;font-weight:650;color:#3a526a}
 .video-link-fields select{padding:10px 12px;border:1px solid #c8d5e1;border-radius:8px;width:100%;background:white;color:#203854;font:inherit}
 .video-link-fields small{font-size:12px;font-weight:400;color:#65798c;line-height:1.5}
+
+/* Compact multi-file import */
+.video-import-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.video-import-list{display:grid;gap:6px;flex:1 1 100%;max-width:760px}
+.video-import-list>strong{font-size:13px;font-weight:600}
+.video-import-file{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid #d8e4ec;border-radius:8px;padding:7px 11px;min-width:0}
+.video-import-file span{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.video-import-file button{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:5px;border:0;background:transparent;cursor:pointer}
