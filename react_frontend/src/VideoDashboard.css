@@ -127,3 +127,30 @@
 .video-output-summary code{font-size:12px;color:#1d617d;background:#edf5f9;border-radius:6px;padding:6px 9px}
 @media(max-width:900px){.video-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:530px){.video-workspace .video-step{padding:10px;min-height:62px}.video-step-current{display:none}.video-step-number{width:27px;height:27px}}
+
+/* Responsive to available dashboard content width, not the outer desktop window.
+   The sidebar remains visible while the inner workspace becomes narrower. */
+.video-workspace{container-type:inline-size;min-width:0;width:100%;box-sizing:border-box}
+.video-workspace .video-steps{grid-template-columns:repeat(4,minmax(0,1fr));min-width:0}
+.video-workspace .video-step{min-width:0;max-width:100%;box-sizing:border-box;overflow:hidden;gap:9px;padding:12px;justify-content:flex-start}
+.video-workspace .video-step-number{flex:0 0 29px;width:29px;height:29px;line-height:1}
+.video-workspace .video-step-name{flex:1 1 auto;min-width:0;max-width:100%;overflow-wrap:break-word;word-break:normal;white-space:normal;text-align:left}
+.video-workspace .video-stage,.video-workspace .video-panel,.video-workspace .video-layout,.video-workspace .video-timeline{min-width:0;max-width:100%;box-sizing:border-box}
+.video-workspace .video-stage-navigation,.video-workspace .video-import-actions{min-width:0;flex-wrap:wrap}
+.video-workspace .video-output-summary code{overflow-wrap:anywhere;min-width:0}
+@container (max-width: 880px){
+  .video-workspace .video-steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .video-workspace .video-layout{grid-template-columns:minmax(0,1fr)}
+  .video-workspace .video-properties{max-height:none}
+  .video-workspace .video-export{flex-direction:column;align-items:stretch}
+}
+@container (max-width: 420px){
+  .video-workspace .video-steps{grid-template-columns:minmax(0,1fr)}
+  .video-workspace .video-step{min-height:50px;padding:10px 12px}
+  .video-workspace .video-stage{padding:12px}
+}
+/* Fallback for webviews without container queries: collapse cards rather than overlap. */
+@supports not (container-type:inline-size){
+  .video-workspace .video-steps{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))}
+  .video-workspace .video-step-name{overflow-wrap:anywhere}
+}
