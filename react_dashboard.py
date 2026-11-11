@@ -737,9 +737,16 @@ class CoCANoTAPI:
                 record_id TEXT NOT NULL,
                 file_path TEXT NOT NULL,
                 created_at TEXT NOT NULL,
+                linked_table TEXT NOT NULL DEFAULT '',
+                linked_record_id TEXT NOT NULL DEFAULT '',
                 PRIMARY KEY(site_id, patient_id, record_id)
             )
         """)
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(patient_video_exports)")}
+        if "linked_table" not in columns:
+            connection.execute("ALTER TABLE patient_video_exports ADD COLUMN linked_table TEXT NOT NULL DEFAULT ''")
+        if "linked_record_id" not in columns:
+            connection.execute("ALTER TABLE patient_video_exports ADD COLUMN linked_record_id TEXT NOT NULL DEFAULT ''")
         return connection
 
     def video_get_patient_exports(self, patient_id: str) -> list[dict[str, Any]]:
@@ -749,13 +756,15 @@ class CoCANoTAPI:
             return []
         with self._video_records_connection() as connection:
             rows = connection.execute(
-                """SELECT record_id, file_path, created_at FROM patient_video_exports
+                """SELECT record_id, file_path, created_at, linked_table, linked_record_id FROM patient_video_exports
                    WHERE site_id = ? AND patient_id = ? ORDER BY created_at DESC""",
                 (site_id, patient_id),
             ).fetchall()
         return [
             {"record_id": row["record_id"], "path": row["file_path"],
              "file_name": Path(row["file_path"]).name,
+             "linked_table": row["linked_table"],
+             "linked_record_id": row["linked_record_id"],
              "updated_at": row["created_at"],
              "review_status": "Exported — requires final privacy review",
              "exists": Path(row["file_path"]).is_file()}
@@ -776,7 +785,8 @@ class CoCANoTAPI:
             )
         return {"deleted": removed.rowcount > 0}
 
-    def video_export_project(self, project: dict[str, Any], patient_id: str = "") -> dict[str, Any]:
+    def video_export_project(self, project: dict[str, Any], patient_id: str = "",
+                             linked_table: str = "", linked_record_id: str = "") -> dict[str, Any]:
         """Render locally and register a patient-linked MP4 only after successful export."""
         site_id = str(self.get_site_id() or "").strip().upper()
         patient_id = normalize_patient_id(patient_id)
@@ -784,6 +794,20 @@ class CoCANoTAPI:
             raise ValueError("Sign in to a CoCANoT site before exporting video.")
         if not patient_id or patient_id not in self.repository.patient_ids_for_site(site_id):
             raise ValueError("Select an existing patient before exporting video.")
+        linked_table = str(linked_table or "").strip()
+        linked_record_id = str(linked_record_id or "").strip()
+        allowed = {"Surgical": "surgical", "Imaging": "imaging",
+                   "Electrophysiology": "electrophysiology"}
+        if linked_table or linked_record_id:
+            if linked_table not in allowed or not linked_record_id:
+                raise ValueError("Select a valid surgery, imaging study, or electrophysiology session.")
+            patient_records = self.metadata_get_patient(site_id, patient_id)
+            matched = any(
+                str(item.get("record_id", "")) == linked_record_id
+                for item in patient_records.get(allowed[linked_table], [])
+            )
+            if not matched:
+                raise ValueError("Selected record does not belong to this patient or no longer exists.")
         # Avoid inserting identifiers into output filenames or directory names.
         output_dir = Path.home() / ".cocanot" / "video_exports"
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -796,13 +820,16 @@ class CoCANoTAPI:
             with self._video_records_connection() as connection:
                 connection.execute(
                     """INSERT INTO patient_video_exports
-                       (site_id, patient_id, record_id, file_path, created_at)
-                       VALUES (?, ?, ?, ?, ?)""",
+                       (site_id, patient_id, record_id, file_path, created_at,
+                        linked_table, linked_record_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (site_id, patient_id, record_id, str(filename),
-                     datetime.now(timezone.utc).isoformat()),
+                     datetime.now(timezone.utc).isoformat(),
+                     linked_table, linked_record_id),
                 )
             return {**(result or {}), "path": str(filename),
-                    "record_id": record_id, "patient_id": patient_id, "registered": True}
+                    "record_id": record_id, "patient_id": patient_id, "registered": True,
+                    "linked_table": linked_table, "linked_record_id": linked_record_id}
         except Exception:
             filename.unlink(missing_ok=True)
             raise
