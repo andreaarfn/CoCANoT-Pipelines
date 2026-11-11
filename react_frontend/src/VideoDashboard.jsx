@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, FolderOpen, Plus, Save, Scissors, ShieldCheck, Trash2, Video } from "lucide-react";
+import { FolderOpen, Plus, Save, Scissors, ShieldCheck, Trash2, Video, GripVertical, RotateCcw } from "lucide-react";
 import "./VideoDashboard.css";
 
 const bridge = () => window.pywebview?.api;
@@ -14,6 +14,7 @@ export default function VideoDashboard() {
   const [cursor, setCursor] = useState(0);
   const [maskMode, setMaskMode] = useState(false);
   const dragAnchor = useRef(null);
+  const draggedClip = useRef(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [reviewed, setReviewed] = useState(false);
@@ -107,6 +108,40 @@ export default function VideoDashboard() {
     setProject(p => {const i=p.clips.findIndex(c=>c.id===clip.id); const clips=[...p.clips];clips.splice(i,1,left,right);return {...p,clips};});
     setSelected(right.id); setCursor(0); setReviewed(false);
   }
+  function trimClip(side, nextValue) {
+    if (!clip) return;
+    const oldStart = clip.start;
+    const oldEnd = clip.end;
+    const next = side === "start"
+      ? clamp(Number(nextValue), 0, oldEnd - 0.1)
+      : clamp(Number(nextValue), oldStart + 0.1, clip.duration);
+    if (!Number.isFinite(next)) return;
+    const start = side === "start" ? next : oldStart;
+    const end = side === "end" ? next : oldEnd;
+    const shift = start - oldStart;
+    mutateClip(c => ({...c, start, end,
+      masks: c.masks.map(m => ({...m,
+        start: clamp(m.start - shift, 0, end - start),
+        end: clamp(m.end - shift, 0, end - start),
+        keyframes: [], tracked_until: null, tracking_complete: null, tracking_message: ""
+      })).filter(m => m.end > m.start)
+    }));
+    const localTime = clamp(cursor - shift, 0, end - start);
+    setCursor(localTime);
+    if (player.current) { player.current.pause(); player.current.currentTime = start + localTime; }
+  }
+  function reorderClip(sourceId, destinationId) {
+    if (!sourceId || sourceId === destinationId) return;
+    setProject(p => {
+      const clips = [...p.clips];
+      const from = clips.findIndex(c => c.id === sourceId);
+      const to = clips.findIndex(c => c.id === destinationId);
+      if (from < 0 || to < 0) return p;
+      clips.splice(to, 0, clips.splice(from, 1)[0]);
+      return {...p, clips};
+    });
+    setReviewed(false);
+  }
   function move(delta) {
     const index = project.clips.findIndex(c=>c.id===clip?.id);
     const next = index+delta;
@@ -189,11 +224,17 @@ export default function VideoDashboard() {
         </> : <div className="video-empty">Import a recording to begin. Original footage is never modified.</div>}
       </div>
       <div className="video-scrub"><input type="range" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
-      <div className="video-actions"><button disabled={!clip || busy} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
+      <div className="video-actions"><button disabled={!clip || busy || cursor <= .05 || cursor >= duration-.05} onClick={split}><Scissors size={16}/> Split at playhead</button><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
       <p className="video-hint">Censor boxes are solid black. Tracking is approximate; inspect the rendered file before releasing it. Audio is removed from exports.</p>
       </section><aside className="video-panel video-properties"><h2>Clip and censor settings</h2>{clip ? <>
-      <label>Start (seconds)<input type="number" step="0.01" min="0" max={clip.end-0.01} value={clip.start} onChange={e=>mutateClip(c=>({...c,start:clamp(Number(e.target.value),0,c.end-0.01)}))}/></label>
-      <label>End (seconds)<input type="number" step="0.01" min={clip.start+0.01} max={clip.duration} value={clip.end} onChange={e=>mutateClip(c=>({...c,end:clamp(Number(e.target.value),c.start+0.01,c.duration)}))}/></label>
+      <div className="video-trim-editor">
+        <div className="video-trim-heading"><strong>Trim selected clip</strong><button title="Restore full clip length" disabled={busy || (clip.start===0 && clip.end===clip.duration)} onClick={()=>{const oldStart=clip.start;mutateClip(c=>({...c,start:0,end:c.duration,masks:c.masks.map(m=>({...m,start:m.start+oldStart,end:m.end+oldStart,keyframes:[],tracked_until:null,tracking_complete:null}))}));setCursor(0);if(player.current){player.current.pause();player.current.currentTime=0;}}}><RotateCcw size={14}/> Reset</button></div>
+        <p>Drag the handles to trim the beginning or end without changing the original recording.</p>
+        <div className="video-trim-track" aria-hidden="true"><div style={{left:`${clip.start / (clip.duration||1)*100}%`,right:`${(1-clip.end/(clip.duration||1))*100}%`}} /></div>
+        <label>Start <strong>{seconds(clip.start)}s</strong><input aria-label="Trim clip start" type="range" min="0" max={Math.max(0,clip.end-.1)} step=".05" value={clip.start} disabled={busy} onChange={e=>trimClip("start",e.target.value)}/></label>
+        <label>End <strong>{seconds(clip.end)}s</strong><input aria-label="Trim clip end" type="range" min={Math.min(clip.duration,clip.start+.1)} max={clip.duration} step=".05" value={clip.end} disabled={busy} onChange={e=>trimClip("end",e.target.value)}/></label>
+        <div className="video-trim-result">Kept: {seconds(duration)}s of {seconds(clip.duration)}s</div>
+      </div>
       <h3>Censor regions ({masks.length})</h3>{!masks.length && <p>No masks on this clip.</p>}
       {masks.map((m,i)=><div className="video-mask-settings" key={m.id}><div><strong>Region {i+1}</strong><button aria-label="Remove mask" onClick={()=>mutateClip(c=>({...c,masks:c.masks.filter(x=>x.id!==m.id)}))}><Trash2 size={15}/></button></div>
         <div className="video-actions"><button disabled={busy} onClick={()=>trackMask(m)}>Track censor interval</button></div>
@@ -206,8 +247,26 @@ export default function VideoDashboard() {
         <div className="video-fields">{["start","end"].map(k=><label key={k}>{k} (s)<input type="number" step="0.01" min="0" max={duration} value={seconds(m[k])} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value),0,duration)}:x)}))}/></label>)}</div>
       </div>)}
       </> : <p>Select a clip to inspect and edit.</p>}</aside></div>
-    <section className="video-panel video-timeline"><div className="video-panel-title">Timeline <small>{project.clips.length} clip(s) · {seconds(combinedDuration)} seconds</small></div><div className="video-clips">{project.clips.map((c,i)=><div key={c.id} className={`video-clip ${clip?.id===c.id?"video-selected":""}`} onClick={()=>selectClip(c)}>
-      <span>{i+1}. {c.name}</span><small>{seconds(c.end-c.start)}s · {c.masks.length} masks</small><div className="video-clip-buttons"><button title="Move left" disabled={i===0} onClick={e=>{e.stopPropagation();setSelected(c.id);setProject(p=>{const a=[...p.clips];[a[i-1],a[i]]=[a[i],a[i-1]];return {...p,clips:a};});setReviewed(false);}}><ArrowUp size={15}/></button><button title="Move right" disabled={i===project.clips.length-1} onClick={e=>{e.stopPropagation();setSelected(c.id);setProject(p=>{const a=[...p.clips];[a[i+1],a[i]]=[a[i],a[i+1]];return {...p,clips:a};});setReviewed(false);}}><ArrowDown size={15}/></button><button title="Remove clip" onClick={e=>{e.stopPropagation();setProject(p=>({...p,clips:p.clips.filter(x=>x.id!==c.id)}));if(selected===c.id)setSelected(null);setReviewed(false);}}><Trash2 size={15}/></button></div></div>)}</div></section>
+    <section className="video-panel video-timeline">
+      <div className="video-panel-title">Timeline <small>{project.clips.length} clips · {seconds(combinedDuration)} seconds</small></div>
+      <div className="video-timeline-toolbar"><span>Select a clip to edit. Drag a clip to change its order. Split at the playhead to make two clips.</span><button onClick={addVideos} disabled={busy}><Plus size={15}/> Add clips</button></div>
+      <div className="video-clips">
+        {project.clips.map((c,i)=><div key={c.id} className={`video-clip ${clip?.id===c.id?"video-selected":""}`}
+          draggable={!busy} onDragStart={e=>{draggedClip.current=c.id;e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",c.id);}}
+          onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect="move";}}
+          onDrop={e=>{e.preventDefault();const source=draggedClip.current;draggedClip.current=null;reorderClip(source,c.id);}}
+          onDragEnd={()=>{draggedClip.current=null;}}
+          onClick={()=>selectClip(c)} role="button" tabIndex={0}
+          onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();selectClip(c);}}}>
+          <div className="video-clip-art"><GripVertical size={17}/><Video size={23}/><span>Clip {i+1}</span></div>
+          <strong title={c.name}>{c.name}</strong>
+          <small>{seconds(c.end-c.start)}s · {c.masks.length} censor boxes</small>
+          <div className="video-clip-buttons"><button title="Remove clip" aria-label={`Remove ${c.name}`} onClick={e=>{e.stopPropagation();setProject(p=>({...p,clips:p.clips.filter(x=>x.id!==c.id)}));if(selected===c.id)setSelected(null);setReviewed(false);}}><Trash2 size={15}/></button></div>
+        </div>)}
+        <button className="video-add-tile" onClick={addVideos} disabled={busy}><Plus size={24}/><span>Add another clip</span></button>
+      </div>
+      <div className="video-timeline-footnote">Clips play in this left-to-right order in the exported video. Trimming and splitting do not alter source files.</div>
+    </section>
     <section className="video-panel video-export"><div><h2>Review & export</h2><p>Export creates a 720p MP4 with solid black censor regions; audio is removed. Tracking is fallible and does not validate privacy.</p><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the censor positions and time intervals.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed}>{busy?"Processing…":"Export censored MP4"}</button></section>
     {notice && <div className="video-notice" role="status">{notice}</div>}
   </div>;
