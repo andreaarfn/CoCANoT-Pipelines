@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, Plus, Save, Scissors, ShieldCheck, Trash2, Video, GripVertical, RotateCcw } from "lucide-react";
+import { Plus, Scissors, ShieldCheck, Trash2, Video, GripVertical, RotateCcw } from "lucide-react";
 import "./VideoDashboard.css";
 
 const bridge = () => window.pywebview?.api;
@@ -137,7 +137,6 @@ export default function VideoDashboard() {
       setSelected(s => s || additions[0].id);
       setReviewed(false);
       setNotice(`Imported ${additions.length} recording(s).`);
-      setStep(2);
     } catch (e) { setNotice(String(e.message || e)); }
   }
   function split() {
@@ -251,12 +250,27 @@ export default function VideoDashboard() {
   }
   const combinedDuration=useMemo(()=>project.clips.reduce((t,c)=>t+c.end-c.start,0),[project]);
   return <div className="video-workspace">
-    <header className="video-header"><div><h1>Video de-identification</h1></div>
-      <div className="video-actions"><button onClick={()=>projectAction("video_load_project")} disabled={busy}><FolderOpen size={16}/> Open project</button><button onClick={()=>projectAction("video_save_project")} disabled={busy || !clip}><Save size={16}/> Save project</button></div></header>
+    <header className="video-header"><h1>Video de-identification</h1></header>
     <nav className="video-steps" aria-label="Video processing steps">
       {["Import", "Edit & Censor", "Review", "Export"].map((name,i)=><button type="button" key={name} className={step===i+1?"video-step-active":""} aria-current={step===i+1?"step":undefined} disabled={(i>0&&!project.clips.length)||busy} onClick={()=>{setStep(i+1);setMaskMode(false);player.current?.pause();}}>{i+1}. {name}</button>)}
     </nav>
-    {step===1 && <section className="video-panel video-stage"><h2>Import</h2><button className="video-primary" onClick={addVideos} disabled={busy}><Plus size={16}/> Import files</button>{project.clips.length>0 && <button onClick={()=>setStep(2)}>Continue</button>}</section>}
+    {step===1 && <section className="video-panel video-stage">
+      <h2>Import</h2>
+      <div className="video-import-actions">
+        <button className="video-primary" onClick={addVideos} disabled={busy}><Plus size={16}/> Add files</button>
+        <button onClick={()=>setStep(2)} disabled={busy || project.clips.length===0}>Continue</button>
+      </div>
+      {project.clips.length>0 && <div className="video-import-list" aria-label="Imported recordings">
+        <strong>{project.clips.length} recording{project.clips.length===1?"":"s"} selected</strong>
+        {project.clips.map(c=><div key={c.id} className="video-import-file">
+          <span title={c.name}>{c.name}</span>
+          <button type="button" aria-label={`Remove ${c.name}`} title="Remove" disabled={busy}
+            onClick={()=>{setProject(p=>({...p,clips:p.clips.filter(x=>x.id!==c.id)}));if(selected===c.id)setSelected(null);setReviewed(false);}}>
+            <Trash2 size={15}/>
+          </button>
+        </div>)}
+      </div>}
+    </section>}
     {step===2 && <section className="video-panel video-stage"><h2>Edit & Censor</h2></section>}
     {step===3 && <section className="video-panel video-stage"><h2>Review</h2></section>}
     {step===4 && <section className="video-panel video-stage"><h2>Export</h2></section>}
