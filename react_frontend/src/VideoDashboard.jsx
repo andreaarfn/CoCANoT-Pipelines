@@ -260,6 +260,7 @@ export default function VideoDashboard() {
     try {
       if (!bridge()?.video_export_project) throw new Error("Desktop video bridge unavailable.");
       setBusy(true);setNotice("Rendering locally. This can take time for long recordings.");
+      if (!outputFolder.trim()) throw new Error("Choose an output folder before exporting.");
       if (!patientId) throw new Error("Choose an existing patient before exporting.");
       if (linkedTable && (!linkedRecordId || !linkedRecords.some(r => String(r.record_id) === linkedRecordId))) {
         throw new Error("Choose a valid record from the selected category.");
@@ -363,7 +364,7 @@ export default function VideoDashboard() {
       </div>
       
     </section>}
-    {step===4 && <section className="video-panel video-export"><div><h2>Patient association</h2><div className="video-output-picker"><div className="video-output-summary"><strong>Output folder</strong><code title={outputFolder || "~/.cocanot/video_exports"}>{outputFolder || "~/.cocanot/video_exports (default)"}</code></div><div className="video-output-actions"><button type="button" disabled={busy} onClick={pickOutputFolder}>Choose Output Folder</button>{outputFolder && <button type="button" disabled={busy} onClick={()=>{setOutputFolder("");setExportRecord(null);}}>Use default</button>}</div></div><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label>
+    {step===4 && <section className="video-panel video-export"><div><h2>Patient association</h2><label className="video-folder-field"><span>Output folder</span><div className="video-folder-control"><input type="text" aria-label="Output folder" placeholder="Select an output folder" value={outputFolder} onChange={event=>{setOutputFolder(event.target.value);setExportRecord(null);setReviewed(false);}} disabled={busy}/><button type="button" disabled={busy} onClick={pickOutputFolder}>Browse…</button></div></label><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label>
       {patientId && <div className="video-link-fields">
         <label>Link video to
           <select value={linkedTable} disabled={!patientRecords} onChange={e=>{setLinkedTable(e.target.value);setLinkedRecordId("");setReviewed(false);}}>
@@ -380,7 +381,7 @@ export default function VideoDashboard() {
           </select>
           {linkedRecords.length===0 && <small>No {linkedTable.toLowerCase()} records exist for this patient. Add one in Patient Data Review or choose patient only.</small>}
         </label>}
-      </div>}<p>Export removes audio. Review the final MP4 before sharing.</p><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the censor positions and time intervals.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !patientId || !patientRecords || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
+      </div>}<p>Export removes audio. Review the final MP4 before sharing.</p><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the censor positions and time intervals.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !outputFolder.trim() || !patientId || !patientRecords || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
     {step===4 && exportRecord && <div className="video-notice" role="status"><strong>Linked to patient {exportRecord.patient_id}</strong><p>MP4: {exportRecord.path}</p><p>{exportRecord.linked_table ? `Linked to ${exportRecord.linked_table} record ${exportRecord.linked_record_id}. ` : ""}Find the record in Patient Data Review. Check the exported footage before sharing.</p></div>}
     {step>1 && step<4 && <div className="video-stage-navigation"><button onClick={()=>setStep(step-1)}>← Previous step</button><button className="video-primary" onClick={()=>{player.current?.pause();setMaskMode(false);setStep(step+1);}}>Continue →</button></div>}
     {notice && <div className="video-notice" role="status">{notice}</div>}
