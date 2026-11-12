@@ -2047,6 +2047,7 @@ class CoCANoTAPI:
     ) -> dict[str, Any]:
         return {
             "field_name": str(rule.get("field_name", "")),
+            "field_order": rule.get("field_order"),
             "ui_prompt": str(
                 rule.get("ui_prompt")
                 or rule.get("field_name")
@@ -12018,16 +12019,18 @@ class CoCANoTAPI:
             )
         )
 
+        editable_rules = [
+            rule for rule in rules
+            if not bool(rule.get("system_generated", False))
+        ]
         return [
-            self._rule_payload(
-                rule
-            )
-            for rule in rules
-            if not bool(
-                rule.get(
-                    "system_generated",
-                    False,
-                )
+            self._rule_payload(rule)
+            for rule in sorted(
+                editable_rules,
+                key=lambda rule: (
+                    float(rule.get("field_order") or float("inf")),
+                    str(rule.get("field_name") or ""),
+                ),
             )
         ]
 
