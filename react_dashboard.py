@@ -744,7 +744,7 @@ class CoCANoTAPI:
         from VideoPipeline.advanced import track_region
         from VideoPipeline.processing import validate_project, _validate_box
         import math
-        validated = validate_project({"clips": [{**clip, "masks": []}]})[0]
+        validated = validate_project({"clips": [{**clip, "path": self._video_current_path(clip.get("path", "")), "masks": []}]})[0]
         start = float(start_time)
         end = float(end_time)
         duration = validated["end"] - validated["start"]
@@ -831,7 +831,7 @@ class CoCANoTAPI:
         if not selected:
             return {}
         filename = selected if isinstance(selected, str) else selected[0]
-        return {"path": save_project(project, str(filename))}
+        return {"path": save_project(self._video_rebind_project_paths(project), str(filename))}
 
     def video_load_project(self) -> dict[str, Any] | None:
         if self._window is None:
@@ -844,7 +844,7 @@ class CoCANoTAPI:
         if not selected:
             return None
         filename = selected if isinstance(selected, str) else selected[0]
-        return load_project(str(filename))
+        return load_project(str(filename), resolve_clip_path=self._video_current_path)
 
     def _video_records_connection(self):
         """Use the same local metadata SQLite database, without storing videos in it."""
@@ -1285,7 +1285,7 @@ class CoCANoTAPI:
         temporary_metadata = output_dir / f".{filename.stem}.{record_id}.json.tmp"
         metadata_created = False
         try:
-            result = render_project(project, str(filename))
+            result = render_project(self._video_rebind_project_paths(project), str(filename))
             if not filename.is_file() or filename.stat().st_size == 0:
                 raise RuntimeError("Video renderer did not produce a valid MP4 file.")
             temporary_metadata.write_text(
