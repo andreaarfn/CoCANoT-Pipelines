@@ -53,7 +53,9 @@ export default function AppShell({
       ? "imaging"
       : page.startsWith("ephys")
         ? "ephys"
-        : page.startsWith("metadata")
+        : page.startsWith("video")
+          ? "video"
+          : page.startsWith("metadata")
           ? "metadata"
           : page;
 
@@ -202,6 +204,20 @@ export default function AppShell({
                     </button>
                   )}
 
+                {!collapsed &&
+                  item.key === "video" &&
+                  active && (
+                    <button
+                      className={`${styles.subItem} ${
+                        page === "video-processing"
+                          ? styles.subItemActive
+                          : ""
+                      }`}
+                      onClick={() => onNavigate("video-processing")}
+                    >
+                      Process Videos
+                    </button>
+                  )}
                 {!collapsed &&
                   item.key === "metadata" &&
                   active && (
