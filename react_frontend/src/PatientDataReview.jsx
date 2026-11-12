@@ -4438,7 +4438,7 @@ function MetadataSummary({ record, expandable = false, onEdit }) {
       <section className={styles.videoDetailsCard} aria-label="CoCANoT Metadata">
         <div className={styles.videoDetailsHeader}>
           <div>
-            <strong><FileText size={16} /> CoCANoT Metadata</strong>
+            <strong>CoCANoT Metadata</strong>
             <span>Record {record?.record_id} · {fields.length} metadata fields</span>
           </div>
           <div className={styles.metadataHeaderActions}>
