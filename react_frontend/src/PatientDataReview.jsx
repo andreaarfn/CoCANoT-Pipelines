@@ -1556,6 +1556,40 @@ function ImagingPatientReview({
 
       <MetadataSummary record={record} expandable onEdit={onEdit} tableName="Imaging" />
 
+      {preview && (
+        <section className={styles.linkedJsonCard}>
+          <div className={styles.linkedJsonHeader}>
+            <div className={styles.linkedJsonHeading}>
+              <strong>NIfTI header</strong>
+              <span>Header values read from the linked imaging file</span>
+            </div>
+          </div>
+          <div className={styles.linkedJsonContent}>
+            <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.linked_header ?? {}, null, 2)}</pre>
+          </div>
+        </section>
+      )}
+
+      {preview && (
+        <section className={styles.linkedJsonCard}>
+          <div className={styles.linkedJsonHeader}>
+            <div className={styles.linkedJsonHeading}>
+              <strong>Linked JSON file</strong>
+              <span>{preview.linked_json_path ? preview.linked_json_path.split(/[\\/]/).pop() : "No matching JSON sidecar found"}</span>
+            </div>
+            <button type="button" className={styles.refreshButton} onClick={() => setShowLinkedJson(current => !current)} aria-expanded={showLinkedJson}>
+              {showLinkedJson ? "Hide JSON" : "View JSON"}
+            </button>
+          </div>
+          {(!preview.linked_is_bids_export || !preview.linked_json_has_cocanot_metadata) && (
+            <p className={styles.linkedJsonEmpty} style={{ padding: "9px 14px", margin: 0 }}>
+              {!preview.linked_is_bids_export
+                ? "This viewer opened the earlier processed NIfTI and its processing JSON, not a verified Step 5 BIDS export. This does not mean Step 5 was never completed. The saved BIDS link may be missing, outdated, or pointing to a different output folder."
+                : "This existing BIDS JSON predates the complete CoCANoT metadata export. Re-export from Step 5 to update the actual JSON file."}
+            </p>
+          )}
+
+
 
 
 
@@ -1943,38 +1977,6 @@ function ImagingPatientReview({
 
 
     
-      {preview && (
-        <section className={styles.linkedJsonCard}>
-          <div className={styles.linkedJsonHeader}>
-            <div className={styles.linkedJsonHeading}>
-              <strong>NIfTI header</strong>
-              <span>Header values read from the linked imaging file</span>
-            </div>
-          </div>
-          <div className={styles.linkedJsonContent}>
-            <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.linked_header ?? {}, null, 2)}</pre>
-          </div>
-        </section>
-      )}
-
-      {preview && (
-        <section className={styles.linkedJsonCard}>
-          <div className={styles.linkedJsonHeader}>
-            <div className={styles.linkedJsonHeading}>
-              <strong>Linked JSON file</strong>
-              <span>{preview.linked_json_path ? preview.linked_json_path.split(/[\\/]/).pop() : "No matching JSON sidecar found"}</span>
-            </div>
-            <button type="button" className={styles.refreshButton} onClick={() => setShowLinkedJson(current => !current)} aria-expanded={showLinkedJson}>
-              {showLinkedJson ? "Hide JSON" : "View JSON"}
-            </button>
-          </div>
-          {(!preview.linked_is_bids_export || !preview.linked_json_has_cocanot_metadata) && (
-            <p className={styles.linkedJsonEmpty} style={{ padding: "9px 14px", margin: 0 }}>
-              {!preview.linked_is_bids_export
-                ? "This viewer opened the earlier processed NIfTI and its processing JSON, not a verified Step 5 BIDS export. This does not mean Step 5 was never completed. The saved BIDS link may be missing, outdated, or pointing to a different output folder."
-                : "This existing BIDS JSON predates the complete CoCANoT metadata export. Re-export from Step 5 to update the actual JSON file."}
-            </p>
-          )}
           {!preview.linked_json_has_cocanot_metadata && Object.keys(preview.record_cocanot_metadata ?? {}).length > 0 && (
             <div className={styles.linkedJsonContent}>
               <strong>CoCANoT metadata saved in patient record (not yet embedded in this JSON file)</strong>
@@ -2520,6 +2522,30 @@ function EphysPatientReview({
 
 
       <MetadataSummary record={record} expandable onEdit={onEdit} tableName="Electrophysiology" />
+
+      {signal && (
+          <section className={styles.linkedJsonCard}>
+            <div className={styles.linkedJsonHeader}>
+              <div className={styles.linkedJsonHeading}>
+                <strong>Linked JSON file</strong>
+                <span>Recording metadata followed by CoCANoT metadata</span>
+              </div>
+              <button type="button" className={styles.refreshButton} onClick={() => setShowLinkedJson(open => !open)} aria-expanded={showLinkedJson}>
+                {showLinkedJson ? "Hide JSON" : "View JSON"}
+              </button>
+            </div>
+            {!signal.linked_metadata?.CoCANoTMetadata && (
+              <p className={styles.linkedJsonEmpty}>
+                This recording's JSON does not contain embedded CoCANoT metadata. Complete Step 5 to create the combined final sidecar.
+              </p>
+            )}
+            {showLinkedJson && (
+              <div className={styles.linkedJsonContent}>
+                <pre className={styles.linkedJsonPreview}>{JSON.stringify(signal.linked_metadata ?? {}, null, 2)}</pre>
+              </div>
+            )}
+          </section>
+      )}
 
 
 
@@ -3340,27 +3366,7 @@ function EphysPatientReview({
               <pre className={styles.linkedJsonPreview}>{JSON.stringify(signal.header ?? {}, null, 2)}</pre>
             </div>
           </section>
-          <section className={styles.linkedJsonCard}>
-            <div className={styles.linkedJsonHeader}>
-              <div className={styles.linkedJsonHeading}>
-                <strong>Linked JSON file</strong>
-                <span>Recording metadata followed by CoCANoT metadata</span>
-              </div>
-              <button type="button" className={styles.refreshButton} onClick={() => setShowLinkedJson(open => !open)} aria-expanded={showLinkedJson}>
-                {showLinkedJson ? "Hide JSON" : "View JSON"}
-              </button>
-            </div>
-            {!signal.linked_metadata?.CoCANoTMetadata && (
-              <p className={styles.linkedJsonEmpty}>
-                This recording's JSON does not contain embedded CoCANoT metadata. Complete Step 5 to create the combined final sidecar.
-              </p>
-            )}
-            {showLinkedJson && (
-              <div className={styles.linkedJsonContent}>
-                <pre className={styles.linkedJsonPreview}>{JSON.stringify(signal.linked_metadata ?? {}, null, 2)}</pre>
-              </div>
-            )}
-          </section>
+
         </>
 
 
