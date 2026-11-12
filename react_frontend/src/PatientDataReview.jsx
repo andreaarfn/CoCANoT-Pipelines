@@ -1020,7 +1020,7 @@ function ReviewHeader({
 
 
 
-          <p>{text}</p>
+          {text && <p>{text}</p>}
 
 
 
