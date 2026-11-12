@@ -676,9 +676,9 @@ export default function MetadataDashboard({
 
 
 
-    patientIdOverride = ""
+    patientIdOverride = "",
 
-
+    returnToVideoReview = false
 
   ) {
 
@@ -912,7 +912,7 @@ export default function MetadataDashboard({
 
       patientId: effectivePatientId,
 
-
+      returnToVideoReview,
 
     });
 
@@ -1255,6 +1255,7 @@ export default function MetadataDashboard({
 
 
     const savedTableName = editor?.tableName ?? "";
+    let refreshedVideoForReview = null;
 
 
 
@@ -1440,6 +1441,7 @@ export default function MetadataDashboard({
         ) {
           throw new Error("Video metadata could not be verified after saving. Reopen the record and retry.");
         }
+        refreshedVideoForReview = persistedVideo;
       } else if (editor.tableName === "Clinical") {
 
 
@@ -1636,6 +1638,15 @@ export default function MetadataDashboard({
       await loadPatient(targetPatientId);
       await onDataChanged?.();
 
+      // Return to the same Video review after saving, using its freshly
+      // persisted record (including any renamed MP4 and updated metadata).
+      // Other editor entry points retain their existing navigation.
+      if (savedTableName === "Video" && editor.returnToVideoReview) {
+        if (!refreshedVideoForReview) {
+          throw new Error("The updated video record could not be reopened.");
+        }
+        setDataReview({ tableName: "Video", record: refreshedVideoForReview });
+      }
       setEditor(null);
       setMessage(`${editor.tableName} metadata saved.`);
 
@@ -2474,15 +2485,13 @@ export default function MetadataDashboard({
 
           await openEditor(
 
-
-
             current.tableName,
 
+            current.record,
 
+            "",
 
-            current.record
-
-
+            current.tableName === "Video"
 
           );
 
