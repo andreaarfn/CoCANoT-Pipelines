@@ -12128,6 +12128,7 @@ class CoCANoTAPI:
         self,
         table_name: str,
         dictionary_version: str = "",
+        include_system_generated: bool = False,
     ) -> list[dict[str, Any]]:
         table_name = str(
             table_name or ""
@@ -12151,14 +12152,18 @@ class CoCANoTAPI:
             )
         )
 
-        editable_rules = [
-            rule for rule in rules
-            if not bool(rule.get("system_generated", False))
-        ]
+        selected_rules = (
+            rules
+            if include_system_generated
+            else [
+                rule for rule in rules
+                if not bool(rule.get("system_generated", False))
+            ]
+        )
         return [
             self._rule_payload(rule)
             for rule in sorted(
-                editable_rules,
+                selected_rules,
                 key=lambda rule: (
                     float(rule.get("field_order") or float("inf")),
                     str(rule.get("field_name") or ""),
