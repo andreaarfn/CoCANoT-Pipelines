@@ -4674,7 +4674,7 @@ function PatientRecordSection({
 
 
 
-              {tableName !== "Video" && <th>Review Status</th>}
+              <th>Review Status</th>
 
 
 
@@ -4706,7 +4706,7 @@ function PatientRecordSection({
 
 
 
-                  colSpan={tableName === "Video" ? 4 : 5}
+                  colSpan={5}
 
 
 
@@ -4798,11 +4798,10 @@ function PatientRecordSection({
 
 
 
-                const needsReview =
-
-
-
-                  issueCount > 0;
+                const videoIssues = tableName === "Video" ? (row.review_issues ?? []) : [];
+                const totalIssueCount = issueCount + videoIssues.length;
+                const needsReview = totalIssueCount > 0 ||
+                  (tableName === "Video" && row.review_status === "Needs Review");
 
 
 
@@ -4898,7 +4897,7 @@ function PatientRecordSection({
 
 
 
-                    <td>{tableName === "Video" ? (row.file_name || row.record_id) : row.record_id}</td>
+                    <td>{tableName === "Video" ? (row.metadata?.["Video ID"] || "Video ID unavailable") : row.record_id}</td>
 
 
 
@@ -4930,7 +4929,7 @@ function PatientRecordSection({
 
 
 
-                    {tableName !== "Video" && <td>
+                    <td>
 
 
 
@@ -5002,15 +5001,7 @@ function PatientRecordSection({
 
 
 
-                            title={rowAttention
-
-
-
-                              .map(item => item.message)
-
-
-
-                              .join("\n")}
+                            title={[...rowAttention.map(item => item.message), ...videoIssues].join("\n")}
 
 
 
@@ -5018,11 +5009,11 @@ function PatientRecordSection({
 
 
 
-                            {issueCount}{" "}
+                            {totalIssueCount}{" "}
 
 
 
-                            {issueCount === 1
+                            {totalIssueCount === 1
 
 
 
@@ -5078,7 +5069,7 @@ function PatientRecordSection({
 
 
 
-                    </td>}
+                    </td>
 
 
 
@@ -5190,7 +5181,17 @@ function summarizeRecord(
 
 
 
-  if (tableName === "Video") return (row.file_name || "") + (row.linked_table ? ` · ${row.linked_table}: ${row.linked_record_id}` : "") + (row.exists ? "" : " · File missing");
+  if (tableName === "Video") {
+    const recordingId = metadata["Recording ID"];
+    const purposeKey = Object.keys(metadata).find(key =>
+      /^purpose(?: of (?:video|recording))?(?:\\s*\\(multiselect\\))?$/i.test(key.trim())
+    ) || Object.keys(metadata).find(key => /^purpose\\b/i.test(key.trim()));
+    const purpose = purposeKey ? metadata[purposeKey] : null;
+    return [
+      recordingId && String(recordingId).trim() && `Recording ID: ${displayValue(recordingId)}`,
+      purpose != null && String(displayValue(purpose)).trim() && `Purpose: ${displayValue(purpose)}`,
+    ].filter(Boolean).join(" | ") || "—";
+  }
   if (tableName === "Clinical") {
 
 
