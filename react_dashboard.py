@@ -739,6 +739,48 @@ class CoCANoTAPI:
         ]
         return rebound
 
+    def _video_rebind_session(self, session: dict[str, Any]) -> dict[str, Any]:
+        """Refresh saved clip paths and a matching Video ID form draft.
+
+        The old ID is matched by a recorded rename for this site/patient and
+        clip. Unrelated recordings and metadata fields are never rewritten.
+        """
+        restored = dict(session)
+        project = restored.get("project")
+        if not isinstance(project, dict) or not isinstance(project.get("clips"), list):
+            return restored
+        draft = restored.get("videoMetadata")
+        patient_id = str(restored.get("patientId") or "")
+        old_video_id = str(draft.get("Video ID") or "") if isinstance(draft, dict) else ""
+        if patient_id and old_video_id:
+            site_id = str(self.get_site_id() or "").strip().upper()
+            for clip in project["clips"]:
+                if not isinstance(clip, dict) or not clip.get("path"):
+                    continue
+                with self._video_records_connection() as connection:
+                    renamed = connection.execute(
+                        """SELECT aliases.old_video_id, exports.metadata_json
+                           FROM patient_video_path_aliases AS aliases
+                           JOIN patient_video_exports AS exports
+                             ON exports.site_id = aliases.site_id
+                            AND exports.patient_id = aliases.patient_id
+                            AND exports.record_id = aliases.record_id
+                           WHERE aliases.site_id = ? AND aliases.patient_id = ?
+                             AND (aliases.old_path = ? OR exports.file_path = ?)""",
+                        (site_id, patient_id, clip["path"], clip["path"]),
+                    ).fetchall()
+                matching = next(
+                    (row for row in renamed if row["old_video_id"] == old_video_id),
+                    None,
+                )
+                if matching:
+                    current_id = json.loads(matching["metadata_json"] or "{}").get("Video ID")
+                    if current_id:
+                        restored["videoMetadata"] = {**draft, "Video ID": current_id}
+                    break
+        restored["project"] = self._video_rebind_project_paths(project)
+        return restored
+
     def video_track_region(self, clip: dict[str, Any], region: dict[str, Any], start_time: float, end_time: float) -> dict[str, Any]:
         """Track a censor box exclusively over its configured clip-relative interval."""
         from VideoPipeline.advanced import track_region
@@ -771,11 +813,7 @@ class CoCANoTAPI:
         session = sessions.get(site_id, {}) if isinstance(sessions, dict) else {}
         if not isinstance(session, dict):
             return {}
-        restored = dict(session)
-        project = restored.get("project")
-        if isinstance(project, dict) and isinstance(project.get("clips"), list):
-            restored["project"] = self._video_rebind_project_paths(project)
-        return restored
+        return self._video_rebind_session(session)
 
     def video_save_session(self, session: dict[str, Any]) -> dict[str, Any]:
         """Persist Video selections, edits and form state without copying source media."""
@@ -790,7 +828,8 @@ class CoCANoTAPI:
             raise ValueError("Video workspace contains an invalid clip list.")
         # The local HTTP preview tokens expire when the app restarts; save only
         # durable clip paths and editing data and re-register previews on load.
-        project_copy = self._video_rebind_project_paths(project)
+        rebound_session = self._video_rebind_session(session)
+        project_copy = rebound_session["project"]
         project_copy["clips"] = [
             {key: value for key, value in clip.items() if key not in {"preview_url", "unavailable"}}
             for clip in project_copy["clips"]
@@ -803,7 +842,7 @@ class CoCANoTAPI:
             "linkedTable": session.get("linkedTable", ""),
             "linkedRecordId": session.get("linkedRecordId", ""),
             "outputFolder": session.get("outputFolder", ""),
-            "videoMetadata": session.get("videoMetadata", {}),
+            "videoMetadata": rebound_session.get("videoMetadata", {}),
         }
         # Verify serializability before touching the existing settings file.
         json.dumps(saved, allow_nan=False)
@@ -884,9 +923,19 @@ class CoCANoTAPI:
                 patient_id TEXT NOT NULL,
                 record_id TEXT NOT NULL,
                 old_path TEXT NOT NULL,
+                old_video_id TEXT NOT NULL DEFAULT '',
                 PRIMARY KEY (site_id, old_path)
             )
         """)
+        alias_columns = {
+            row["name"] for row in connection.execute(
+                "PRAGMA table_info(patient_video_path_aliases)"
+            )
+        }
+        if "old_video_id" not in alias_columns:
+            connection.execute(
+                "ALTER TABLE patient_video_path_aliases ADD COLUMN old_video_id TEXT NOT NULL DEFAULT ''"
+            )
         return connection
 
     def _reserve_video_number(self, site_id: str, patient_id: str, output_dir: Path) -> int:
@@ -1103,12 +1152,14 @@ class CoCANoTAPI:
                     # multiple renames. Commit aliases with its DB update.
                     connection.execute(
                         """INSERT INTO patient_video_path_aliases
-                           (site_id, patient_id, record_id, old_path)
-                           VALUES (?, ?, ?, ?)
+                           (site_id, patient_id, record_id, old_path, old_video_id)
+                           VALUES (?, ?, ?, ?, ?)
                            ON CONFLICT(site_id, old_path)
                            DO UPDATE SET patient_id = excluded.patient_id,
-                                         record_id = excluded.record_id""",
-                        (site_id, patient_id, record_id, str(original_video)),
+                                         record_id = excluded.record_id,
+                                         old_video_id = excluded.old_video_id""",
+                        (site_id, patient_id, record_id, str(original_video),
+                         str(previous.get("Video ID") or "")),
                     )
                 # Read back both persisted representations *before* committing.
                 # An exception here rolls back the SQLite update and triggers
