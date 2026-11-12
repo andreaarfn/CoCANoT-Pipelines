@@ -573,3 +573,42 @@
 .ephysEventMarker.ephysEventMarkerSelected:hover,.ephysEventMarker.ephysEventMarkerSelected:focus-visible {background:#b92432;outline:2px solid #efb4b7}
 .ephysEventTableSelected {background:#fff0f1}
 .ephysEventTableSelected td {border-bottom-color:#e9a7af}
+
+
+/* Video review uses the same review-header and panel system as Imaging/Ephys. */
+.videoReview{width:100%;max-width:1160px;margin:0 auto;padding:12px 20px 30px;box-sizing:border-box}
+.videoOverview{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px;padding:17px 19px;margin:0 0 16px;border:1px solid #d6e0e8;border-radius:10px;background:#fff}
+.videoOverviewMain{display:flex;align-items:center;gap:13px;min-width:0;flex:1 1 260px}
+.videoFileIcon{width:48px;height:48px;flex:0 0 48px;display:grid;place-items:center;background:#eaf4f9;border-radius:10px;color:#2b6684}
+.videoFileDetails{display:grid;gap:4px;min-width:0}
+.videoFileDetails>span{font-size:10px;letter-spacing:.08em;font-weight:850;color:#50778e}
+.videoFileDetails>strong{font-size:15px;color:#243e56;overflow-wrap:anywhere}
+.videoFileDetails>small{font-size:11px;color:#677e90}
+.videoOverviewFacts{display:flex;flex-wrap:wrap;gap:14px 24px}
+.videoOverviewFacts>div{display:grid;gap:5px;min-width:90px;max-width:270px}
+.videoOverviewFacts>div>span{color:#728597;font-size:10px;font-weight:750}
+.videoOverviewFacts strong{color:#2c4860;font-size:11px;overflow-wrap:anywhere}
+.videoOverviewFacts .videoAvailable,.videoOverviewFacts .videoUnavailable{display:flex;align-items:center;gap:5px}
+.videoOverviewFacts .videoAvailable{color:#317550}
+.videoOverviewFacts .videoUnavailable{color:#ad3c3c}
+.videoViewerTitle{display:inline-flex;align-items:center;gap:8px;color:#29465f}
+.videoViewer{padding:20px;display:grid;place-items:center;background:#17202d;min-height:270px}
+.videoViewer video{display:block;width:100%;max-width:950px;max-height:600px;aspect-ratio:16/9;object-fit:contain;background:#080c13;border-radius:6px}
+.videoViewerEmpty{min-height:260px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;text-align:center;font-size:12px;color:#c8d4de}
+.videoLocation{display:grid;gap:6px;padding:12px 15px;border-top:1px solid #dce5ec;background:#f7fafc}
+.videoLocation span{font-size:10px;color:#728597;font-weight:750}
+.videoLocation code{font-size:11px;color:#36556d;overflow-wrap:anywhere;white-space:normal}
+.videoDetailsCard{margin-top:16px;border:1px solid #d5e0e8;border-radius:9px;background:#fff;overflow:hidden}
+.videoDetailsHeader{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 17px;background:#f7fafc;border-bottom:1px solid #dce5ec}
+.videoDetailsHeader>div{display:grid;gap:5px}
+.videoDetailsHeader strong{display:flex;align-items:center;gap:8px;font-size:13px;color:#243d55}
+.videoDetailsHeader span{color:#6c7f90;font-size:11px}
+.videoCollapseButton{display:inline-flex;align-items:center;gap:6px;border:1px solid #c9d5df;border-radius:7px;padding:8px 11px;background:#fff;color:#2f5674;font-size:11px;font-weight:750;cursor:pointer;white-space:nowrap}
+.videoCollapseButton:hover{background:#edf5fa}
+.videoDetailsBody{padding:16px 18px;display:grid;gap:22px}
+.videoMetadataGroup h3{margin:0 0 11px;font-size:11px;letter-spacing:.04em;color:#547087;text-transform:uppercase}
+.videoMetadataGrid{margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px}
+.videoMetadataGrid>div{min-width:0;padding:12px;border:1px solid #e1e8ee;background:#fbfcfe;border-radius:7px}
+.videoMetadataGrid dt{font-size:10px;font-weight:750;color:#6b7f91;margin:0 0 6px}
+.videoMetadataGrid dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:#243d55;font-size:12px;font-weight:650;line-height:1.55}
+@media(max-width:750px){.videoReview{padding:10px 8px 24px}.videoOverviewFacts{width:100%}.videoViewer{padding:10px;min-height:180px}.videoViewerEmpty{min-height:190px}.videoDetailsHeader{align-items:flex-start;flex-direction:column}}
