@@ -513,6 +513,6 @@ function CombinedVideoReview({ clips, trackedRegion }) {
       <span>{seconds(position)} / {seconds(total)} s</span>
     </div>
     {previewError && <p className="video-review-error" role="alert">{previewError}</p>}
-    <p className="video-review-note">Preview of the combined edit. Review the rendered MP4 before sharing.</p>
+    
   </section>;
 }
