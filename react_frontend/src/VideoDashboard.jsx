@@ -51,8 +51,12 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             const previews = await bridge()?.video_register_previews?.([clip.path]);
             const preview = previews?.[0];
             return {...clip, id:clip.id || id(),
+              // A Video ID edit may have renamed this exported MP4.
+              // Always adopt the verified path returned by the backend.
+              path: preview?.path || clip.path,
               masks:(clip.masks || []).map(mask => ({...mask,id:mask.id || id()})),
-              preview_url: preview?.preview_url || "", unavailable: false};
+              preview_url: preview?.preview_url || "",
+              unavailable: Boolean(preview?.unavailable || !preview?.preview_url)};
           } catch (error) {
             // Keep the remembered selection and edits even if the source has
             // moved. The missing file can be restored at its original path.
@@ -350,8 +354,14 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       const result = await bridge()[action](action==="video_save_project" ? project : undefined);
       if (action==="video_load_project" && result?.clips) {
         const previews = await bridge().video_register_previews(result.clips.map(c => c.path));
-        const previewByPath = new Map(previews.map(item => [item.path, item.preview_url]));
-        result.clips = result.clips.map(c => ({...c,preview_url:previewByPath.get(c.path)}));
+        // Keep the same clip edits but rebind to the renamed MP4 by the
+        // server's exact old-path mapping, never by guessing from a filename.
+        result.clips = result.clips.map((c, index) => ({
+          ...c,
+          path: previews?.[index]?.path || c.path,
+          preview_url: previews?.[index]?.preview_url || "",
+          unavailable: Boolean(previews?.[index]?.unavailable || !previews?.[index]?.preview_url),
+        }));
         const loaded={...result,clips:result.clips.map(c=>({...c,id:c.id || id(),masks:(c.masks || []).map(m=>({...m,id:m.id || id()}))}))};
         setProject(loaded);setSelected(loaded.clips[0]?.id||null);setCursor(0);setReviewed(false);
       }
