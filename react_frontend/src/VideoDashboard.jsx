@@ -10,7 +10,7 @@ const seconds = value => Number(value || 0).toFixed(2);
 const initial = { schema_version: 1, clips: [] };
 const normalizePatientId = value => { const text = String(value ?? "").trim(); return /^[0-9]+$/.test(text) ? (text.replace(/^0+(?=\d)/, "") || "0").padStart(3, "0") : text; };
 
-export default function VideoDashboard({ initialSession = null, onCreateClinicalAssessment }) {
+export default function VideoDashboard({ initialSession = null, onCreateClinicalAssessment, onSessionChange }) {
   const [project, setProject] = useState(initialSession?.project || initial);
   const [selected, setSelected] = useState(initialSession?.selected ?? null);
   const [cursor, setCursor] = useState(0);
@@ -33,6 +33,82 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const [videoRules, setVideoRules] = useState(null);
   const [videoMetadata, setVideoMetadata] = useState(initialSession?.videoMetadata || {});
   const [videoFieldErrors, setVideoFieldErrors] = useState({});
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const latestSession = useRef(null);
+
+  // The pipeline settings hold durable paths and edits, not transient preview
+  // URLs. Re-register each existing source when the desktop page mounts.
+  useEffect(() => {
+    let active = true;
+    async function restoreSession() {
+      try {
+        const saved = initialSession || (await bridge()?.video_get_session?.()) || {};
+        const incoming = saved.project && Array.isArray(saved.project.clips)
+          ? saved.project : initial;
+        const clips = await Promise.all(incoming.clips.map(async clip => {
+          if (!clip?.path) return null;
+          try {
+            const previews = await bridge()?.video_register_previews?.([clip.path]);
+            const preview = previews?.[0];
+            return {...clip, id:clip.id || id(),
+              masks:(clip.masks || []).map(mask => ({...mask,id:mask.id || id()})),
+              preview_url: preview?.preview_url || clip.preview_url || ""};
+          } catch (error) {
+            return null;
+          }
+        }));
+        if (!active) return;
+        const missing = clips.filter(clip => !clip).length;
+        const restored = {...incoming, clips:clips.filter(Boolean)};
+        setProject(restored);
+        setSelected(restored.clips.some(clip => clip.id === saved.selected)
+          ? saved.selected : restored.clips[0]?.id || null);
+        setStep([1,2,3,4].includes(Number(saved.step)) ? Number(saved.step) : 1);
+        setPatientId(saved.patientId || "");
+        setLinkedTable(saved.linkedTable || "");
+        setLinkedRecordId(saved.linkedRecordId || "");
+        setOutputFolder(saved.outputFolder || "");
+        setVideoMetadata(saved.videoMetadata && typeof saved.videoMetadata === "object"
+          ? saved.videoMetadata : {});
+        setReviewed(false);
+        if (missing) setNotice(
+          `${missing} previously selected video file(s) could not be reopened. Check whether the source files were moved or deleted.`
+        );
+      } catch (error) {
+        if (active) setNotice("Could not restore the Video workspace: " + String(error));
+      } finally {
+        if (active) setSessionLoaded(true);
+      }
+    }
+    restoreSession();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!sessionLoaded) return;
+    const snapshot = {
+      project, selected, step, patientId, linkedTable, linkedRecordId,
+      outputFolder, videoMetadata,
+    };
+    latestSession.current = snapshot;
+    onSessionChange?.(snapshot);
+    const timer = setTimeout(() => {
+      bridge()?.video_save_session?.(snapshot).catch(error => {
+        setNotice("Could not remember Video selections: " + String(error));
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [sessionLoaded, project, selected, step, patientId, linkedTable, linkedRecordId,
+      outputFolder, videoMetadata, onSessionChange]);
+
+  // Flush the last snapshot when navigating away, instead of dropping a
+  // pending debounce while React unmounts the Video page.
+  useEffect(() => () => {
+    if (latestSession.current) {
+      bridge()?.video_save_session?.(latestSession.current).catch(() => {});
+    }
+  }, []);
+
   const normalizedPatientId = normalizePatientId(patientId);
   const existingPatientId = patients.find(p => normalizePatientId(p.patient_id) === normalizedPatientId)?.patient_id || "";
   const newPatient = patientsReady && Boolean(normalizedPatientId) && !existingPatientId;
