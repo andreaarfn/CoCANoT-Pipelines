@@ -219,12 +219,17 @@ def save_project(project: dict, path: str) -> str:
     return str(target)
 
 
-def load_project(path: str) -> dict:
+def load_project(path: str, resolve_clip_path=None) -> dict:
     source = Path(path).expanduser().resolve(strict=True)
     if source.suffix.lower() != ".json" or source.stat().st_size > MAX_PROJECT_BYTES:
         raise ValueError("Invalid project file.")
     project = json.loads(source.read_text(encoding="utf-8"))
     if project.get("schema_version") != 1:
         raise ValueError("Unsupported video project version.")
+    if resolve_clip_path is not None:
+        project["clips"] = [
+            {**clip, "path": resolve_clip_path(clip.get("path", ""))}
+            for clip in project.get("clips", []) if isinstance(clip, dict)
+        ]
     validate_project(project)
     return {**project, "clips": [{k: v for k, v in clip.items() if k != "background_blur"} for clip in project["clips"]]}
