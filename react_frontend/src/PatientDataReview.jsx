@@ -742,7 +742,7 @@ function MetadataDocumentPatientReview({
 
 
 
-      <MetadataSummary record={record} expandable={tableName === "Surgical"} />
+      <MetadataSummary record={record} expandable />
 
 
 
