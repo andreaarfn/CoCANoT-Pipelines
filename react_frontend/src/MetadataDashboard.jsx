@@ -4868,7 +4868,7 @@ function PatientRecordSection({
 
 
 
-                    <td>{row.record_id}</td>
+                    <td>{tableName === "Video" ? (row.file_name || row.record_id) : row.record_id}</td>
 
 
 
