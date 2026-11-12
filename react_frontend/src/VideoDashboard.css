@@ -197,3 +197,8 @@
 .video-edit-action .video-audio-option input{flex:0 0 auto;accent-color:#317a9c;width:16px;height:16px}
 .video-edit-action .video-audio-option span{overflow-wrap:anywhere}
 @container (max-width:560px){.video-edit-action .video-audio-option{width:100%}}
+
+/* CoCANoT Patient ID entry and clinical assessment status in Video Export. */
+.video-patient-field input[type="text"]{font:inherit;padding:10px 12px;border:1px solid #c8d5e1;border-radius:8px;max-width:420px;min-width:0;width:100%;box-sizing:border-box;background:#fff;color:#203854}
+.video-patient-status{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 15px;color:#536982;font-size:13px;max-width:100%}
+.video-patient-status button{white-space:normal}
