@@ -85,6 +85,8 @@ export default function App() {
 
     useState({});
 
+  const [videoSession, setVideoSession] = useState(null);
+
 
 
   const [attentionItems, setAttentionItems] =
@@ -1053,7 +1055,8 @@ export default function App() {
 
   } else if (page === "video") {
     content = <VideoDashboard
-      initialSession={navigationContext.videoSession || null}
+      initialSession={navigationContext.videoSession || videoSession || null}
+      onSessionChange={setVideoSession}
       onCreateClinicalAssessment={(patientId, videoSession) =>
         navigate("metadata-patients", {
           patientId,
