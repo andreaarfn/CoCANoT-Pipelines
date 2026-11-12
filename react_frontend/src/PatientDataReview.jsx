@@ -301,9 +301,7 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
   }, [record?.path, record?.exists]);
 
   const metadata = record?.metadata && typeof record.metadata === "object" ? record.metadata : {};
-  const rows = Object.entries(metadata).filter(([, value]) =>
-    value !== null && value !== undefined && value !== "" &&
-    (!Array.isArray(value) || value.length > 0));
+
   // Include every dictionary field, even when its saved value is blank.
   // The server returns the full MR Video definition including field_order.
   const orderedRules = [...(videoRules || [])].sort((a, b) =>
@@ -316,8 +314,7 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
     value: metadata[rule.field_name],
   }));
   const fileName = record?.file_name || "Exported video";
-  const association = record?.linked_table && record?.linked_record_id
-    ? `${record.linked_table} · ${record.linked_record_id}` : "Patient only";
+
   const formatValue = value => Array.isArray(value)
     ? value.join(", ") : value && typeof value === "object"
       ? JSON.stringify(value, null, 2) : String(value);
@@ -339,35 +336,40 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
       icon={FileVideo}
       eyebrow="VIDEO DATA REVIEW"
       title="Review linked video"
-      text="Review the exported video, its patient association, and the saved metadata."
+
       onBack={onBack}
       onEdit={onEdit}
     />
 
-    <section className={styles.videoOverview}>
-      <div className={styles.videoOverviewMain}>
-        <div className={styles.videoFileIcon}><FileVideo size={23}/></div>
-        <div className={styles.videoFileDetails}>
-          <span>EXPORTED RECORDING</span>
-          <strong title={fileName}>{fileName}</strong>
-          <small>CoCANoT Patient {patientId}</small>
+    <section className={styles.videoDetailsCard} aria-label="Video metadata">
+      <div className={styles.videoDetailsHeader}>
+        <div>
+          <strong><FileText size={16}/> Video metadata</strong>
+          <span>Information saved with this recording</span>
         </div>
+        {orderedFields.length > 0 && <button type="button"
+          className={styles.videoCollapseButton}
+          aria-expanded={metadataOpen}
+          onClick={() => setMetadataOpen(value => !value)}>
+          {metadataOpen ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
+          {metadataOpen ? "Hide details" : "Show details"}
+        </button>}
       </div>
-      <div className={styles.videoOverviewFacts}>
-        <div><span>Video ID</span><strong>{metadata["Video ID"] || "—"}</strong></div>
-        <div><span>Associated record</span><strong>{association}</strong></div>
-        <div><span>File status</span>
-          <strong className={record?.exists ? styles.videoAvailable : styles.videoUnavailable}>
-            {record?.exists ? <CheckCircle2 size={14}/> : <AlertCircle size={14}/>}
-            {record?.exists ? "Stored locally" : "File missing"}
-          </strong>
-        </div>
-      </div>
+      {rulesError && <div className={styles.errorBox} role="alert">Could not load MR Video dictionary: {rulesError}</div>}
+      {videoRules === null && !rulesError && <div className={styles.loading}>Loading Video dictionary…</div>}
+      {videoRules !== null && orderedFields.length === 0
+        ? <div className={styles.documentEmpty}>No Video metadata fields are defined in the active dictionary.</div>
+        : metadataOpen && orderedFields.length > 0 && <div className={styles.videoDetailsBody}>
+            {renderRows(orderedFields)}
+          </div>}
     </section>
+
+
+
 
     <section className={styles.viewerCard} aria-label="Video preview">
       <div className={styles.viewerHeader}>
-        <strong className={styles.videoViewerTitle}><Film size={16}/> Video preview</strong>
+        <strong className={styles.videoViewerTitle} title={fileName}>{fileName}</strong>
         <span>Exported MP4</span>
       </div>
       <div className={styles.videoViewer}>
@@ -392,28 +394,7 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
     </section>
     {error && <div className={styles.errorBox} role="alert">{error}</div>}
 
-    <section className={styles.videoDetailsCard} aria-label="Video metadata">
-      <div className={styles.videoDetailsHeader}>
-        <div>
-          <strong><FileText size={16}/> Video metadata</strong>
-          <span>Information saved with this recording</span>
-        </div>
-        {orderedFields.length > 0 && <button type="button"
-          className={styles.videoCollapseButton}
-          aria-expanded={metadataOpen}
-          onClick={() => setMetadataOpen(value => !value)}>
-          {metadataOpen ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
-          {metadataOpen ? "Hide details" : "Show details"}
-        </button>}
-      </div>
-      {rulesError && <div className={styles.errorBox} role="alert">Could not load MR Video dictionary: {rulesError}</div>}
-      {videoRules === null && !rulesError && <div className={styles.loading}>Loading Video dictionary…</div>}
-      {videoRules !== null && orderedFields.length === 0
-        ? <div className={styles.documentEmpty}>No Video metadata fields are defined in the active dictionary.</div>
-        : metadataOpen && orderedFields.length > 0 && <div className={styles.videoDetailsBody}>
-            {renderRows(orderedFields)}
-          </div>}
-    </section>
+
   </div>;
 }
 
