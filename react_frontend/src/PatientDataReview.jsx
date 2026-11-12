@@ -386,7 +386,7 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
     <section className={styles.viewerCard} aria-label="Video preview">
       <div className={styles.viewerHeader}>
         <strong className={styles.videoViewerTitle} title={fileName}>{fileName}</strong>
-        <span>Exported MP4</span>
+        
       </div>
       <div className={styles.videoViewer}>
         {previewUrl ? <video
