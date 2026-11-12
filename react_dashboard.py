@@ -1078,14 +1078,59 @@ class CoCANoTAPI:
         previous = json.loads(row["metadata_json"] or "{}")
         _dictionary, rules, validator = self._dictionary_context("Video")
         clean = self._normalize_metadata_values(metadata, rules)
-        # Patient and clinical/session associations come from the saved record,
-        # not the editor; they cannot be reassigned using a metadata edit.
-        for name in (
-            "CoCANoT Patient ID", "Clinical Assessment ID",
-            "Surgery ID", "Recording ID", "Image ID",
-        ):
+        # Patient identity and Clinical Assessment association are immutable
+        # here, but the three optional linked records are user-editable.
+        # Resolve links against this patient's records rather than silently
+        # reverting edits to the previous database values.
+        for name in ("CoCANoT Patient ID", "Clinical Assessment ID"):
             clean[name] = previous.get(name, "")
         clean["CoCANoT Patient ID"] = patient_id
+
+        link_fields = {
+            "Surgery ID": ("Surgical", "surgical"),
+            "Recording ID": ("Electrophysiology", "electrophysiology"),
+            "Image ID": ("Imaging", "imaging"),
+        }
+        requested_links = [
+            (field, str(clean.get(field) or "").strip())
+            for field in link_fields
+            if str(clean.get(field) or "").strip()
+        ]
+        if len(requested_links) > 1:
+            raise ValueError(
+                "A Video can be linked to only one Surgical, "
+                "Electrophysiology, or Imaging record at a time. "
+                "Clear the other linked IDs before saving."
+            )
+        new_linked_table = ""
+        new_linked_record_id = ""
+        if requested_links:
+            field, requested_id = requested_links[0]
+            new_linked_table, records_key = link_fields[field]
+            patient_records = self.metadata_get_patient(site_id, patient_id)
+            matching_record = next(
+                (
+                    candidate
+                    for candidate in patient_records.get(records_key, [])
+                    if requested_id in {
+                        str(candidate.get("record_id") or "").strip(),
+                        str((candidate.get("metadata") or {}).get(field) or "").strip(),
+                    }
+                ),
+                None,
+            )
+            if matching_record is None:
+                raise ValueError(
+                    f"{field} {requested_id!r} does not match an existing "
+                    "record for this patient. Select a linked record from "
+                    "the current patient's data."
+                )
+            new_linked_record_id = str(matching_record.get("record_id") or "").strip()
+            if not new_linked_record_id:
+                raise ValueError(f"The selected {new_linked_table} record has no saved record ID.")
+            # Persist the linked record's canonical ID in both places, matching
+            # the format used at initial Video export.
+            clean[field] = new_linked_record_id
         new_id = str(clean.get("Video ID") or "").strip()
         if not new_id or not re.fullmatch(r"[A-Za-z0-9_-]+", new_id):
             raise ValueError("Video ID must contain only letters, numbers, underscores or hyphens.")
@@ -1142,10 +1187,12 @@ class CoCANoTAPI:
             with self._video_records_connection() as connection:
                 updated = connection.execute(
                     """UPDATE patient_video_exports
-                       SET metadata_json = ?, file_path = ?
+                       SET metadata_json = ?, file_path = ?,
+                           linked_table = ?, linked_record_id = ?
                        WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
                     (json.dumps(clean, ensure_ascii=False, allow_nan=False),
-                     str(proposed_video), site_id, patient_id, record_id),
+                     str(proposed_video), new_linked_table, new_linked_record_id,
+                     site_id, patient_id, record_id),
                 )
                 if updated.rowcount != 1:
                     raise RuntimeError("Unable to update the selected Video record.")
@@ -1167,13 +1214,16 @@ class CoCANoTAPI:
                 # An exception here rolls back the SQLite update and triggers
                 # the file/sidecar restoration below.
                 saved_row = connection.execute(
-                    """SELECT metadata_json, file_path FROM patient_video_exports
+                    """SELECT metadata_json, file_path, linked_table, linked_record_id
+                       FROM patient_video_exports
                        WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
                     (site_id, patient_id, record_id),
                 ).fetchone()
                 if (
                     saved_row is None
                     or saved_row["file_path"] != str(proposed_video)
+                    or saved_row["linked_table"] != new_linked_table
+                    or saved_row["linked_record_id"] != new_linked_record_id
                     or json.loads(saved_row["metadata_json"] or "{}") != clean
                 ):
                     raise RuntimeError("Video metadata database verification failed; changes were not saved.")
@@ -1240,6 +1290,8 @@ class CoCANoTAPI:
             "record_id": record_id, "patient_id": patient_id,
             "path": str(proposed_video), "file_name": proposed_video.name,
             "metadata_path": str(proposed_json), "metadata": clean,
+            "linked_table": new_linked_table,
+            "linked_record_id": new_linked_record_id,
             "saved": True,
         }
 
