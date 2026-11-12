@@ -5160,7 +5160,7 @@ function summarizeRecord(
 
 
 
-  if (tableName === "Video") return row.file_name + (row.linked_table ? ` · ${row.linked_table}: ${row.linked_record_id}` : " · Patient only") + (row.exists ? " · Stored locally" : " · File missing");
+  if (tableName === "Video") return (row.file_name || "") + (row.linked_table ? ` · ${row.linked_table}: ${row.linked_record_id}` : "") + (row.exists ? "" : " · File missing");
   if (tableName === "Clinical") {
 
 
