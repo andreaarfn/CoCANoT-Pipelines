@@ -73,207 +73,114 @@ const api = () => window.pywebview?.api ?? null;
 
 
 export default function PatientDataReview({
-
-
-
   patientId,
-
-
-
   tableName,
-
-
-
   record,
-
-
-
   onBack,
-
-
-
   onEdit,
-
-
-
+  onOpenAssociated,
 }) {
-
-
-
+  let viewer = null;
   if (tableName === "Clinical" || tableName === "Surgical") {
-
-    return (
-
-      <>
-      {tableName === "Surgical" && <RelatedVideoRecords patientId={patientId} tableName="Surgical" record={record}/>}
-      <MetadataDocumentPatientReview
-
+    viewer = <MetadataDocumentPatientReview
+      patientId={patientId}
+      tableName={tableName}
+      record={record}
+      onBack={onBack}
+      onEdit={onEdit}
+    />;
+  } else if (tableName === "Video") {
+    viewer = <VideoPatientReview
+      patientId={patientId}
+      record={record}
+      onBack={onBack}
+      onEdit={onEdit}
+    />;
+  } else if (tableName === "Imaging") {
+    viewer = <ImagingPatientReview
+      record={record}
+      onBack={onBack}
+      onEdit={onEdit}
+    />;
+  } else if (tableName === "Electrophysiology") {
+    viewer = <EphysPatientReview
+      record={record}
+      onBack={onBack}
+      onEdit={onEdit}
+    />;
+  }
+  if (!viewer) return null;
+  return (
+    <>
+      {viewer}
+      {tableName !== "Clinical" && <AssociatedData
         patientId={patientId}
-
         tableName={tableName}
-
-        record={record}
-
-        onBack={onBack}
-
-        onEdit={onEdit}
-
-      />
-
-      </>
-    );
-
-  }
-
-
-
-
-
-
-
-  if (tableName === "Video") {
-    return <VideoPatientReview patientId={patientId} record={record} onBack={onBack} onEdit={onEdit}/>;
-  }
-
-  if (tableName === "Imaging") {
-
-
-
-    return (
-
-
-
-      <>
-      <RelatedVideoRecords patientId={patientId} tableName="Imaging" record={record}/>
-      <ImagingPatientReview
-
-
-
-        record={record}
-
-
-
-        onBack={onBack}
-
-
-
-        onEdit={onEdit}
-
-
-
-      />
-
-      </>
-
-
-    );
-
-
-
-  }
-
-
-
-
-
-
-
-  if (tableName === "Electrophysiology") {
-
-
-
-    return (
-
-
-
-      <>
-      <RelatedVideoRecords patientId={patientId} tableName="Electrophysiology" record={record}/>
-      <EphysPatientReview
-
-
-
-        record={record}
-
-
-
-        onBack={onBack}
-
-
-
-        onEdit={onEdit}
-
-
-
-      />
-
-      </>
-
-
-    );
-
-
-
-  }
-
-
-
-
-
-
-
-  return null;
-
-
-
+        recordId={record?.record_id}
+        onOpenAssociated={onOpenAssociated}
+      />}
+    </>
+  );
 }
 
+function AssociatedData({ patientId, tableName, recordId, onOpenAssociated }) {
+  const [associations, setAssociations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-
-
-
-
-
-function RelatedVideoRecords({patientId, tableName, record}) {
-  const recordId = record?.record_id;
-  const fieldByTable = {
-    Surgical: "Surgery ID",
-    Electrophysiology: "Recording ID",
-    Imaging: "Image ID",
-  };
-  const field = fieldByTable[tableName];
-  const metadataId = String(record?.metadata?.[field] || "").trim();
-  const matchingIds = new Set([recordId, metadataId].map(value => String(value || "").trim()).filter(Boolean));
-  const [videos,setVideos] = useState([]);
-  const [error,setError] = useState("");
   useEffect(() => {
     let active = true;
-    if (!patientId || !recordId) return () => {active=false;};
-    async function fetchRelated() {
+    setLoading(true);
+    setError("");
+    async function loadAssociations() {
       try {
-        const exports = await api()?.video_get_patient_exports?.(patientId);
-        if (active) setVideos((exports || []).filter(v => {
-          const savedId = String(
-            v.linked_records?.[tableName] ||
-            v.metadata?.[field] ||
-            (v.linked_table === tableName ? v.linked_record_id : "") ||
-            ""
-          ).trim();
-          return savedId && matchingIds.has(savedId);
-        }));
-      } catch(e) { if(active) setError(String(e)); }
+        if (!api()?.metadata_get_associated_data) {
+          throw new Error("The associated-data service is unavailable in this desktop build.");
+        }
+        const data = await api().metadata_get_associated_data(patientId, tableName, recordId);
+        if (active) setAssociations(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (active) setError(String(err?.message || err));
+      } finally {
+        if (active) setLoading(false);
+      }
     }
-    fetchRelated();
-    return () => {active=false;};
-  },[patientId,tableName,recordId,metadataId]);
-  if (!videos.length && !error) return null;
-  return <section style={{margin:"12px 0",padding:16,border:"1px solid #d8e3eb",borderRadius:12}}>
-    <h3>Related video exports</h3>
-    {videos.map(v=><div key={v.record_id} style={{padding:"8px 0",overflowWrap:"anywhere"}}>
-      <strong>{v.file_name}</strong> · {v.exists ? "Stored locally" : "File missing"}
-      <div style={{fontSize:12,color:"#536982"}}>{v.path}</div>
-    </div>)}
-    {error && <p role="alert">Related video lookup unavailable: {error}</p>}
-  </section>;
+    if (patientId && recordId) loadAssociations();
+    else setLoading(false);
+    return () => { active = false; };
+  }, [patientId, tableName, recordId]);
+
+  return (
+    <section className={styles.associatedDataCard} aria-label="Associated data">
+      <header className={styles.associatedDataHeader}>
+        <strong>Associated Data</strong>
+        <span>Linked records for this patient</span>
+      </header>
+      {loading ? <p className={styles.associatedDataEmpty}>Loading associated data…</p>
+        : error ? <p className={styles.associatedDataError} role="alert">{error}</p>
+        : associations.length === 0 ? (
+          <p className={styles.associatedDataEmpty}>No associated data has been linked to this record.</p>
+        ) : (
+          <div className={styles.associatedDataRows}>
+            {associations.map((item, index) => (
+              <div className={styles.associatedDataRow}
+                key={`${item.table_name}-${item.record_id || item.requested_id}-${index}`}>
+                <div className={styles.associatedDataDescription}>
+                  <strong>{item.table_name} · {item.requested_id}</strong>
+                  <span>{item.available ? item.file_name : "File has not been uploaded"}</span>
+                </div>
+                {item.available && item.record_id && onOpenAssociated && (
+                  <button type="button" className={styles.associatedDataLink}
+                    onClick={() => onOpenAssociated(item.table_name, item.record_id)}>
+                    View linked file <ArrowRight size={15}/>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+    </section>
+  );
 }
 
 function VideoPatientReview({ patientId, record, onBack, onEdit }) {
