@@ -803,11 +803,14 @@ class CoCANoTAPI:
                              output_folder: str = "") -> dict[str, Any]:
         """Render locally and register a patient-linked MP4 only after successful export."""
         site_id = str(self.get_site_id() or "").strip().upper()
-        patient_id = normalize_patient_id(patient_id)
+        patient_id = self._resolve_existing_patient_id(patient_id)
         if not site_id:
             raise ValueError("Sign in to a CoCANoT site before exporting video.")
         if not patient_id or patient_id not in self.repository.patient_ids_for_site(site_id):
-            raise ValueError("Select an existing patient before exporting video.")
+            raise ValueError("Enter a valid CoCANoT Patient ID and complete the Clinical Assessment before exporting.")
+        patient_records = self.metadata_get_patient(site_id, patient_id)
+        if not patient_records.get("clinical"):
+            raise ValueError("A Clinical Assessment is required before exporting video.")
         linked_table = str(linked_table or "").strip()
         linked_record_id = str(linked_record_id or "").strip()
         allowed = {"Surgical": "surgical", "Imaging": "imaging",
