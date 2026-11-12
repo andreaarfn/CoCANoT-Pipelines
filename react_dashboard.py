@@ -902,7 +902,24 @@ class CoCANoTAPI:
         clinical_id = str(latest_clinical.get("record_id") or latest_clinical.get("assessment_id") or "").strip()
         if not clinical_id:
             raise ValueError("The patient's Clinical Assessment has no ID.")
-        # The filename and dictionary Video ID use the same readable sequence.
+        # Video ID is entered by the user and defined as non-system-generated
+        # in MR Video. Never silently replace it with a generated sequence.
+        video_rule = next(
+            (rule for rule in video_rules if rule.get("field_name") == "Video ID"),
+            None,
+        )
+        if video_rule is None or video_rule.get("system_generated"):
+            raise ValueError(
+                "The active MR Video dictionary must define Video ID as a "
+                "required, user-entered identifier (system_generated = FALSE)."
+            )
+        video_id = str(metadata.get("Video ID") or "").strip()
+        if not video_id:
+            raise ValueError("Enter a Video ID in Step 4 before exporting.")
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", video_id):
+            raise ValueError(
+                "Video ID may contain only letters, numbers, hyphens, and underscores."
+            )
         if not str(output_folder or "").strip():
             raise ValueError("Select an output folder before exporting video.")
         output_dir = Path(str(output_folder)).expanduser().resolve()
@@ -911,14 +928,32 @@ class CoCANoTAPI:
         file_patient_id = normalize_patient_id(patient_id)
         if not re.fullmatch(r"[A-Za-z0-9_-]+", file_patient_id):
             raise ValueError("Patient ID contains characters that are unsafe for a filename.")
-        video_number = self._reserve_video_number(site_id, file_patient_id, output_dir)
-        video_id = f"VID-{video_number:03d}"
         filename = output_dir / f"sub-{file_patient_id}_{video_id}.mp4"
         metadata_filename = filename.with_suffix(".json")
         if filename.exists() or metadata_filename.exists():
             raise FileExistsError(
-                f"Video or metadata output already exists for {video_id} in {output_dir}."
+                f"A video or metadata JSON already exists for Video ID {video_id} in {output_dir}."
             )
+        # Reject duplicate Video IDs for the same patient, even when an older
+        # export was saved to a different directory.
+        with self._video_records_connection() as connection:
+            previous_exports = connection.execute(
+                """SELECT metadata_json, file_path FROM patient_video_exports
+                   WHERE site_id = ? AND patient_id = ?""",
+                (site_id, patient_id),
+            ).fetchall()
+        for previous in previous_exports:
+            try:
+                prior_metadata = json.loads(previous["metadata_json"] or "{}")
+            except (ValueError, TypeError):
+                prior_metadata = {}
+            prior_id = str(prior_metadata.get("Video ID") or "").strip()
+            prior_filename = Path(previous["file_path"]).stem
+            if prior_id == video_id or prior_filename == filename.stem:
+                raise ValueError(
+                    f"Video ID {video_id} is already registered for patient {patient_id}. "
+                    "Enter another Video ID."
+                )
         metadata = self._normalize_metadata_values(metadata, video_rules)
         metadata.update({
             "CoCANoT Patient ID": patient_id,
