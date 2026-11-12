@@ -11506,6 +11506,104 @@ class CoCANoTAPI:
         result["video"] = self.video_get_patient_exports(patient_id)
         return result
 
+    def metadata_get_associated_data(
+        self, patient_id: str, table_name: str, record_id: str,
+    ) -> list[dict[str, Any]]:
+        """Resolve patient-scoped references and file availability on demand.
+
+        Missing targets remain visible by their entered ID, allowing
+        prospective links to resolve automatically after a later upload.
+        This never associates files across patients or guesses from names.
+        """
+        site_id = str(self.get_site_id() or "").strip().upper()
+        patient_id = self._resolve_existing_patient_id(patient_id)
+        table_name = str(table_name or "").strip()
+        record_id = str(record_id or "").strip()
+        keys = {
+            "Surgical": ("surgical", "Surgery ID"),
+            "Imaging": ("imaging", "Image ID"),
+            "Electrophysiology": ("electrophysiology", "Recording ID"),
+            "Video": ("video", "Video ID"),
+        }
+        if not site_id or not patient_id or table_name not in keys or not record_id:
+            raise ValueError("Select a valid patient and review record.")
+        summary = self.metadata_get_patient(site_id, patient_id)
+        source = next(
+            (item for item in summary.get(keys[table_name][0], [])
+             if str(item.get("record_id") or "") == record_id),
+            None,
+        )
+        if source is None:
+            raise ValueError("The selected review record no longer exists for this patient.")
+
+        def identifiers(item: dict[str, Any], table: str) -> set[str]:
+            field = keys[table][1]
+            metadata = item.get("metadata") or {}
+            return {
+                str(value).strip().casefold()
+                for value in (item.get("record_id"), metadata.get(field))
+                if str(value or "").strip()
+            }
+
+        def availability(item: dict[str, Any], table: str) -> tuple[bool, str]:
+            if table == "Video":
+                path = Path(str(item.get("path") or "")).expanduser()
+                return path.is_file(), path.name if path.is_file() else ""
+            if table == "Surgical":
+                documents = self.metadata_document_list(patient_id, table, str(item["record_id"]))
+                return bool(documents), ", ".join(doc.get("file_name", "") for doc in documents)
+            try:
+                file_path = (
+                    self._metadata_find_imaging_file(item)
+                    if table == "Imaging" else self._metadata_find_edf_file(item)
+                )
+                return file_path.is_file(), file_path.name if file_path.is_file() else ""
+            except (OSError, ValueError, RuntimeError, FileNotFoundError):
+                return False, ""
+
+        results: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        source_ids = identifiers(source, table_name)
+        source_metadata = source.get("metadata") or {}
+
+        def add(table: str, requested_id: str, target: dict[str, Any] | None) -> None:
+            identity = (table, str(target.get("record_id")) if target else requested_id.casefold())
+            if identity in seen:
+                return
+            seen.add(identity)
+            available, filename = availability(target, table) if target else (False, "")
+            results.append({
+                "table_name": table,
+                "requested_id": requested_id,
+                "record_id": str(target.get("record_id") or "") if target else "",
+                "file_name": filename,
+                "available": available,
+                "message": "File available" if available else "File has not been uploaded",
+            })
+
+        for other_table, (summary_key, field) in keys.items():
+            if other_table == table_name:
+                continue
+            candidates = summary.get(summary_key, [])
+            requested = str(source_metadata.get(field) or "").strip()
+            if requested:
+                target = next(
+                    (item for item in candidates if requested.casefold() in identifiers(item, other_table)),
+                    None,
+                )
+                add(other_table, requested, target)
+            # Reverse lookup: an existing record may reference the one
+            # currently being reviewed, even if the current record has no ID
+            # for that linked Video/Surgery/Imaging/Ephys metadata row.
+            source_field = keys[table_name][1]
+            for item in candidates:
+                item_metadata = item.get("metadata") or {}
+                reverse_id = str(item_metadata.get(source_field) or "").strip()
+                if reverse_id and reverse_id.casefold() in source_ids:
+                    display_id = str(item_metadata.get(field) or item.get("record_id") or "").strip()
+                    add(other_table, display_id, item)
+        return results
+
     @staticmethod
     def _metadata_record_file_candidates(
         record: dict[str, Any],
