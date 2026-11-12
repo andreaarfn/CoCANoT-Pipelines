@@ -489,6 +489,7 @@ export default function App() {
 
 
 
+      setVideoSession(null);
       setSiteId(result.site_id || value);
 
 
@@ -565,6 +566,7 @@ export default function App() {
 
 
 
+      setVideoSession(null);
       setSiteId("");
 
 
