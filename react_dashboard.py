@@ -11550,8 +11550,15 @@ class CoCANoTAPI:
                 path = Path(str(item.get("path") or "")).expanduser()
                 return path.is_file(), path.name if path.is_file() else ""
             if table == "Surgical":
-                documents = self.metadata_document_list(patient_id, table, str(item["record_id"]))
-                return bool(documents), ", ".join(doc.get("file_name", "") for doc in documents)
+                try:
+                    documents = self.metadata_document_list(
+                        patient_id, table, str(item["record_id"])
+                    )
+                except (OSError, ValueError):
+                    return False, ""
+                return bool(documents), ", ".join(
+                    doc.get("file_name", "") for doc in documents
+                )
             try:
                 file_path = (
                     self._metadata_find_imaging_file(item)
