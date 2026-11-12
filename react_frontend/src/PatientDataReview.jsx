@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 
 
@@ -279,7 +279,17 @@ function VideoPatientReview({ patientId, record, onBack }) {
     {record.linked_table && record.linked_record_id && <p><strong>Associated {record.linked_table} record:</strong> {record.linked_record_id}</p>}
     {!record.linked_table && <p><strong>Association:</strong> Patient only</p>}
     <p><strong>Stored locally:</strong> <code style={{overflowWrap:"anywhere"}}>{record.path}</code></p>
-    <p><strong>Status:</strong> Final privacy review required. Scrub through and inspect the exported footage in full, including clip transitions and tracked censor regions, before sharing. Export completion alone is not de-identification validation.</p>
+    {record.metadata && Object.keys(record.metadata).length > 0 && <section>
+      <h3>Video metadata</h3>
+      <dl style={{display:"grid",gridTemplateColumns:"minmax(140px,1fr) minmax(0,2fr)",gap:"8px 16px"}}>
+        {Object.entries(record.metadata).filter(([, value]) => value !== null && value !== "" && (!Array.isArray(value) || value.length > 0)).map(([name,value]) =>
+          <React.Fragment key={name}>
+            <dt style={{fontWeight:650}}>{name}</dt>
+            <dd style={{margin:0,overflowWrap:"anywhere"}}>{Array.isArray(value) ? value.join(", ") : String(value)}</dd>
+          </React.Fragment>
+        )}
+      </dl>
+    </section>}
   </section>;
 }
 
