@@ -905,6 +905,120 @@ class CoCANoTAPI:
             for row in rows
         ]
 
+    def video_update_patient_metadata(
+        self, patient_id: str, record_id: str, metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Validate edits against MR Video and synchronize the saved JSON and MP4."""
+        site_id = str(self.get_site_id() or "").strip().upper()
+        patient_id = self._resolve_existing_patient_id(patient_id)
+        record_id = str(record_id or "").strip()
+        if not site_id or not patient_id or not record_id:
+            raise ValueError("An authenticated site, patient and existing Video record are required.")
+        if not isinstance(metadata, dict):
+            raise ValueError("Video metadata must be an object.")
+
+        with self._video_records_connection() as connection:
+            row = connection.execute(
+                """SELECT file_path, metadata_json, linked_table, linked_record_id
+                   FROM patient_video_exports
+                   WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                (site_id, patient_id, record_id),
+            ).fetchone()
+        if row is None:
+            raise ValueError("The selected Video record was not found for this patient.")
+
+        previous = json.loads(row["metadata_json"] or "{}")
+        _dictionary, rules, validator = self._dictionary_context("Video")
+        clean = self._normalize_metadata_values(metadata, rules)
+        # Patient and clinical/session associations come from the saved record,
+        # not the editor; they cannot be reassigned using a metadata edit.
+        for name in (
+            "CoCANoT Patient ID", "Clinical Assessment ID",
+            "Surgery ID", "Recording ID", "Image ID",
+        ):
+            clean[name] = previous.get(name, "")
+        clean["CoCANoT Patient ID"] = patient_id
+        new_id = str(clean.get("Video ID") or "").strip()
+        if not new_id or not re.fullmatch(r"[A-Za-z0-9_-]+", new_id):
+            raise ValueError("Video ID must contain only letters, numbers, underscores or hyphens.")
+        clean["Video ID"] = new_id
+        if _exclusive_multiselect_conflicts(clean, rules):
+            raise ValueError("\n".join(_exclusive_multiselect_conflicts(clean, rules)[:20]))
+        validation = validator.validate_record("Video", clean)
+        bad = [
+            entry for entry in validation["results"]
+            if entry["status"] in {"invalid", "missing_required"}
+        ]
+        if bad:
+            raise ValueError("\n".join(
+                f"{entry['field_name']}: {entry['message']}" for entry in bad[:20]
+            ))
+
+        original_video = Path(row["file_path"])
+        if not original_video.is_file():
+            raise FileNotFoundError("The exported Video MP4 must be available to update its metadata.")
+        original_json = original_video.with_suffix(".json")
+        saved_patient = normalize_patient_id(patient_id)
+        proposed_video = original_video.with_name(f"sub-{saved_patient}_{new_id}.mp4")
+        proposed_json = proposed_video.with_suffix(".json")
+        if proposed_video != original_video and (
+            proposed_video.exists() or proposed_json.exists()
+        ):
+            raise FileExistsError("Another exported Video/JSON already uses that Video ID.")
+        with self._video_records_connection() as connection:
+            others = connection.execute(
+                """SELECT metadata_json FROM patient_video_exports
+                   WHERE site_id = ? AND patient_id = ? AND record_id != ?""",
+                (site_id, patient_id, record_id),
+            ).fetchall()
+        for other in others:
+            if str(json.loads(other["metadata_json"] or "{}").get("Video ID") or "") == new_id:
+                raise ValueError("This Video ID is already assigned to another video for this patient.")
+
+        json_payload = json.dumps(clean, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+        # Preserve existing JSON until the database update succeeds; restore
+        # the previous contents if anything fails after staging the new file.
+        previous_json = original_json.read_bytes() if original_json.exists() else None
+        temp_json = original_video.parent / f".{original_video.stem}.{uuid.uuid4().hex}.json.tmp"
+        moved_video = False
+        moved_json = False
+        try:
+            temp_json.write_text(json_payload, encoding="utf-8")
+            if proposed_video != original_video:
+                original_video.rename(proposed_video)
+                moved_video = True
+                if original_json.exists():
+                    original_json.rename(proposed_json)
+                    moved_json = True
+            temp_json.replace(proposed_json)
+            with self._video_records_connection() as connection:
+                updated = connection.execute(
+                    """UPDATE patient_video_exports
+                       SET metadata_json = ?, file_path = ?
+                       WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                    (json.dumps(clean, ensure_ascii=False, allow_nan=False),
+                     str(proposed_video), site_id, patient_id, record_id),
+                )
+                if updated.rowcount != 1:
+                    raise RuntimeError("Unable to update the selected Video record.")
+        except Exception:
+            temp_json.unlink(missing_ok=True)
+            if moved_video:
+                proposed_video.rename(original_video)
+            if moved_json and proposed_json.exists():
+                proposed_json.rename(original_json)
+            if previous_json is None:
+                original_json.unlink(missing_ok=True)
+            else:
+                original_json.write_bytes(previous_json)
+            raise
+        return {
+            "record_id": record_id, "patient_id": patient_id,
+            "path": str(proposed_video), "file_name": proposed_video.name,
+            "metadata_path": str(proposed_json), "metadata": clean,
+            "saved": True,
+        }
+
     def video_delete_patient_export(self, patient_id: str, record_id: str) -> dict[str, Any]:
         """Remove a video association, never delete the actual recording."""
         site_id = str(self.get_site_id() or "").strip().upper()
