@@ -634,3 +634,5 @@
 .associatedDataEmpty,.associatedDataError{padding:15px 17px;margin:0;font-size:12px;color:#667b8d}
 .associatedDataError{color:#a33b3b}
 @media(max-width:650px){.associatedDataRow,.associatedDataHeader{align-items:flex-start;flex-direction:column}}
+
+.associatedDataHeaderActions{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
