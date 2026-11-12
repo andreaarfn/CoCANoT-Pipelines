@@ -247,7 +247,7 @@ function RelatedVideoRecords({patientId, tableName, recordId}) {
   return <section style={{margin:"12px 0",padding:16,border:"1px solid #d8e3eb",borderRadius:12}}>
     <h3>Related video exports</h3>
     {videos.map(v=><div key={v.record_id} style={{padding:"8px 0",overflowWrap:"anywhere"}}>
-      <strong>{v.file_name}</strong> · {v.exists ? "Stored locally; final privacy review required" : "File missing"}
+      <strong>{v.file_name}</strong> · {v.exists ? "Stored locally" : "File missing"}
       <div style={{fontSize:12,color:"#536982"}}>{v.path}</div>
     </div>)}
     {error && <p role="alert">Related video lookup unavailable: {error}</p>}
