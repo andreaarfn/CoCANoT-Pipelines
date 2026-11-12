@@ -1630,27 +1630,14 @@ export default function MetadataDashboard({
 
 
 
-      setEditor(null);
-
-
-
-      setMessage(
-
-
-
-        `${editor.tableName} metadata saved.`
-
-
-
-      );
-
-
-
+      // Do not close the editor or announce success until the refreshed
+      // patient record is available. This matters especially for Video, whose
+      // sidecar and filename may have changed as part of the save.
       await loadPatient(targetPatientId);
-
-
-
       await onDataChanged?.();
+
+      setEditor(null);
+      setMessage(`${editor.tableName} metadata saved.`);
 
 
 
