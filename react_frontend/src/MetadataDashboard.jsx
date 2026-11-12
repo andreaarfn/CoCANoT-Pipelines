@@ -4644,7 +4644,7 @@ function PatientRecordSection({
 
 
 
-              <th>Review Status</th>
+              {tableName !== "Video" && <th>Review Status</th>}
 
 
 
@@ -4676,7 +4676,7 @@ function PatientRecordSection({
 
 
 
-                  colSpan="5"
+                  colSpan={tableName === "Video" ? 4 : 5}
 
 
 
@@ -4900,11 +4900,11 @@ function PatientRecordSection({
 
 
 
-                    <td>
+                    {tableName !== "Video" && <td>
 
 
 
-                      {tableName === "Video" ? <span className={styles.needsReviewBadge}>{row.exists ? "Final privacy review required" : "File missing"}</span> : needsReview ? (
+                      {needsReview ? (
 
 
 
@@ -5048,7 +5048,7 @@ function PatientRecordSection({
 
 
 
-                    </td>
+                    </td>}
 
 
 
