@@ -617,3 +617,20 @@
 @media(max-width:750px){.videoReview{padding:10px 8px 24px}.videoOverviewFacts{width:100%}.videoViewer{padding:10px;min-height:180px}.videoViewerEmpty{min-height:190px}.videoDetailsHeader{align-items:flex-start;flex-direction:column}}
 
 .videoDetailsHeader .metadataHeaderActions{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+
+/* Patient-scoped links between data modalities, resolved on every review open. */
+.associatedDataCard{margin:22px 0 24px;border:1px solid #d5e0e8;border-radius:10px;background:#fff;overflow:hidden}
+.associatedDataHeader{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px 17px;background:#f7fafc;border-bottom:1px solid #dce5ec}
+.associatedDataHeader strong{font-size:14px;color:#243d55}
+.associatedDataHeader span{font-size:11px;color:#687e90}
+.associatedDataRows{display:grid}
+.associatedDataRow{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 17px;border-bottom:1px solid #e4eaf0}
+.associatedDataRow:last-child{border-bottom:none}
+.associatedDataDescription{display:grid;gap:5px;min-width:0}
+.associatedDataDescription strong{font-size:12px;color:#29445b;overflow-wrap:anywhere}
+.associatedDataDescription span{font-size:11px;color:#667b8d;overflow-wrap:anywhere}
+.associatedDataLink{display:inline-flex;align-items:center;gap:7px;border:1px solid #b6cede;border-radius:7px;padding:8px 11px;background:#f4f9fc;color:#19629c;font-size:11px;font-weight:750;cursor:pointer;white-space:nowrap}
+.associatedDataLink:hover{background:#e6f2fa}
+.associatedDataEmpty,.associatedDataError{padding:15px 17px;margin:0;font-size:12px;color:#667b8d}
+.associatedDataError{color:#a33b3b}
+@media(max-width:650px){.associatedDataRow,.associatedDataHeader{align-items:flex-start;flex-direction:column}}
