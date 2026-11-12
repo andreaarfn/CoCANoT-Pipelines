@@ -14,6 +14,7 @@ from typing import Any, Iterable, Mapping
 PIPELINE_SECTIONS = {
     "electrophysiology",
     "imaging",
+    "video",
 }
 
 
@@ -27,6 +28,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "input_dirs": [],
         "derivatives_dir": "",
         "bids_output_dir": "",
+    },
+    "video": {
+        "sessions": {},
     },
 }
 
