@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Scissors, ShieldCheck, Trash2, Video, GripVertical, RotateCcw, Play, Pause } from "lucide-react";
 import "./VideoDashboard.css";
+import DictionaryForm, { validateRecordAgainstRules } from "./DictionaryForm";
 
 const bridge = () => window.pywebview?.api;
 const id = () => (globalThis.crypto?.randomUUID?.() || String(Date.now()) + Math.random());
@@ -29,9 +30,23 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const [linkedRecordId, setLinkedRecordId] = useState(initialSession?.linkedRecordId || "");
   const [exportRecord, setExportRecord] = useState(null);
   const [outputFolder, setOutputFolder] = useState(initialSession?.outputFolder || "");
+  const [videoRules, setVideoRules] = useState(null);
+  const [videoMetadata, setVideoMetadata] = useState(initialSession?.videoMetadata || {});
+  const [videoFieldErrors, setVideoFieldErrors] = useState({});
   const normalizedPatientId = normalizePatientId(patientId);
   const existingPatientId = patients.find(p => normalizePatientId(p.patient_id) === normalizedPatientId)?.patient_id || "";
   const newPatient = patientsReady && Boolean(normalizedPatientId) && !existingPatientId;
+  const linkedVideoMetadata = {
+    ...videoMetadata,
+    "CoCANoT Patient ID": existingPatientId,
+    "Surgery ID": linkedTable === "Surgical" ? linkedRecordId : "",
+    "Recording ID": linkedTable === "Electrophysiology" ? linkedRecordId : "",
+    "Image ID": linkedTable === "Imaging" ? linkedRecordId : "",
+    "Clinical Assessment ID": patientRecords?.clinical?.[0]?.record_id || "",
+  };
+  const editableVideoRules = (videoRules || []).filter(rule =>
+    !["CoCANoT Patient ID", "Surgery ID", "Recording ID", "Image ID"].includes(rule.field_name)
+  );
   useEffect(() => {
     let live = true;
     async function loadPatients() {
@@ -59,6 +74,21 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     loadRecords();
     return () => {active=false;};
   }, [existingPatientId,step]);
+  useEffect(() => {
+    if (step !== 4) return;
+    let active = true;
+    async function loadVideoRules() {
+      try {
+        if (!bridge()?.metadata_get_rules) throw new Error("Metadata rules API is unavailable.");
+        const rules = await bridge().metadata_get_rules("Video");
+        if (active) setVideoRules(Array.isArray(rules) ? rules : []);
+      } catch (error) {
+        if (active) { setVideoRules(null); setNotice("Could not load MR Video dictionary: " + String(error)); }
+      }
+    }
+    loadVideoRules();
+    return () => { active = false; };
+  }, [step]);
   const linkedRecords = linkedTable && patientRecords
     ? patientRecords[linkedTable === "Surgical" ? "surgical" : linkedTable === "Imaging" ? "imaging" : "electrophysiology"] || []
     : [];
@@ -272,7 +302,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       }
       onCreateClinicalAssessment(canonicalId, {
         project, selected, step: 4, patientId: canonicalId, outputFolder,
-        linkedTable: "", linkedRecordId: "", reviewed: false
+        linkedTable: "", linkedRecordId: "", reviewed: false, videoMetadata
       });
     } catch (error) {
       setNotice("Could not create patient: " + String(error.message || error));
@@ -286,10 +316,14 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       if (!outputFolder.trim()) throw new Error("Choose an output folder before exporting.");
       if (!existingPatientId) throw new Error("Enter an existing CoCANoT patient ID or create a Clinical Assessment first.");
       if (!patientRecords?.clinical?.length) throw new Error("A Clinical Assessment is required before exporting video.");
+      if (!videoRules) throw new Error("Load the MR Video metadata dictionary before exporting.");
+      const invalid = validateRecordAgainstRules(editableVideoRules, linkedVideoMetadata);
+      setVideoFieldErrors(invalid);
+      if (Object.keys(invalid).length) throw new Error("Complete the required Video metadata fields before exporting.");
       if (linkedTable && (!linkedRecordId || !linkedRecords.some(r => String(r.record_id) === linkedRecordId))) {
         throw new Error("Choose a valid record from the selected category.");
       }
-      const result=await bridge().video_export_project(project, existingPatientId, linkedTable, linkedRecordId, outputFolder);
+      const result=await bridge().video_export_project(project, existingPatientId, linkedTable, linkedRecordId, outputFolder, linkedVideoMetadata);
       if (result?.error) throw new Error(result.error);
       if (result?.registered && result?.path) {setExportRecord(result);setNotice("");setReviewed(false);}
       else setNotice("Export cancelled.");
@@ -413,7 +447,23 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           </select>
           {linkedRecords.length===0 && <small>No {linkedTable.toLowerCase()} records exist for this patient. Add one in Patient Data Review or choose patient only.</small>}
         </label>}
-      </div>}<label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the video and can confirm all PHI has been censored or removed.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !outputFolder.trim() || !existingPatientId || !patientRecords?.clinical?.length || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
+      </div>}
+      <div className="video-metadata-fields">
+        <h2>Video metadata</h2>
+        {videoRules === null
+          ? <p>Loading Video metadata from the active dictionary…</p>
+          : <DictionaryForm
+              rules={editableVideoRules}
+              values={linkedVideoMetadata}
+              errors={videoFieldErrors}
+              onChange={(name, value) => {
+                setVideoMetadata(current => ({...current, [name]: value}));
+                setVideoFieldErrors(current => ({...current, [name]: ""}));
+                setReviewed(false);
+                setExportRecord(null);
+              }}
+            />}
+      </div><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the video and can confirm all PHI has been censored or removed.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !outputFolder.trim() || !existingPatientId || !patientRecords?.clinical?.length || !videoRules || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
     {step===4 && exportRecord && <div className="video-notice" role="status"><strong>Video linked to patient {exportRecord.patient_id}</strong><p>Saved locally: {exportRecord.path}</p>{exportRecord.linked_table && <p>Linked to {exportRecord.linked_table} record {exportRecord.linked_record_id}.</p>}</div>}
     {step>1 && step<4 && <div className="video-stage-navigation"><button onClick={()=>setStep(step-1)}>← Previous step</button><button className="video-primary" onClick={()=>{player.current?.pause();setMaskMode(false);setStep(step+1);}}>Continue →</button></div>}
     {notice && <div className="video-notice" role="status">{notice}</div>}
