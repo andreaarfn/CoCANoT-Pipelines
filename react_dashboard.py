@@ -908,11 +908,12 @@ class CoCANoTAPI:
         output_dir = Path(str(output_folder)).expanduser().resolve()
         if not output_dir.is_dir():
             raise ValueError("The selected output folder does not exist. Choose another folder.")
-        if not re.fullmatch(r"[A-Za-z0-9_-]+", patient_id):
+        file_patient_id = normalize_patient_id(patient_id)
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", file_patient_id):
             raise ValueError("Patient ID contains characters that are unsafe for a filename.")
-        video_number = self._reserve_video_number(site_id, patient_id, output_dir)
+        video_number = self._reserve_video_number(site_id, file_patient_id, output_dir)
         video_id = f"VID-{video_number:03d}"
-        filename = output_dir / f"sub-{patient_id}_{video_id}.mp4"
+        filename = output_dir / f"sub-{file_patient_id}_{video_id}.mp4"
         if filename.exists():
             raise FileExistsError(f"Output video already exists: {filename}")
         metadata = self._normalize_metadata_values(metadata, video_rules)
