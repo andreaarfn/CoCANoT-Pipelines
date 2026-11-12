@@ -291,7 +291,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       }
       const result=await bridge().video_export_project(project, existingPatientId, linkedTable, linkedRecordId, outputFolder);
       if (result?.error) throw new Error(result.error);
-      if (result?.registered && result?.path) {setExportRecord(result);setNotice("MP4 registered to patient " + patientId + " in Patient Data Review. Review final footage before sharing.");setReviewed(false);}
+      if (result?.registered && result?.path) {setExportRecord(result);setNotice("");setReviewed(false);}
       else setNotice("Export cancelled.");
     }catch(e){setNotice(String(e.message || e));}finally{setBusy(false);}
   }
@@ -414,7 +414,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           {linkedRecords.length===0 && <small>No {linkedTable.toLowerCase()} records exist for this patient. Add one in Patient Data Review or choose patient only.</small>}
         </label>}
       </div>}<label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the video and can confirm all PHI has been censored or removed.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !outputFolder.trim() || !existingPatientId || !patientRecords?.clinical?.length || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
-    {step===4 && exportRecord && <div className="video-notice" role="status"><strong>Linked to patient {exportRecord.patient_id}</strong><p>MP4: {exportRecord.path}</p><p>{exportRecord.linked_table ? `Linked to ${exportRecord.linked_table} record ${exportRecord.linked_record_id}. ` : ""}Find the record in Patient Data Review. Check the exported footage before sharing.</p></div>}
+    {step===4 && exportRecord && <div className="video-notice" role="status"><strong>Video linked to patient {exportRecord.patient_id}</strong><p>Saved locally: {exportRecord.path}</p>{exportRecord.linked_table && <p>Linked to {exportRecord.linked_table} record {exportRecord.linked_record_id}.</p>}</div>}
     {step>1 && step<4 && <div className="video-stage-navigation"><button onClick={()=>setStep(step-1)}>← Previous step</button><button className="video-primary" onClick={()=>{player.current?.pause();setMaskMode(false);setStep(step+1);}}>Continue →</button></div>}
     {notice && <div className="video-notice" role="status">{notice}</div>}
   </div>;
