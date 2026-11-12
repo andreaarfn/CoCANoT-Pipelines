@@ -16,6 +16,7 @@ import ImagingDashboard from "./ImagingDashboard";
 
 import ElectrophysiologyDashboard from "./ElectrophysiologyDashboard";
 import VideoDashboard from "./VideoDashboard";
+import VideoHome from "./VideoHome";
 
 
 
@@ -1056,6 +1057,14 @@ export default function App() {
 
 
   } else if (page === "video") {
+    content = (
+      <VideoHome
+        onHome={() => navigate("home")}
+        onProcessVideos={() => navigate("video-processing")}
+        onPatientReview={() => navigate("patient-review")}
+      />
+    );
+  } else if (page === "video-processing") {
     content = <VideoDashboard
       initialSession={navigationContext.videoSession || videoSession || null}
       onSessionChange={setVideoSession}
@@ -1063,7 +1072,7 @@ export default function App() {
         navigate("metadata-patients", {
           patientId,
           autoOpenClinical: true,
-          returnPage: "video",
+          returnPage: "video-processing",
           returnContext: { videoSession },
         })
       }
