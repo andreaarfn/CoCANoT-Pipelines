@@ -92,7 +92,7 @@ export default function VideoDashboard() {
     }
     try {
       setBusy(true);
-      setNotice(`Tracking region from ${seconds(start)}s to ${seconds(end)}s…`);
+      setNotice("");
       // Always initialize tracking from the box geometry at its start time,
       // regardless of the current video playhead position.
       const current = trackedRegion(mask, start);
@@ -108,7 +108,7 @@ export default function VideoDashboard() {
         tracking_size_mode:"fixed",
         tracking_message:result.warning || "",
       }:item)}));
-      setNotice(result.warning || `Tracking completed from ${seconds(start)}s to ${seconds(end)}s. Review the rendered censor coverage.`);
+      // Tracking results and warnings are displayed beside the censor region.
     } catch(error) {
       setNotice("Tracking failed: " + (error.message || error));
     } finally {
