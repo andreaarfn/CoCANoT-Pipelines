@@ -1052,7 +1052,17 @@ export default function App() {
 
 
   } else if (page === "video") {
-    content = <VideoDashboard />;
+    content = <VideoDashboard
+      initialSession={navigationContext.videoSession || null}
+      onCreateClinicalAssessment={(patientId, videoSession) =>
+        navigate("metadata-patients", {
+          patientId,
+          autoOpenClinical: true,
+          returnPage: "video",
+          returnContext: { videoSession },
+        })
+      }
+    />;
 
   } else if (page === "help-support") {
 
