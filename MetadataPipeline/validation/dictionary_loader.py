@@ -133,6 +133,22 @@ def _read_machine_sheet(
 
         record = dict(zip(headers, values))
 
+        # Some spreadsheets store TRUE/FALSE as text rather than Excel
+        # boolean cells. Normalize only exact boolean literals; leave other
+        # values unchanged so schema validation still rejects invalid data.
+        boolean_columns = (
+            "required",
+            "manual_review_required",
+            "system_generated",
+            "creates_new_clinical_assessment_if_changed",
+        )
+        for column in boolean_columns:
+            value = record.get(column)
+            if isinstance(value, str):
+                literal = value.strip().upper()
+                if literal in {"TRUE", "FALSE"}:
+                    record[column] = literal == "TRUE"
+
         for source_column, config in JSON_COLUMNS.items():
             output_key, default = config
             if source_column in record:
