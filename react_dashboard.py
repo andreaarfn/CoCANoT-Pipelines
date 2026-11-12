@@ -763,7 +763,71 @@ class CoCANoTAPI:
             connection.execute("ALTER TABLE patient_video_exports ADD COLUMN linked_record_id TEXT NOT NULL DEFAULT ''")
         if "metadata_json" not in columns:
             connection.execute("ALTER TABLE patient_video_exports ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'")
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS patient_video_id_counters (
+                site_id TEXT NOT NULL,
+                patient_id TEXT NOT NULL,
+                last_number INTEGER NOT NULL,
+                PRIMARY KEY(site_id, patient_id)
+            )
+        """)
         return connection
+
+    def _reserve_video_number(self, site_id: str, patient_id: str, output_dir: Path) -> int:
+        """Reserve the next readable Video ID for this site/patient.
+
+        A SQLite write transaction ensures concurrent exports don't receive the
+        same ID. The initial value accounts for previously exported videos and
+        existing matching files in the destination directory.
+        """
+        safe_patient = re.escape(patient_id)
+        filename_pattern = re.compile(
+            rf"^sub-{safe_patient}_VID-([0-9]+)\\.mp4$",
+            re.IGNORECASE,
+        )
+        existing_file_numbers = [
+            int(match.group(1))
+            for entry in output_dir.iterdir()
+            if entry.is_file() and (match := filename_pattern.fullmatch(entry.name))
+        ]
+        with self._video_records_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            previous = connection.execute(
+                """SELECT last_number FROM patient_video_id_counters
+                   WHERE site_id = ? AND patient_id = ?""",
+                (site_id, patient_id),
+            ).fetchone()
+            highest = max(existing_file_numbers, default=0)
+            if previous:
+                highest = max(highest, int(previous["last_number"]))
+            else:
+                # Migration: older exports have UUID record IDs, but may
+                # already carry a sequential Video ID in their metadata.
+                prior_rows = connection.execute(
+                    """SELECT metadata_json, file_path FROM patient_video_exports
+                       WHERE site_id = ? AND patient_id = ?""",
+                    (site_id, patient_id),
+                ).fetchall()
+                for row in prior_rows:
+                    try:
+                        prior_id = str(json.loads(row["metadata_json"] or "{}").get("Video ID", ""))
+                    except (ValueError, TypeError):
+                        prior_id = ""
+                    match = re.fullmatch(r"VID-([0-9]+)", prior_id, re.IGNORECASE)
+                    if match:
+                        highest = max(highest, int(match.group(1)))
+                    match = filename_pattern.fullmatch(Path(row["file_path"]).name)
+                    if match:
+                        highest = max(highest, int(match.group(1)))
+            next_number = highest + 1
+            connection.execute(
+                """INSERT INTO patient_video_id_counters(site_id, patient_id, last_number)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(site_id, patient_id)
+                   DO UPDATE SET last_number = excluded.last_number""",
+                (site_id, patient_id, next_number),
+            )
+        return next_number
 
     def video_get_patient_exports(self, patient_id: str) -> list[dict[str, Any]]:
         site_id = str(self.get_site_id() or "").strip().upper()
@@ -838,10 +902,23 @@ class CoCANoTAPI:
         clinical_id = str(latest_clinical.get("record_id") or latest_clinical.get("assessment_id") or "").strip()
         if not clinical_id:
             raise ValueError("The patient's Clinical Assessment has no ID.")
+        # The filename and dictionary Video ID use the same readable sequence.
+        if not str(output_folder or "").strip():
+            raise ValueError("Select an output folder before exporting video.")
+        output_dir = Path(str(output_folder)).expanduser().resolve()
+        if not output_dir.is_dir():
+            raise ValueError("The selected output folder does not exist. Choose another folder.")
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", patient_id):
+            raise ValueError("Patient ID contains characters that are unsafe for a filename.")
+        video_number = self._reserve_video_number(site_id, patient_id, output_dir)
+        video_id = f"VID-{video_number:03d}"
+        filename = output_dir / f"sub-{patient_id}_{video_id}.mp4"
+        if filename.exists():
+            raise FileExistsError(f"Output video already exists: {filename}")
         metadata = self._normalize_metadata_values(metadata, video_rules)
         metadata.update({
             "CoCANoT Patient ID": patient_id,
-            "Video ID": f"VID-{record_id}",
+            "Video ID": video_id,
             "Clinical Assessment ID": clinical_id,
             "Surgery ID": linked_record_id if linked_table == "Surgical" else "",
             "Recording ID": linked_record_id if linked_table == "Electrophysiology" else "",
@@ -856,13 +933,8 @@ class CoCANoTAPI:
             raise ValueError("\n".join(
                 f"{item['field_name']}: {item['message']}" for item in failures[:20]
             ))
-        # Avoid inserting identifiers into output filenames or directory names.
-        if not str(output_folder or "").strip():
-            raise ValueError("Select an output folder before exporting video.")
-        output_dir = Path(str(output_folder)).expanduser().resolve()
-        if not output_dir.is_dir():
-            raise ValueError("The selected output folder does not exist. Choose another folder.")
-        filename = output_dir / f"video_{record_id}.mp4"
+        # Export to the requested readable name; record_id remains a private
+        # database key to preserve existing links and deletion behavior.
         try:
             result = render_project(project, str(filename))
             if not filename.is_file() or filename.stat().st_size == 0:
@@ -881,7 +953,8 @@ class CoCANoTAPI:
             return {**(result or {}), "path": str(filename),
                     "record_id": record_id, "patient_id": patient_id, "registered": True,
                     "linked_table": linked_table, "linked_record_id": linked_record_id,
-                    "metadata": metadata}
+                    "metadata": metadata, "video_id": video_id,
+                    "file_name": filename.name}
         except Exception:
             filename.unlink(missing_ok=True)
             raise
