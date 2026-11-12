@@ -242,7 +242,7 @@ function RelatedVideoRecords({patientId, tableName, recordId}) {
     async function fetchRelated() {
       try {
         const exports = await api()?.video_get_patient_exports?.(patientId);
-        if (active) setVideos((exports || []).filter(v => v.linked_table === tableName && String(v.linked_record_id) === String(recordId)));
+        if (active) setVideos((exports || []).filter(v => String(v.linked_records?.[tableName] || (v.linked_table === tableName ? v.linked_record_id : "")) === String(recordId)));
       } catch(e) { if(active) setError(String(e)); }
     }
     fetchRelated();
