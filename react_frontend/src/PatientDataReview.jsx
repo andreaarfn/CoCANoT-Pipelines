@@ -356,7 +356,7 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
       <div className={styles.videoDetailsHeader}>
         <div>
           <strong>CoCANoT Metadata</strong>
-          <span>Record {record?.record_id} · {orderedFields.length} populated fields</span>
+          <span>{metadata["Video ID"] || "Video ID unavailable"} · {orderedFields.length} populated fields</span>
         </div>
         <div className={styles.metadataHeaderActions}>
           {orderedFields.length > 0 && <button type="button"
