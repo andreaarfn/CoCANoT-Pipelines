@@ -5184,8 +5184,8 @@ function summarizeRecord(
   if (tableName === "Video") {
     const recordingId = metadata["Recording ID"];
     const purposeKey = Object.keys(metadata).find(key =>
-      /^purpose(?: of (?:video|recording))?(?:\\s*\\(multiselect\\))?$/i.test(key.trim())
-    ) || Object.keys(metadata).find(key => /^purpose\\b/i.test(key.trim()));
+      /^purpose(?: of (?:video|recording))?(?:\s*\(multiselect\))?$/i.test(key.trim())
+    ) || Object.keys(metadata).find(key => /^purpose\b/i.test(key.trim()));
     const purpose = purposeKey ? metadata[purposeKey] : null;
     return [
       recordingId && String(recordingId).trim() && `Recording ID: ${displayValue(recordingId)}`,
