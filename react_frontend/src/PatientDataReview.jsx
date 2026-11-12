@@ -1560,20 +1560,6 @@ function ImagingPatientReview({
         <section className={styles.linkedJsonCard}>
           <div className={styles.linkedJsonHeader}>
             <div className={styles.linkedJsonHeading}>
-              <strong>NIfTI header</strong>
-              <span>Header values read from the linked imaging file</span>
-            </div>
-          </div>
-          <div className={styles.linkedJsonContent}>
-            <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.linked_header ?? {}, null, 2)}</pre>
-          </div>
-        </section>
-      )}
-
-      {preview && (
-        <section className={styles.linkedJsonCard}>
-          <div className={styles.linkedJsonHeader}>
-            <div className={styles.linkedJsonHeading}>
               <strong>Linked JSON file</strong>
               <span>{preview.linked_json_path ? preview.linked_json_path.split(/[\\/]/).pop() : "No matching JSON sidecar found"}</span>
             </div>
@@ -1588,7 +1574,26 @@ function ImagingPatientReview({
                 : "This existing BIDS JSON predates the complete CoCANoT metadata export. Re-export from Step 5 to update the actual JSON file."}
             </p>
           )}
-
+          {!preview.linked_json_has_cocanot_metadata && Object.keys(preview.record_cocanot_metadata ?? {}).length > 0 && (
+            <div className={styles.linkedJsonContent}>
+              <strong>CoCANoT metadata saved in patient record (not yet embedded in this JSON file)</strong>
+              <p>The linked file shown above is missing CoCANoTMetadata. The values below are from the local patient database, not from the linked JSON. Complete a successful Step 5 export to create the combined final sidecar.</p>
+              <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.record_cocanot_metadata, null, 2)}</pre>
+            </div>
+          )}
+          {showLinkedJson && (
+            <div className={styles.linkedJsonContent}>
+              {preview.linked_json_error ? (
+                <p role="alert" className={styles.errorBox}>Could not load linked JSON: {preview.linked_json_error}</p>
+              ) : preview.linked_json != null ? (
+                <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.linked_json, null, 2)}</pre>
+              ) : (
+                <p className={styles.linkedJsonEmpty}>No matching JSON sidecar was found beside the linked NIfTI image.</p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
 
 
@@ -1977,26 +1982,21 @@ function ImagingPatientReview({
 
 
     
-          {!preview.linked_json_has_cocanot_metadata && Object.keys(preview.record_cocanot_metadata ?? {}).length > 0 && (
-            <div className={styles.linkedJsonContent}>
-              <strong>CoCANoT metadata saved in patient record (not yet embedded in this JSON file)</strong>
-              <p>The linked file shown above is missing CoCANoTMetadata. The values below are from the local patient database, not from the linked JSON. Complete a successful Step 5 export to create the combined final sidecar.</p>
-              <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.record_cocanot_metadata, null, 2)}</pre>
+      {preview && (
+        <section className={styles.linkedJsonCard}>
+          <div className={styles.linkedJsonHeader}>
+            <div className={styles.linkedJsonHeading}>
+              <strong>NIfTI header</strong>
+              <span>Header values read from the linked imaging file</span>
             </div>
-          )}
-          {showLinkedJson && (
-            <div className={styles.linkedJsonContent}>
-              {preview.linked_json_error ? (
-                <p role="alert" className={styles.errorBox}>Could not load linked JSON: {preview.linked_json_error}</p>
-              ) : preview.linked_json != null ? (
-                <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.linked_json, null, 2)}</pre>
-              ) : (
-                <p className={styles.linkedJsonEmpty}>No matching JSON sidecar was found beside the linked NIfTI image.</p>
-              )}
-            </div>
-          )}
+          </div>
+          <div className={styles.linkedJsonContent}>
+            <pre className={styles.linkedJsonPreview}>{JSON.stringify(preview.linked_header ?? {}, null, 2)}</pre>
+          </div>
         </section>
       )}
+
+
       </div>
 
 
