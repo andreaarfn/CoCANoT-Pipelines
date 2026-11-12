@@ -914,8 +914,11 @@ class CoCANoTAPI:
         video_number = self._reserve_video_number(site_id, file_patient_id, output_dir)
         video_id = f"VID-{video_number:03d}"
         filename = output_dir / f"sub-{file_patient_id}_{video_id}.mp4"
-        if filename.exists():
-            raise FileExistsError(f"Output video already exists: {filename}")
+        metadata_filename = filename.with_suffix(".json")
+        if filename.exists() or metadata_filename.exists():
+            raise FileExistsError(
+                f"Video or metadata output already exists for {video_id} in {output_dir}."
+            )
         metadata = self._normalize_metadata_values(metadata, video_rules)
         metadata.update({
             "CoCANoT Patient ID": patient_id,
@@ -934,12 +937,23 @@ class CoCANoTAPI:
             raise ValueError("\n".join(
                 f"{item['field_name']}: {item['message']}" for item in failures[:20]
             ))
-        # Export to the requested readable name; record_id remains a private
-        # database key to preserve existing links and deletion behavior.
+        # Both exports use the same stem. Stage the JSON before making it
+        # visible so failed writes never leave a truncated metadata sidecar.
+        # The database remains the source for Patient Data Review.
+        temporary_metadata = output_dir / f".{filename.stem}.{record_id}.json.tmp"
+        metadata_created = False
         try:
             result = render_project(project, str(filename))
             if not filename.is_file() or filename.stat().st_size == 0:
                 raise RuntimeError("Video renderer did not produce a valid MP4 file.")
+            temporary_metadata.write_text(
+                json.dumps(metadata, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+                encoding="utf-8",
+            )
+            if metadata_filename.exists():
+                raise FileExistsError(f"Video metadata file already exists: {metadata_filename}")
+            temporary_metadata.replace(metadata_filename)
+            metadata_created = True
             with self._video_records_connection() as connection:
                 connection.execute(
                     """INSERT INTO patient_video_exports
@@ -955,8 +969,13 @@ class CoCANoTAPI:
                     "record_id": record_id, "patient_id": patient_id, "registered": True,
                     "linked_table": linked_table, "linked_record_id": linked_record_id,
                     "metadata": metadata, "video_id": video_id,
-                    "file_name": filename.name}
+                    "file_name": filename.name,
+                    "metadata_path": str(metadata_filename),
+                    "metadata_file_name": metadata_filename.name}
         except Exception:
+            temporary_metadata.unlink(missing_ok=True)
+            if metadata_created:
+                metadata_filename.unlink(missing_ok=True)
             filename.unlink(missing_ok=True)
             raise
 
