@@ -315,6 +315,7 @@ export default function MetadataDashboard({
 
 
   const [dataReview, setDataReview] = useState(null);
+  const [associatedReviewStack, setAssociatedReviewStack] = useState([]);
 
 
 
@@ -2083,19 +2084,8 @@ export default function MetadataDashboard({
 
 
 
-      setDataReview({
-
-
-
-        tableName,
-
-
-
-        record: rows[0],
-
-
-
-      });
+      setAssociatedReviewStack([]);
+      setDataReview({ tableName, record: rows[0] });
 
 
 
@@ -2470,7 +2460,35 @@ export default function MetadataDashboard({
 
 
 
-        onBack={() => setDataReview(null)}
+        onBack={() => {
+          if (associatedReviewStack.length > 0) {
+            setDataReview(associatedReviewStack[associatedReviewStack.length - 1]);
+            setAssociatedReviewStack(current => current.slice(0, -1));
+          } else {
+            setDataReview(null);
+          }
+        }}
+        onOpenAssociated={async (targetTable, targetId) => {
+          try {
+            const site = await currentSiteId();
+            const refreshed = await api()?.metadata_get_patient?.(site, loadedPatientId);
+            const keyByTable = {
+              Surgical: "surgical",
+              Imaging: "imaging",
+              Electrophysiology: "electrophysiology",
+              Video: "video",
+            };
+            const records = refreshed?.[keyByTable[targetTable]] || [];
+            const linked = records.find(item => String(item.record_id) === String(targetId));
+            if (!linked) {
+              throw new Error("The associated record is no longer available. Reopen the current review to refresh links.");
+            }
+            setAssociatedReviewStack(current => [...current, dataReview]);
+            setDataReview({ tableName: targetTable, record: linked });
+          } catch (error) {
+            window.alert(String(error?.message || error));
+          }
+        }}
 
 
 
@@ -2483,8 +2501,7 @@ export default function MetadataDashboard({
 
 
           setDataReview(null);
-
-
+          setAssociatedReviewStack([]);
 
           await openEditor(
 
