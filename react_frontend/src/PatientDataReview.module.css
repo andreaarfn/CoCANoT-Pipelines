@@ -607,8 +607,11 @@
 .videoCollapseButton:hover{background:#edf5fa}
 .videoDetailsBody{padding:16px 18px;display:grid;gap:22px}
 .videoMetadataGroup h3{margin:0 0 11px;font-size:11px;letter-spacing:.04em;color:#547087;text-transform:uppercase}
-.videoMetadataGrid{margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px}
-.videoMetadataGrid>div{min-width:0;padding:12px;border:1px solid #e1e8ee;background:#fbfcfe;border-radius:7px}
-.videoMetadataGrid dt{font-size:10px;font-weight:750;color:#6b7f91;margin:0 0 6px}
+.videoMetadataGrid{margin:0;display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+.videoMetadataGrid>div{min-width:0;padding:12px 14px;display:grid;grid-template-columns:minmax(200px,.9fr) minmax(0,1.5fr);align-items:start;gap:16px;border-bottom:1px solid #e1e8ee}
+.videoMetadataGrid>div:last-child{border-bottom:0}
+.videoMetadataGrid>div:nth-child(even){background:#f8fafc}
+.videoMetadataGrid dt{font-size:11px;font-weight:750;color:#5f7487;margin:0}
 .videoMetadataGrid dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:#243d55;font-size:12px;font-weight:650;line-height:1.55}
+@media(max-width:700px){.videoMetadataGrid>div{grid-template-columns:1fr;gap:5px}}
 @media(max-width:750px){.videoReview{padding:10px 8px 24px}.videoOverviewFacts{width:100%}.videoViewer{padding:10px;min-height:180px}.videoViewerEmpty{min-height:190px}.videoDetailsHeader{align-items:flex-start;flex-direction:column}}
