@@ -1413,11 +1413,33 @@ export default function MetadataDashboard({
         if (!api()?.video_update_patient_metadata) {
           throw new Error("Video metadata editing is unavailable in this desktop build.");
         }
-        await api().video_update_patient_metadata(
+        const savedVideo = await api().video_update_patient_metadata(
           targetPatientId,
           editor.record.record_id,
           draft
         );
+        if (
+          savedVideo?.saved !== true ||
+          savedVideo.record_id !== editor.record.record_id ||
+          !savedVideo.path ||
+          !savedVideo.metadata_path
+        ) {
+          throw new Error("The Video metadata update was not confirmed. No save success was reported.");
+        }
+        // Confirm the editor will receive the persisted values when the patient
+        // is reloaded, instead of trusting only the bridge's success message.
+        const refreshedVideos = await api().video_get_patient_exports(targetPatientId);
+        const persistedVideo = (refreshedVideos || []).find(
+          item => item.record_id === savedVideo.record_id
+        );
+        if (
+          !persistedVideo ||
+          !persistedVideo.exists ||
+          persistedVideo.path !== savedVideo.path ||
+          JSON.stringify(persistedVideo.metadata) !== JSON.stringify(savedVideo.metadata)
+        ) {
+          throw new Error("Video metadata could not be verified after saving. Reopen the record and retry.");
+        }
       } else if (editor.tableName === "Clinical") {
 
 
