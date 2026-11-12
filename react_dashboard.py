@@ -12106,6 +12106,20 @@ class CoCANoTAPI:
             "exists": False,
         }
 
+    def video_get_metadata_rules(self) -> list[dict[str, Any]]:
+        """Provide all MR Video fields, including generated IDs, in field_order."""
+        _dictionary, rules, _validator = self._dictionary_context("Video")
+        return [
+            self._rule_payload(rule)
+            for rule in sorted(
+                rules,
+                key=lambda rule: (
+                    float(rule.get("field_order") or float("inf")),
+                    str(rule.get("field_name") or ""),
+                ),
+            )
+        ]
+
     def metadata_get_rules(
         self,
         table_name: str,
