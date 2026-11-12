@@ -685,12 +685,59 @@ class CoCANoTAPI:
         """Restore preview access when opening a saved editing project."""
         output = []
         for path in paths:
-            info = inspect_video(path)
+            resolved = self._video_current_path(path)
+            if not Path(resolved).is_file():
+                output.append({
+                    "path": resolved,
+                    "requested_path": path,
+                    "preview_url": "",
+                    "unavailable": True,
+                    "error": "Video file is missing from its saved location.",
+                })
+                continue
+            info = inspect_video(resolved)
             token = secrets.token_urlsafe(32)
             _VIDEO_PREVIEWS[token] = Path(info["path"])
             info["preview_url"] = "/__cocanot_video_preview/" + token
+            info["requested_path"] = path
+            info["unavailable"] = False
             output.append(info)
         return output
+
+    def _video_current_path(self, path: str) -> str:
+        """Resolve only exact, site-owned paths recorded by Video ID renames.
+
+        Never guess based on filename similarities. An existing path always
+        takes precedence, so a new file placed at the old location is safe.
+        """
+        candidate = Path(str(path or "")).expanduser()
+        if candidate.is_file():
+            return str(candidate.resolve())
+        site_id = str(self.get_site_id() or "").strip().upper()
+        if not site_id or not candidate.is_absolute():
+            return str(candidate)
+        with self._video_records_connection() as connection:
+            saved = connection.execute(
+                """SELECT exports.file_path FROM patient_video_path_aliases AS aliases
+                   JOIN patient_video_exports AS exports
+                     ON exports.site_id = aliases.site_id
+                    AND exports.patient_id = aliases.patient_id
+                    AND exports.record_id = aliases.record_id
+                   WHERE aliases.site_id = ? AND aliases.old_path = ?""",
+                (site_id, str(candidate)),
+            ).fetchone()
+        if saved and Path(saved["file_path"]).is_file():
+            return str(Path(saved["file_path"]).resolve())
+        return str(candidate)
+
+    def _video_rebind_project_paths(self, project: dict[str, Any]) -> dict[str, Any]:
+        """Copy project data and rebind renamed exports without losing edits."""
+        rebound = dict(project)
+        rebound["clips"] = [
+            {**clip, "path": self._video_current_path(clip.get("path", ""))}
+            for clip in project.get("clips", []) if isinstance(clip, dict)
+        ]
+        return rebound
 
     def video_track_region(self, clip: dict[str, Any], region: dict[str, Any], start_time: float, end_time: float) -> dict[str, Any]:
         """Track a censor box exclusively over its configured clip-relative interval."""
@@ -722,7 +769,13 @@ class CoCANoTAPI:
         video = settings.get("video", {})
         sessions = video.get("sessions", {}) if isinstance(video, dict) else {}
         session = sessions.get(site_id, {}) if isinstance(sessions, dict) else {}
-        return session if isinstance(session, dict) else {}
+        if not isinstance(session, dict):
+            return {}
+        restored = dict(session)
+        project = restored.get("project")
+        if isinstance(project, dict) and isinstance(project.get("clips"), list):
+            restored["project"] = self._video_rebind_project_paths(project)
+        return restored
 
     def video_save_session(self, session: dict[str, Any]) -> dict[str, Any]:
         """Persist Video selections, edits and form state without copying source media."""
@@ -737,10 +790,10 @@ class CoCANoTAPI:
             raise ValueError("Video workspace contains an invalid clip list.")
         # The local HTTP preview tokens expire when the app restarts; save only
         # durable clip paths and editing data and re-register previews on load.
-        project_copy = dict(project)
+        project_copy = self._video_rebind_project_paths(project)
         project_copy["clips"] = [
-            {key: value for key, value in clip.items() if key != "preview_url"}
-            for clip in clips if isinstance(clip, dict)
+            {key: value for key, value in clip.items() if key not in {"preview_url", "unavailable"}}
+            for clip in project_copy["clips"]
         ]
         saved = {
             "project": project_copy,
@@ -823,6 +876,15 @@ class CoCANoTAPI:
                 patient_id TEXT NOT NULL,
                 last_number INTEGER NOT NULL,
                 PRIMARY KEY(site_id, patient_id)
+            )
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS patient_video_path_aliases (
+                site_id TEXT NOT NULL,
+                patient_id TEXT NOT NULL,
+                record_id TEXT NOT NULL,
+                old_path TEXT NOT NULL,
+                PRIMARY KEY (site_id, old_path)
             )
         """)
         return connection
@@ -1036,6 +1098,18 @@ class CoCANoTAPI:
                 )
                 if updated.rowcount != 1:
                     raise RuntimeError("Unable to update the selected Video record.")
+                if proposed_video != original_video:
+                    # The immutable record ID identifies this MP4 even after
+                    # multiple renames. Commit aliases with its DB update.
+                    connection.execute(
+                        """INSERT INTO patient_video_path_aliases
+                           (site_id, patient_id, record_id, old_path)
+                           VALUES (?, ?, ?, ?)
+                           ON CONFLICT(site_id, old_path)
+                           DO UPDATE SET patient_id = excluded.patient_id,
+                                         record_id = excluded.record_id""",
+                        (site_id, patient_id, record_id, str(original_video)),
+                    )
                 # Read back both persisted representations *before* committing.
                 # An exception here rolls back the SQLite update and triggers
                 # the file/sidecar restoration below.
@@ -1090,6 +1164,12 @@ class CoCANoTAPI:
                    WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
                 (site_id, patient_id, str(record_id)),
             )
+            if removed.rowcount:
+                connection.execute(
+                    """DELETE FROM patient_video_path_aliases
+                       WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                    (site_id, patient_id, str(record_id)),
+                )
         return {"deleted": removed.rowcount > 0}
 
     def video_export_project(self, project: dict[str, Any], patient_id: str = "",
