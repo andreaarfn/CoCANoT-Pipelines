@@ -338,7 +338,6 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
       title="Review linked video"
 
       onBack={onBack}
-      onEdit={onEdit}
     />
 
     <section className={styles.videoDetailsCard} aria-label="Video metadata">
@@ -347,13 +346,18 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
           <strong><FileText size={16}/> Video metadata</strong>
           <span>Information saved with this recording</span>
         </div>
-        {orderedFields.length > 0 && <button type="button"
-          className={styles.videoCollapseButton}
-          aria-expanded={metadataOpen}
-          onClick={() => setMetadataOpen(value => !value)}>
-          {metadataOpen ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
-          {metadataOpen ? "Hide details" : "Show details"}
-        </button>}
+        <div className={styles.metadataHeaderActions}>
+          {orderedFields.length > 0 && <button type="button"
+            className={styles.videoCollapseButton}
+            aria-expanded={metadataOpen}
+            onClick={() => setMetadataOpen(value => !value)}>
+            {metadataOpen ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
+            {metadataOpen ? "Hide details" : "Show details"}
+          </button>}
+          {onEdit && <button type="button" className={styles.videoCollapseButton} onClick={onEdit}>
+            <Pencil size={15}/> Edit
+          </button>}
+        </div>
       </div>
       {rulesError && <div className={styles.errorBox} role="alert">Could not load MR Video dictionary: {rulesError}</div>}
       {videoRules === null && !rulesError && <div className={styles.loading}>Loading Video dictionary…</div>}
@@ -722,7 +726,7 @@ function MetadataDocumentPatientReview({
 
 
 
-      <MetadataSummary record={record} expandable />
+      <MetadataSummary record={record} expandable onEdit={onEdit} />
 
 
 
@@ -1532,10 +1536,6 @@ function ImagingPatientReview({
 
 
 
-        onEdit={onEdit}
-
-
-
       />
 
 
@@ -1544,7 +1544,7 @@ function ImagingPatientReview({
 
 
 
-      <MetadataSummary record={record} expandable />
+      <MetadataSummary record={record} expandable onEdit={onEdit} />
 
 
 
@@ -2501,10 +2501,6 @@ function EphysPatientReview({
 
 
 
-        onEdit={onEdit}
-
-
-
       />
 
 
@@ -2513,7 +2509,7 @@ function EphysPatientReview({
 
 
 
-      <MetadataSummary record={record} expandable />
+      <MetadataSummary record={record} expandable onEdit={onEdit} />
 
 
 
@@ -4427,7 +4423,7 @@ function formatAmplitude(value) {
 
 
 
-function MetadataSummary({ record, expandable = false }) {
+function MetadataSummary({ record, expandable = false, onEdit }) {
   const [metadataOpen, setMetadataOpen] = useState(true);
 
   if (expandable) {
@@ -4441,23 +4437,28 @@ function MetadataSummary({ record, expandable = false }) {
     };
 
     return (
-      <section className={styles.videoDetailsCard} aria-label="Linked metadata">
+      <section className={styles.videoDetailsCard} aria-label="CoCANoT Metadata">
         <div className={styles.videoDetailsHeader}>
           <div>
-            <strong><FileText size={16} /> Linked metadata</strong>
+            <strong><FileText size={16} /> CoCANoT Metadata</strong>
             <span>Record {record?.record_id} · {fields.length} metadata fields</span>
           </div>
-          {fields.length > 0 && (
-            <button
-              type="button"
-              className={styles.videoCollapseButton}
-              aria-expanded={metadataOpen}
-              onClick={() => setMetadataOpen(open => !open)}
-            >
-              {metadataOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-              {metadataOpen ? "Hide details" : "Show details"}
-            </button>
-          )}
+          <div className={styles.metadataHeaderActions}>
+            {fields.length > 0 && (
+              <button
+                type="button"
+                className={styles.videoCollapseButton}
+                aria-expanded={metadataOpen}
+                onClick={() => setMetadataOpen(open => !open)}
+              >
+                {metadataOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                {metadataOpen ? "Hide details" : "Show details"}
+              </button>
+            )}
+            {onEdit && <button type="button" className={styles.videoCollapseButton} onClick={onEdit}>
+              <Pencil size={15} /> Edit
+            </button>}
+          </div>
         </div>
         {fields.length === 0
           ? <div className={styles.documentEmpty}>No saved metadata available for this record.</div>
@@ -4576,7 +4577,7 @@ function MetadataSummary({ record, expandable = false }) {
 
 
 
-        <strong>Linked metadata</strong>
+        <strong>CoCANoT Metadata</strong>
 
 
 
