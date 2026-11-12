@@ -105,7 +105,7 @@ export default function PatientDataReview({
     return (
 
       <>
-      {tableName === "Surgical" && <RelatedVideoRecords patientId={patientId} tableName="Surgical" recordId={record?.record_id}/>}
+      {tableName === "Surgical" && <RelatedVideoRecords patientId={patientId} tableName="Surgical" record={record}/>}
       <MetadataDocumentPatientReview
 
         patientId={patientId}
@@ -144,7 +144,7 @@ export default function PatientDataReview({
 
 
       <>
-      <RelatedVideoRecords patientId={patientId} tableName={"Imaging"} recordId={record?.record_id}/>
+      <RelatedVideoRecords patientId={patientId} tableName="Imaging" record={record}/>
       <ImagingPatientReview
 
 
@@ -187,7 +187,7 @@ export default function PatientDataReview({
 
 
       <>
-      <RelatedVideoRecords patientId={patientId} tableName={"Electrophysiology"} recordId={record?.record_id}/>
+      <RelatedVideoRecords patientId={patientId} tableName="Electrophysiology" record={record}/>
       <EphysPatientReview
 
 
@@ -233,7 +233,16 @@ export default function PatientDataReview({
 
 
 
-function RelatedVideoRecords({patientId, tableName, recordId}) {
+function RelatedVideoRecords({patientId, tableName, record}) {
+  const recordId = record?.record_id;
+  const fieldByTable = {
+    Surgical: "Surgery ID",
+    Electrophysiology: "Recording ID",
+    Imaging: "Image ID",
+  };
+  const field = fieldByTable[tableName];
+  const metadataId = String(record?.metadata?.[field] || "").trim();
+  const matchingIds = new Set([recordId, metadataId].map(value => String(value || "").trim()).filter(Boolean));
   const [videos,setVideos] = useState([]);
   const [error,setError] = useState("");
   useEffect(() => {
@@ -242,12 +251,20 @@ function RelatedVideoRecords({patientId, tableName, recordId}) {
     async function fetchRelated() {
       try {
         const exports = await api()?.video_get_patient_exports?.(patientId);
-        if (active) setVideos((exports || []).filter(v => String(v.linked_records?.[tableName] || (v.linked_table === tableName ? v.linked_record_id : "")) === String(recordId)));
+        if (active) setVideos((exports || []).filter(v => {
+          const savedId = String(
+            v.linked_records?.[tableName] ||
+            v.metadata?.[field] ||
+            (v.linked_table === tableName ? v.linked_record_id : "") ||
+            ""
+          ).trim();
+          return savedId && matchingIds.has(savedId);
+        }));
       } catch(e) { if(active) setError(String(e)); }
     }
     fetchRelated();
     return () => {active=false;};
-  },[patientId,tableName,recordId]);
+  },[patientId,tableName,recordId,metadataId]);
   if (!videos.length && !error) return null;
   return <section style={{margin:"12px 0",padding:16,border:"1px solid #d8e3eb",borderRadius:12}}>
     <h3>Related video exports</h3>
