@@ -1001,6 +1001,26 @@ class CoCANoTAPI:
                 )
                 if updated.rowcount != 1:
                     raise RuntimeError("Unable to update the selected Video record.")
+                # Read back both persisted representations *before* committing.
+                # An exception here rolls back the SQLite update and triggers
+                # the file/sidecar restoration below.
+                saved_row = connection.execute(
+                    """SELECT metadata_json, file_path FROM patient_video_exports
+                       WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                    (site_id, patient_id, record_id),
+                ).fetchone()
+                if (
+                    saved_row is None
+                    or saved_row["file_path"] != str(proposed_video)
+                    or json.loads(saved_row["metadata_json"] or "{}") != clean
+                ):
+                    raise RuntimeError("Video metadata database verification failed; changes were not saved.")
+                if not proposed_video.is_file():
+                    raise RuntimeError("Updated Video MP4 could not be found.")
+                if not proposed_json.is_file() or json.loads(
+                    proposed_json.read_text(encoding="utf-8")
+                ) != clean:
+                    raise RuntimeError("Video JSON verification failed; changes were not saved.")
         except Exception:
             temp_json.unlink(missing_ok=True)
             # Remove any newly written sidecar before moving the old sidecar
