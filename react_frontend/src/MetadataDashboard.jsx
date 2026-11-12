@@ -5188,9 +5188,9 @@ function summarizeRecord(
     ) || Object.keys(metadata).find(key => /^purpose\b/i.test(key.trim()));
     const purpose = purposeKey ? metadata[purposeKey] : null;
     return [
-      recordingId && String(recordingId).trim() && `Recording ID: ${displayValue(recordingId)}`,
-      purpose != null && String(displayValue(purpose)).trim() && `Purpose: ${displayValue(purpose)}`,
-    ].filter(Boolean).join(" | ") || "—";
+      `Recording ID: ${recordingId && String(displayValue(recordingId)).trim() ? displayValue(recordingId) : "—"}`,
+      `Purpose: ${purpose != null && String(displayValue(purpose)).trim() ? displayValue(purpose) : "—"}`,
+    ].join(" | ");
   }
   if (tableName === "Clinical") {
 
