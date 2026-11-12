@@ -132,7 +132,7 @@ export default function PatientDataReview({
 
 
   if (tableName === "Video") {
-    return <VideoPatientReview patientId={patientId} record={record} onBack={onBack}/>;
+    return <VideoPatientReview patientId={patientId} record={record} onBack={onBack} onEdit={onEdit}/>;
   }
 
   if (tableName === "Imaging") {
@@ -259,11 +259,27 @@ function RelatedVideoRecords({patientId, tableName, recordId}) {
   </section>;
 }
 
-function VideoPatientReview({ patientId, record, onBack }) {
+function VideoPatientReview({ patientId, record, onBack, onEdit }) {
   const [previewUrl, setPreviewUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [metadataOpen, setMetadataOpen] = useState(true);
+  const [videoRules, setVideoRules] = useState(null);
+  const [rulesError, setRulesError] = useState("");
+  useEffect(() => {
+    let active = true;
+    async function loadRules() {
+      try {
+        if (!api()?.video_get_metadata_rules) throw new Error("Video dictionary API unavailable.");
+        const rules = await api().video_get_metadata_rules();
+        if (active) setVideoRules(Array.isArray(rules) ? rules : []);
+      } catch (err) {
+        if (active) setRulesError(String(err?.message || err));
+      }
+    }
+    loadRules();
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -288,12 +304,17 @@ function VideoPatientReview({ patientId, record, onBack }) {
   const rows = Object.entries(metadata).filter(([, value]) =>
     value !== null && value !== undefined && value !== "" &&
     (!Array.isArray(value) || value.length > 0));
-  const identifiers = new Set([
-    "CoCANoT Patient ID", "Video ID", "Clinical Assessment ID",
-    "Surgery ID", "Recording ID", "Image ID",
-  ]);
-  const identityRows = rows.filter(([field]) => identifiers.has(field));
-  const detailRows = rows.filter(([field]) => !identifiers.has(field));
+  // Include every dictionary field, even when its saved value is blank.
+  // The server returns the full MR Video definition including field_order.
+  const orderedRules = [...(videoRules || [])].sort((a, b) =>
+    (Number(a.field_order) || Number.MAX_SAFE_INTEGER) -
+    (Number(b.field_order) || Number.MAX_SAFE_INTEGER)
+  );
+  const orderedFields = orderedRules.map(rule => ({
+    name: rule.field_name,
+    label: rule.ui_prompt || rule.field_name,
+    value: metadata[rule.field_name],
+  }));
   const fileName = record?.file_name || "Exported video";
   const association = record?.linked_table && record?.linked_record_id
     ? `${record.linked_table} · ${record.linked_record_id}` : "Patient only";
@@ -302,10 +323,12 @@ function VideoPatientReview({ patientId, record, onBack }) {
       ? JSON.stringify(value, null, 2) : String(value);
   const renderRows = entries => (
     <dl className={styles.videoMetadataGrid}>
-      {entries.map(([field, value]) => (
-        <div key={field}>
-          <dt>{field}</dt>
-          <dd>{formatValue(value)}</dd>
+      {entries.map(field => (
+        <div key={field.name}>
+          <dt>{field.label}</dt>
+          <dd>{field.value === null || field.value === undefined || field.value === "" ||
+            (Array.isArray(field.value) && !field.value.length)
+            ? "—" : formatValue(field.value)}</dd>
         </div>
       ))}
     </dl>
@@ -318,6 +341,7 @@ function VideoPatientReview({ patientId, record, onBack }) {
       title="Review linked video"
       text="Review the exported video, its patient association, and the saved metadata."
       onBack={onBack}
+      onEdit={onEdit}
     />
 
     <section className={styles.videoOverview}>
@@ -374,7 +398,7 @@ function VideoPatientReview({ patientId, record, onBack }) {
           <strong><FileText size={16}/> Video metadata</strong>
           <span>Information saved with this recording</span>
         </div>
-        {rows.length > 0 && <button type="button"
+        {orderedFields.length > 0 && <button type="button"
           className={styles.videoCollapseButton}
           aria-expanded={metadataOpen}
           onClick={() => setMetadataOpen(value => !value)}>
@@ -382,15 +406,12 @@ function VideoPatientReview({ patientId, record, onBack }) {
           {metadataOpen ? "Hide details" : "Show details"}
         </button>}
       </div>
-      {rows.length === 0
-        ? <div className={styles.documentEmpty}>No saved Video metadata is available for this recording.</div>
-        : metadataOpen && <div className={styles.videoDetailsBody}>
-            {identityRows.length > 0 && <div className={styles.videoMetadataGroup}>
-              <h3>Record identifiers</h3>{renderRows(identityRows)}
-            </div>}
-            {detailRows.length > 0 && <div className={styles.videoMetadataGroup}>
-              <h3>Video information</h3>{renderRows(detailRows)}
-            </div>}
+      {rulesError && <div className={styles.errorBox} role="alert">Could not load MR Video dictionary: {rulesError}</div>}
+      {videoRules === null && !rulesError && <div className={styles.loading}>Loading Video dictionary…</div>}
+      {videoRules !== null && orderedFields.length === 0
+        ? <div className={styles.documentEmpty}>No Video metadata fields are defined in the active dictionary.</div>
+        : metadataOpen && orderedFields.length > 0 && <div className={styles.videoDetailsBody}>
+            {renderRows(orderedFields)}
           </div>}
     </section>
   </div>;
