@@ -652,7 +652,7 @@ export function DictionaryField({
       value == null ? "" : String(value);
 
     return (
-      <label
+      <div
         className={`${styles.field} ${
           invalid ? styles.fieldInvalid : ""
         }`}
@@ -663,6 +663,7 @@ export function DictionaryField({
         </span>
 
         <select
+          aria-label={rule.ui_prompt}
           className={invalid ? styles.inputInvalid : ""}
           disabled={disabled}
           value={selectedValue}
@@ -685,12 +686,12 @@ export function DictionaryField({
             {error}
           </span>
         )}
-      </label>
+      </div>
     );
   }
 
   return (
-    <label
+    <div
       className={`${styles.field} ${
         invalid ? styles.fieldInvalid : ""
       }`}
@@ -701,6 +702,7 @@ export function DictionaryField({
       </span>
 
       <input
+        aria-label={rule.ui_prompt}
         className={invalid ? styles.inputInvalid : ""}
         disabled={disabled}
         value={value ?? ""}
@@ -716,7 +718,7 @@ export function DictionaryField({
           {error}
         </span>
       )}
-    </label>
+    </div>
   );
 }
 
