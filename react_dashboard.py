@@ -1003,14 +1003,18 @@ class CoCANoTAPI:
                     raise RuntimeError("Unable to update the selected Video record.")
         except Exception:
             temp_json.unlink(missing_ok=True)
-            if moved_video:
-                proposed_video.rename(original_video)
-            if moved_json and proposed_json.exists():
-                proposed_json.rename(original_json)
-            if previous_json is None:
+            # Remove any newly written sidecar before moving the old sidecar
+            # back. Never leave an orphaned JSON at the proposed Video ID.
+            if proposed_json != original_json:
+                proposed_json.unlink(missing_ok=True)
+            if moved_json and original_json != proposed_json:
+                original_json.write_bytes(previous_json)
+            elif previous_json is None:
                 original_json.unlink(missing_ok=True)
             else:
                 original_json.write_bytes(previous_json)
+            if moved_video:
+                proposed_video.rename(original_video)
             raise
         return {
             "record_id": record_id, "patient_id": patient_id,
