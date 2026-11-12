@@ -1406,7 +1406,19 @@ export default function MetadataDashboard({
 
 
 
-      if (editor.tableName === "Clinical") {
+      if (editor.tableName === "Video") {
+        if (!editor.record?.record_id) {
+          throw new Error("Select an existing Video record to edit.");
+        }
+        if (!api()?.video_update_patient_metadata) {
+          throw new Error("Video metadata editing is unavailable in this desktop build.");
+        }
+        await api().video_update_patient_metadata(
+          targetPatientId,
+          editor.record.record_id,
+          draft
+        );
+      } else if (editor.tableName === "Clinical") {
 
 
 
