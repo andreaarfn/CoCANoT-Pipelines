@@ -1145,6 +1145,44 @@ class CoCANoTAPI:
             if moved_video:
                 proposed_video.rename(original_video)
             raise
+        if proposed_video != original_video:
+            # Existing preview tokens may still be attached to the old path
+            # while the user navigates between Video and metadata review.
+            for token, preview_path in list(_VIDEO_PREVIEWS.items()):
+                if Path(preview_path) == original_video:
+                    _VIDEO_PREVIEWS[token] = proposed_video
+
+            # Update the durable Video workspace as well. The alias table is
+            # still authoritative if a stale in-memory snapshot gets saved later.
+            try:
+                settings = load_settings_dict()
+                session = (
+                    settings.get("video", {}).get("sessions", {}).get(site_id)
+                    if isinstance(settings.get("video"), dict) else None
+                )
+                if isinstance(session, dict):
+                    project = session.get("project")
+                    clips = project.get("clips") if isinstance(project, dict) else None
+                    if isinstance(clips, list):
+                        references_renamed_file = any(
+                            isinstance(clip, dict) and clip.get("path") == str(original_video)
+                            for clip in clips
+                        )
+                        if references_renamed_file:
+                            session["project"] = self._video_rebind_project_paths(project)
+                            draft = session.get("videoMetadata")
+                            if (
+                                str(session.get("patientId") or "") == patient_id
+                                and isinstance(draft, dict)
+                                and str(draft.get("Video ID") or "") == str(previous.get("Video ID") or "")
+                            ):
+                                session["videoMetadata"] = {**draft, "Video ID": new_id}
+                            save_settings_dict(settings)
+            except (OSError, ValueError, TypeError):
+                # The MP4, JSON and database are already updated. A failed
+                # workspace write must not report a false save failure:
+                # next Video workspace load uses the committed path aliases.
+                pass
         return {
             "record_id": record_id, "patient_id": patient_id,
             "path": str(proposed_video), "file_name": proposed_video.name,
