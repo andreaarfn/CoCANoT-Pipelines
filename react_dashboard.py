@@ -1100,47 +1100,19 @@ class CoCANoTAPI:
             "Recording ID": ("Electrophysiology", "electrophysiology"),
             "Image ID": ("Imaging", "imaging"),
         }
-        requested_links = [
-            (field, str(clean.get(field) or "").strip())
-            for field in link_fields
+        # Linked IDs are prospective metadata references. A user may upload
+        # the corresponding Surgical, Electrophysiology, or Imaging record
+        # later, so a missing record must not prevent Video metadata saving.
+        # Preserve the exact entered ID in the database and JSON sidecar.
+        linked_records = {
+            table: str(clean.get(field) or "").strip()
+            for field, (table, _records_key) in link_fields.items()
             if str(clean.get(field) or "").strip()
-        ]
-        # A Video may document surgery, electrophysiology, and imaging
-        # together. Validate each association independently and save all
-        # three in the MR Video metadata and exported JSON.
-        linked_records = {}
-        if requested_links:
-            patient_records = self.metadata_get_patient(site_id, patient_id)
-            for field, requested_id in requested_links:
-                linked_table, records_key = link_fields[field]
-                matching_record = next(
-                    (
-                        candidate
-                        for candidate in patient_records.get(records_key, [])
-                        if requested_id in {
-                            str(candidate.get("record_id") or "").strip(),
-                            str((candidate.get("metadata") or {}).get(field) or "").strip(),
-                        }
-                    ),
-                    None,
-                )
-                if matching_record is None:
-                    raise ValueError(
-                        f"{field} {requested_id!r} does not match an existing "
-                        "record for this patient. Select a linked record from "
-                        "the current patient's data."
-                    )
-                canonical_id = str(matching_record.get("record_id") or "").strip()
-                if not canonical_id:
-                    raise ValueError(f"The selected {linked_table} record has no saved record ID.")
-                clean[field] = canonical_id
-                linked_records[linked_table] = canonical_id
-        # Retain one primary association for consumers of the older database
-        # schema. All three associations are authoritative in metadata_json
-        # and the matching sidecar and are exposed through linked_records.
+        }
         previous_table = str(row["linked_table"] or "")
-        new_linked_table = previous_table if previous_table in linked_records else (
-            next(iter(linked_records), "")
+        new_linked_table = (
+            previous_table if previous_table in linked_records
+            else next(iter(linked_records), "")
         )
         new_linked_record_id = linked_records.get(new_linked_table, "")
         new_id = str(clean.get("Video ID") or "").strip()
