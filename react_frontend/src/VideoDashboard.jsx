@@ -54,6 +54,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
               // A Video ID edit may have renamed this exported MP4.
               // Always adopt the verified path returned by the backend.
               path: preview?.path || clip.path,
+              name: preview?.name || clip.name,
               masks:(clip.masks || []).map(mask => ({...mask,id:mask.id || id()})),
               preview_url: preview?.preview_url || "",
               unavailable: Boolean(preview?.unavailable || !preview?.preview_url)};
@@ -257,6 +258,46 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       setNotice("");
     } catch (e) { setNotice(String(e.message || e)); }
   }
+  async function relinkMissingClip(missingClip) {
+    try {
+      if (!bridge()?.video_pick_files) {
+        throw new Error("Video file picker is unavailable in this desktop build.");
+      }
+      const selected = await bridge().video_pick_files();
+      if (!selected?.length) return;
+      if (selected.length !== 1) {
+        throw new Error("Select one replacement file for this missing recording.");
+      }
+      const replacement = selected[0];
+      // Preserve trims and censor masks only when the newly selected media
+      // supports their existing timing and geometry.
+      if (
+        Number(replacement.duration) + 0.01 < Number(missingClip.end) ||
+        (missingClip.width && Number(replacement.width) !== Number(missingClip.width)) ||
+        (missingClip.height && Number(replacement.height) !== Number(missingClip.height))
+      ) {
+        throw new Error("This file is not compatible with the saved recording's duration or dimensions. Choose the original recording.");
+      }
+      setProject(current => ({
+        ...current,
+        clips: current.clips.map(item => item.id === missingClip.id
+          ? {
+              ...item,
+              path: replacement.path,
+              name: replacement.name,
+              duration: replacement.duration,
+              audio: Boolean(replacement.audio),
+              preview_url: replacement.preview_url || "",
+              unavailable: false,
+            }
+          : item),
+      }));
+      setReviewed(false);
+      setNotice("Video relinked. Confirm the footage is the original recording before processing or export.");
+    } catch (error) {
+      setNotice(String(error?.message || error));
+    }
+  }
   function split() {
     if (!clip || cursor <= 0.05 || cursor >= duration - 0.05) return;
     player.current?.pause();
@@ -359,6 +400,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         result.clips = result.clips.map((c, index) => ({
           ...c,
           path: previews?.[index]?.path || c.path,
+          name: previews?.[index]?.name || c.name,
           preview_url: previews?.[index]?.preview_url || "",
           unavailable: Boolean(previews?.[index]?.unavailable || !previews?.[index]?.preview_url),
         }));
@@ -435,7 +477,12 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       {project.clips.length>0 && <div className="video-import-list" aria-label="Imported recordings">
         <strong>{project.clips.length} recording{project.clips.length===1?"":"s"} selected</strong>
         {project.clips.map(c=><div key={c.id} className="video-import-file">
-          <span title={c.name}>{c.name}</span>
+          <span title={c.path}>{c.name}{c.unavailable ? " · File missing" : ""}</span>
+          {c.unavailable && <button type="button" disabled={busy}
+            onClick={() => relinkMissingClip(c)}
+            aria-label={`Relink missing recording ${c.name}`}>
+            Relink
+          </button>}
           <button type="button" aria-label={`Remove ${c.name}`} title="Remove" disabled={busy}
             onClick={()=>{setProject(p=>({...p,clips:p.clips.filter(x=>x.id!==c.id)}));if(selected===c.id)setSelected(null);setReviewed(false);}}>
             <Trash2 size={15}/>
