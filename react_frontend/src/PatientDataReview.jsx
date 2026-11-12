@@ -19,6 +19,11 @@ import {
 
 
   CheckCircle2,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  FileVideo,
+  Film,
 
 
 
@@ -256,41 +261,139 @@ function RelatedVideoRecords({patientId, tableName, recordId}) {
 
 function VideoPatientReview({ patientId, record, onBack }) {
   const [previewUrl, setPreviewUrl] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [metadataOpen, setMetadataOpen] = useState(true);
+
   useEffect(() => {
     let active = true;
+    setPreviewUrl("");
+    setError("");
+    if (!record?.exists || !record?.path) return () => { active = false; };
+    setLoading(true);
     async function load() {
-      if (!record.exists) return;
       try {
-        const paths = await api()?.video_register_previews?.([record.path]);
-        if (active) setPreviewUrl(paths?.[0]?.preview_url || "");
-      } catch (err) { if (active) setError(String(err)); }
+        const previews = await api()?.video_register_previews?.([record.path]);
+        if (!active) return;
+        if (!previews?.[0]?.preview_url) throw new Error("Video preview unavailable.");
+        setPreviewUrl(previews[0].preview_url);
+      } catch (err) { if (active) setError(String(err?.message || err)); }
+      finally { if (active) setLoading(false); }
     }
     load();
     return () => { active = false; };
-  }, [record.path,record.exists]);
-  return <section style={{padding:24,maxWidth:1000,display:"grid",gap:14}}>
-    <div><button type="button" onClick={onBack}>← Back to Patient Data Review</button></div>
-    <h2 style={{margin:0}}>Video data review</h2>
-    <p><strong>Patient:</strong> {patientId} · <strong>MP4:</strong> {record.file_name}</p>
-    {previewUrl && <video src={previewUrl} controls preload="metadata" style={{maxWidth:"100%",width:800,background:"#111",borderRadius:10}}/>}
-    {!record.exists && <p role="alert">The exported MP4 is missing from its saved location.</p>}
-    {error && <p role="alert">Video preview unavailable: {error}</p>}
-    {record.linked_table && record.linked_record_id && <p><strong>Associated {record.linked_table} record:</strong> {record.linked_record_id}</p>}
-    {!record.linked_table && <p><strong>Association:</strong> Patient only</p>}
-    <p><strong>Stored locally:</strong> <code style={{overflowWrap:"anywhere"}}>{record.path}</code></p>
-    {record.metadata && Object.keys(record.metadata).length > 0 && <section>
-      <h3>Video metadata</h3>
-      <dl style={{display:"grid",gridTemplateColumns:"minmax(140px,1fr) minmax(0,2fr)",gap:"8px 16px"}}>
-        {Object.entries(record.metadata).filter(([, value]) => value !== null && value !== "" && (!Array.isArray(value) || value.length > 0)).map(([name,value]) =>
-          <React.Fragment key={name}>
-            <dt style={{fontWeight:650}}>{name}</dt>
-            <dd style={{margin:0,overflowWrap:"anywhere"}}>{Array.isArray(value) ? value.join(", ") : String(value)}</dd>
-          </React.Fragment>
-        )}
-      </dl>
-    </section>}
-  </section>;
+  }, [record?.path, record?.exists]);
+
+  const metadata = record?.metadata && typeof record.metadata === "object" ? record.metadata : {};
+  const rows = Object.entries(metadata).filter(([, value]) =>
+    value !== null && value !== undefined && value !== "" &&
+    (!Array.isArray(value) || value.length > 0));
+  const identifiers = new Set([
+    "CoCANoT Patient ID", "Video ID", "Clinical Assessment ID",
+    "Surgery ID", "Recording ID", "Image ID",
+  ]);
+  const identityRows = rows.filter(([field]) => identifiers.has(field));
+  const detailRows = rows.filter(([field]) => !identifiers.has(field));
+  const fileName = record?.file_name || "Exported video";
+  const association = record?.linked_table && record?.linked_record_id
+    ? `${record.linked_table} · ${record.linked_record_id}` : "Patient only";
+  const formatValue = value => Array.isArray(value)
+    ? value.join(", ") : value && typeof value === "object"
+      ? JSON.stringify(value, null, 2) : String(value);
+  const renderRows = entries => (
+    <dl className={styles.videoMetadataGrid}>
+      {entries.map(([field, value]) => (
+        <div key={field}>
+          <dt>{field}</dt>
+          <dd>{formatValue(value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+
+  return <div className={styles.videoReview}>
+    <ReviewHeader
+      icon={FileVideo}
+      eyebrow="VIDEO DATA REVIEW"
+      title="Review linked video"
+      text="Review the exported video, its patient association, and the saved metadata."
+      onBack={onBack}
+    />
+
+    <section className={styles.videoOverview}>
+      <div className={styles.videoOverviewMain}>
+        <div className={styles.videoFileIcon}><FileVideo size={23}/></div>
+        <div className={styles.videoFileDetails}>
+          <span>EXPORTED RECORDING</span>
+          <strong title={fileName}>{fileName}</strong>
+          <small>CoCANoT Patient {patientId}</small>
+        </div>
+      </div>
+      <div className={styles.videoOverviewFacts}>
+        <div><span>Video ID</span><strong>{metadata["Video ID"] || "—"}</strong></div>
+        <div><span>Associated record</span><strong>{association}</strong></div>
+        <div><span>File status</span>
+          <strong className={record?.exists ? styles.videoAvailable : styles.videoUnavailable}>
+            {record?.exists ? <CheckCircle2 size={14}/> : <AlertCircle size={14}/>}
+            {record?.exists ? "Stored locally" : "File missing"}
+          </strong>
+        </div>
+      </div>
+    </section>
+
+    <section className={styles.viewerCard} aria-label="Video preview">
+      <div className={styles.viewerHeader}>
+        <strong className={styles.videoViewerTitle}><Film size={16}/> Video preview</strong>
+        <span>Exported MP4</span>
+      </div>
+      <div className={styles.videoViewer}>
+        {previewUrl ? <video
+          key={record.path}
+          src={previewUrl}
+          controls
+          playsInline
+          preload="metadata"
+          aria-label={`Playback of ${fileName}`}
+          onError={() => setError("Video playback failed. Check that this MP4 uses a supported codec.")}
+        /> : <div className={styles.videoViewerEmpty}>
+          {loading ? <><Film size={28}/>Loading video preview…</>
+            : record?.exists ? <><Film size={28}/>Video preview unavailable</>
+            : <><AlertCircle size={28}/>The exported MP4 is missing from its saved location.</>}
+        </div>}
+      </div>
+      <div className={styles.videoLocation}>
+        <span>File location</span>
+        <code title={record?.path || ""}>{record?.path || "Not available"}</code>
+      </div>
+    </section>
+    {error && <div className={styles.errorBox} role="alert">{error}</div>}
+
+    <section className={styles.videoDetailsCard} aria-label="Video metadata">
+      <div className={styles.videoDetailsHeader}>
+        <div>
+          <strong><FileText size={16}/> Video metadata</strong>
+          <span>Information saved with this recording</span>
+        </div>
+        {rows.length > 0 && <button type="button"
+          className={styles.videoCollapseButton}
+          aria-expanded={metadataOpen}
+          onClick={() => setMetadataOpen(value => !value)}>
+          {metadataOpen ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
+          {metadataOpen ? "Hide details" : "Show details"}
+        </button>}
+      </div>
+      {rows.length === 0
+        ? <div className={styles.documentEmpty}>No saved Video metadata is available for this recording.</div>
+        : metadataOpen && <div className={styles.videoDetailsBody}>
+            {identityRows.length > 0 && <div className={styles.videoMetadataGroup}>
+              <h3>Record identifiers</h3>{renderRows(identityRows)}
+            </div>}
+            {detailRows.length > 0 && <div className={styles.videoMetadataGroup}>
+              <h3>Video information</h3>{renderRows(detailRows)}
+            </div>}
+          </div>}
+    </section>
+  </div>;
 }
 
 function MetadataDocumentPatientReview({
