@@ -720,8 +720,6 @@ function MetadataDocumentPatientReview({
 
         onBack={onBack}
 
-        onEdit={onEdit}
-
       />
 
 
