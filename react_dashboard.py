@@ -823,7 +823,9 @@ class CoCANoTAPI:
         if not isinstance(session, dict):
             raise ValueError("Video workspace must be an object.")
         project = session.get("project", {})
-        clips = project.get("clips", []) if isinstance(project, dict) else []
+        if not isinstance(project, dict):
+            raise ValueError("Video workspace project must be an object.")
+        clips = project.get("clips", [])
         if not isinstance(clips, list) or len(clips) > 200:
             raise ValueError("Video workspace contains an invalid clip list.")
         # The local HTTP preview tokens expire when the app restarts; save only
