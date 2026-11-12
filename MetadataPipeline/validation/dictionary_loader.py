@@ -19,6 +19,10 @@ DEFAULT_EXPECTED_TABLES = (
     "Imaging",
 )
 
+# Newer dictionaries may include Video, but historical dictionary versions do not.
+# Read it when present without making older workbooks invalid.
+OPTIONAL_TABLES = ("Video",)
+
 JSON_COLUMNS = {
     "allowed_values_json": ("allowed_values", []),
     "conditional_allowed_values_json": ("conditional_allowed_values", {}),
@@ -177,6 +181,11 @@ def load_dictionary(
         f"{MR_PREFIX}{table}": table
         for table in expected_tables
     }
+    optional_sheets = {
+        f"{MR_PREFIX}{table}": table
+        for table in OPTIONAL_TABLES
+        if table not in expected_tables
+    }
 
     try:
         workbook = openpyxl.load_workbook(
@@ -216,7 +225,7 @@ def load_dictionary(
         unexpected = [
             sheet
             for sheet in machine_sheets
-            if sheet not in expected_sheets
+            if sheet not in expected_sheets and sheet not in optional_sheets
         ]
 
         if unexpected and reject_unexpected_mr_sheets:
@@ -231,6 +240,12 @@ def load_dictionary(
             tables[table_name] = _read_machine_sheet(
                 workbook[sheet_name]
             )
+
+        for sheet_name, table_name in optional_sheets.items():
+            if sheet_name in machine_sheets:
+                tables[table_name] = _read_machine_sheet(
+                    workbook[sheet_name]
+                )
 
         return {
             "source_file": str(path),
