@@ -7,10 +7,11 @@ const id = () => (globalThis.crypto?.randomUUID?.() || String(Date.now()) + Math
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const seconds = value => Number(value || 0).toFixed(2);
 const initial = { schema_version: 1, clips: [] };
+const normalizePatientId = value => { const text = String(value ?? "").trim(); return /^[0-9]+$/.test(text) ? (text.replace(/^0+(?=\d)/, "") || "0").padStart(3, "0") : text; };
 
-export default function VideoDashboard() {
-  const [project, setProject] = useState(initial);
-  const [selected, setSelected] = useState(null);
+export default function VideoDashboard({ initialSession = null, onCreateClinicalAssessment }) {
+  const [project, setProject] = useState(initialSession?.project || initial);
+  const [selected, setSelected] = useState(initialSession?.selected ?? null);
   const [cursor, setCursor] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [maskMode, setMaskMode] = useState(false);
@@ -18,15 +19,19 @@ export default function VideoDashboard() {
   const draggedClip = useRef(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  const [reviewed, setReviewed] = useState(false);
-  const [step, setStep] = useState(1);
+  const [reviewed, setReviewed] = useState(initialSession?.reviewed || false);
+  const [step, setStep] = useState(initialSession?.step || 1);
   const [patients, setPatients] = useState([]);
-  const [patientId, setPatientId] = useState("");
+  const [patientsReady, setPatientsReady] = useState(false);
+  const [patientId, setPatientId] = useState(initialSession?.patientId || "");
   const [patientRecords, setPatientRecords] = useState(null);
-  const [linkedTable, setLinkedTable] = useState("");
-  const [linkedRecordId, setLinkedRecordId] = useState("");
+  const [linkedTable, setLinkedTable] = useState(initialSession?.linkedTable || "");
+  const [linkedRecordId, setLinkedRecordId] = useState(initialSession?.linkedRecordId || "");
   const [exportRecord, setExportRecord] = useState(null);
-  const [outputFolder, setOutputFolder] = useState("");
+  const [outputFolder, setOutputFolder] = useState(initialSession?.outputFolder || "");
+  const normalizedPatientId = normalizePatientId(patientId);
+  const existingPatientId = patients.find(p => normalizePatientId(p.patient_id) === normalizedPatientId)?.patient_id || "";
+  const newPatient = patientsReady && Boolean(normalizedPatientId) && !existingPatientId;
   useEffect(() => {
     let live = true;
     async function loadPatients() {
@@ -34,8 +39,8 @@ export default function VideoDashboard() {
         const siteId = await bridge()?.get_site_id?.();
         if (!siteId) return;
         const rows = await bridge()?.metadata_get_patients?.(siteId);
-        if (live) setPatients(Array.isArray(rows) ? rows : []);
-      } catch (error) { if (live) setNotice("Could not load patient IDs: " + String(error)); }
+        if (live) { setPatients(Array.isArray(rows) ? rows : []); setPatientsReady(true); }
+      } catch (error) { if (live) { setPatientsReady(false); setNotice("Could not load patient IDs: " + String(error)); } }
     }
     loadPatients();
     return () => { live = false; };
@@ -43,19 +48,17 @@ export default function VideoDashboard() {
   useEffect(() => {
     let active = true;
     setPatientRecords(null);
-    setLinkedTable("");
-    setLinkedRecordId("");
-    if (!patientId || step !== 4) return () => {active=false;};
+    if (!existingPatientId || step !== 4) return () => {active=false;};
     async function loadRecords() {
       try {
         const site = await bridge()?.get_site_id?.();
-        const result = await bridge()?.metadata_get_patient?.(site,patientId);
+        const result = await bridge()?.metadata_get_patient?.(site,existingPatientId);
         if (active) setPatientRecords(result);
       } catch(e) { if (active) setNotice("Could not load this patient's linked sessions: "+String(e)); }
     }
     loadRecords();
     return () => {active=false;};
-  }, [patientId,step]);
+  }, [existingPatientId,step]);
   const linkedRecords = linkedTable && patientRecords
     ? patientRecords[linkedTable === "Surgical" ? "surgical" : linkedTable === "Imaging" ? "imaging" : "electrophysiology"] || []
     : [];
@@ -255,17 +258,35 @@ export default function VideoDashboard() {
       if (folder) { setOutputFolder(folder); setExportRecord(null); setNotice(""); }
     } catch (error) { setNotice("Could not select output folder: " + String(error.message || error)); }
   }
+  async function createClinicalAssessment() {
+    if (!newPatient || busy || !onCreateClinicalAssessment) return;
+    try {
+      setBusy(true);
+      setNotice("");
+      const site = await bridge()?.get_site_id?.();
+      if (!site || !bridge()?.metadata_create_patient) throw new Error("Patient registration is unavailable.");
+      const result = await bridge().metadata_create_patient(site, normalizedPatientId);
+      const canonicalId = result?.patient_id || normalizedPatientId;
+      onCreateClinicalAssessment(canonicalId, {
+        project, selected, step: 4, patientId: canonicalId, outputFolder,
+        linkedTable: "", linkedRecordId: "", reviewed: false
+      });
+    } catch (error) {
+      setNotice("Could not create patient: " + String(error.message || error));
+    } finally { setBusy(false); }
+  }
   async function exportVideo() {
     if (!project.clips.length) return;
     try {
       if (!bridge()?.video_export_project) throw new Error("Desktop video bridge unavailable.");
       setBusy(true);setNotice("Rendering locally. This can take time for long recordings.");
       if (!outputFolder.trim()) throw new Error("Choose an output folder before exporting.");
-      if (!patientId) throw new Error("Choose an existing patient before exporting.");
+      if (!existingPatientId) throw new Error("Enter an existing CoCANoT patient ID or create a Clinical Assessment first.");
+      if (!patientRecords?.clinical?.length) throw new Error("A Clinical Assessment is required before exporting video.");
       if (linkedTable && (!linkedRecordId || !linkedRecords.some(r => String(r.record_id) === linkedRecordId))) {
         throw new Error("Choose a valid record from the selected category.");
       }
-      const result=await bridge().video_export_project(project, patientId, linkedTable, linkedRecordId, outputFolder);
+      const result=await bridge().video_export_project(project, existingPatientId, linkedTable, linkedRecordId, outputFolder);
       if (result?.error) throw new Error(result.error);
       if (result?.registered && result?.path) {setExportRecord(result);setNotice("MP4 registered to patient " + patientId + " in Patient Data Review. Review final footage before sharing.");setReviewed(false);}
       else setNotice("Export cancelled.");
@@ -365,8 +386,12 @@ export default function VideoDashboard() {
       </div>
       
     </section>}
-    {step===4 && <section className="video-panel video-export"><div><h2>Patient association</h2><label className="video-folder-field"><span>Output folder</span><div className="video-folder-control"><input type="text" aria-label="Output folder" placeholder="Select an output folder" value={outputFolder} onChange={event=>{setOutputFolder(event.target.value);setExportRecord(null);setReviewed(false);}} disabled={busy}/><button type="button" disabled={busy} onClick={pickOutputFolder}>Browse…</button></div></label><label className="video-patient-field">Patient <select value={patientId} onChange={e=>{setPatientId(e.target.value);setReviewed(false);}}><option value="">Select existing patient…</option>{patients.map(p=><option key={p.patient_id} value={p.patient_id}>{p.patient_id}</option>)}</select></label>
-      {patientId && <div className="video-link-fields">
+    {step===4 && <section className="video-panel video-export"><div><h2>Patient association</h2><label className="video-folder-field"><span>Output folder</span><div className="video-folder-control"><input type="text" aria-label="Output folder" placeholder="Select an output folder" value={outputFolder} onChange={event=>{setOutputFolder(event.target.value);setExportRecord(null);setReviewed(false);}} disabled={busy}/><button type="button" disabled={busy} onClick={pickOutputFolder}>Browse…</button></div></label><label className="video-patient-field">CoCANoT Patient ID <input type="text" list="video-patient-ids" placeholder="Enter CoCANoT Patient ID" value={patientId} onChange={e=>{setPatientId(e.target.value);setLinkedTable("");setLinkedRecordId("");setReviewed(false);setExportRecord(null);}} autoComplete="off" disabled={busy}/><datalist id="video-patient-ids">{patients.map(p=><option key={p.patient_id} value={p.patient_id}/>)}</datalist></label>
+      {normalizedPatientId && patientsReady && <div className="video-patient-status">
+        {existingPatientId ? <>Patient {existingPatientId}{patientRecords?.clinical?.length ? " — Clinical Assessment available" : " — Clinical Assessment required"}</> :
+          <>New patient {normalizedPatientId}. <button type="button" onClick={createClinicalAssessment} disabled={busy || !onCreateClinicalAssessment}>Create Clinical Assessment</button></>}
+      </div>}
+      {existingPatientId && <div className="video-link-fields">
         <label>Link video to
           <select value={linkedTable} disabled={!patientRecords} onChange={e=>{setLinkedTable(e.target.value);setLinkedRecordId("");setReviewed(false);}}>
             <option value="">Patient only (no specific session)</option>
@@ -382,7 +407,7 @@ export default function VideoDashboard() {
           </select>
           {linkedRecords.length===0 && <small>No {linkedTable.toLowerCase()} records exist for this patient. Add one in Patient Data Review or choose patient only.</small>}
         </label>}
-      </div>}<label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the video and can confirm all PHI has been censored or removed.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !outputFolder.trim() || !patientId || !patientRecords || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
+      </div>}<label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the video and can confirm all PHI has been censored or removed.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !outputFolder.trim() || !existingPatientId || !patientRecords?.clinical?.length || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
     {step===4 && exportRecord && <div className="video-notice" role="status"><strong>Linked to patient {exportRecord.patient_id}</strong><p>MP4: {exportRecord.path}</p><p>{exportRecord.linked_table ? `Linked to ${exportRecord.linked_table} record ${exportRecord.linked_record_id}. ` : ""}Find the record in Patient Data Review. Check the exported footage before sharing.</p></div>}
     {step>1 && step<4 && <div className="video-stage-navigation"><button onClick={()=>setStep(step-1)}>← Previous step</button><button className="video-primary" onClick={()=>{player.current?.pause();setMaskMode(false);setStep(step+1);}}>Continue →</button></div>}
     {notice && <div className="video-notice" role="status">{notice}</div>}
