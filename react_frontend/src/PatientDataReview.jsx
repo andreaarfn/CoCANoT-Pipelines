@@ -724,7 +724,7 @@ function MetadataDocumentPatientReview({
 
 
 
-      <MetadataSummary record={record} expandable onEdit={onEdit} />
+      <MetadataSummary record={record} expandable onEdit={onEdit} tableName={tableName} />
 
 
 
@@ -1542,7 +1542,7 @@ function ImagingPatientReview({
 
 
 
-      <MetadataSummary record={record} expandable onEdit={onEdit} />
+      <MetadataSummary record={record} expandable onEdit={onEdit} tableName="Imaging" />
 
 
 
@@ -2507,7 +2507,7 @@ function EphysPatientReview({
 
 
 
-      <MetadataSummary record={record} expandable onEdit={onEdit} />
+      <MetadataSummary record={record} expandable onEdit={onEdit} tableName="Electrophysiology" />
 
 
 
@@ -4421,47 +4421,93 @@ function formatAmplitude(value) {
 
 
 
-function MetadataSummary({ record, expandable = false, onEdit }) {
+function metadataHasSavedValue(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some(metadataHasSavedValue);
+  if (typeof value === "object") return Object.values(value).some(metadataHasSavedValue);
+  return true; // Preserve meaningful numeric zero and boolean false.
+}
+
+function MetadataSummary({ record, onEdit, tableName }) {
   const [metadataOpen, setMetadataOpen] = useState(true);
+  const [rules, setRules] = useState(null);
+  const [rulesError, setRulesError] = useState("");
+  const dictionaryVersion = tableName === "Clinical" ? String(record?.dictionary_version || "") : "";
 
-  if (expandable) {
-    const metadata = record?.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
-      ? record.metadata : {};
-    const fields = Object.entries(metadata);
-    const formatValue = (value) => {
-      if (value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) return "—";
-      if (Array.isArray(value)) return value.map(item => item && typeof item === "object" ? JSON.stringify(item) : String(item)).join(", ");
-      return typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
-    };
+  useEffect(() => {
+    let active = true;
+    setRules(null);
+    setRulesError("");
+    async function loadRules() {
+      try {
+        if (!api()?.metadata_get_rules) throw new Error("Metadata dictionary API unavailable.");
+        // Include generated fields such as record IDs in their correct MR sheet position.
+        const response = await api().metadata_get_rules(tableName, dictionaryVersion, true);
+        if (active) setRules(Array.isArray(response) ? response : []);
+      } catch (error) {
+        if (active) setRulesError(String(error?.message || error));
+      }
+    }
+    loadRules();
+    return () => { active = false; };
+  }, [tableName, dictionaryVersion]);
 
-    return (
-      <section className={styles.videoDetailsCard} aria-label="CoCANoT Metadata">
-        <div className={styles.videoDetailsHeader}>
-          <div>
-            <strong>CoCANoT Metadata</strong>
-            <span>Record {record?.record_id} · {fields.length} metadata fields</span>
-          </div>
-          <div className={styles.metadataHeaderActions}>
-            {fields.length > 0 && (
-              <button
-                type="button"
-                className={styles.videoCollapseButton}
-                aria-expanded={metadataOpen}
-                onClick={() => setMetadataOpen(open => !open)}
-              >
-                {metadataOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                {metadataOpen ? "Hide details" : "Show details"}
-              </button>
-            )}
-            {onEdit && <button type="button" className={styles.videoCollapseButton} onClick={onEdit}>
-              <Pencil size={15} /> Edit
-            </button>}
-          </div>
+  const metadata = record?.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+    ? record.metadata : {};
+  const savedEntries = Object.entries(metadata).filter(([, value]) => metadataHasSavedValue(value));
+  const orderedRules = [...(rules || [])].sort((first, second) => {
+    const firstOrder = Number(first.field_order);
+    const secondOrder = Number(second.field_order);
+    const a = first.field_order == null || first.field_order === "" || !Number.isFinite(firstOrder)
+      ? Number.POSITIVE_INFINITY : firstOrder;
+    const b = second.field_order == null || second.field_order === "" || !Number.isFinite(secondOrder)
+      ? Number.POSITIVE_INFINITY : secondOrder;
+    return a - b;
+  });
+  const knownNames = new Set(orderedRules.map(rule => rule.field_name));
+  const fields = [
+    ...orderedRules
+      .filter(rule => metadataHasSavedValue(metadata[rule.field_name]))
+      .map(rule => [rule.field_name, metadata[rule.field_name]]),
+    // Keep saved legacy fields that no longer exist in the active dictionary visible.
+    ...savedEntries.filter(([name]) => !knownNames.has(name)),
+  ];
+  const formatValue = (value) => {
+    if (Array.isArray(value)) return value.filter(metadataHasSavedValue)
+      .map(item => item && typeof item === "object" ? JSON.stringify(item) : String(item)).join(", ");
+    return value && typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
+  };
+
+  return (
+    <section className={styles.videoDetailsCard} aria-label="CoCANoT Metadata">
+      <div className={styles.videoDetailsHeader}>
+        <div>
+          <strong>CoCANoT Metadata</strong>
+          <span>Record {record?.record_id} · {fields.length} populated fields</span>
         </div>
-        {fields.length === 0
-          ? <div className={styles.documentEmpty}>No saved metadata available for this record.</div>
-          : metadataOpen && (
-            <div className={styles.videoDetailsBody}>
+        <div className={styles.metadataHeaderActions}>
+          {fields.length > 0 && (
+            <button type="button" className={styles.videoCollapseButton}
+              aria-expanded={metadataOpen}
+              onClick={() => setMetadataOpen(open => !open)}>
+              {metadataOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              {metadataOpen ? "Hide details" : "Show details"}
+            </button>
+          )}
+          {onEdit && <button type="button" className={styles.videoCollapseButton} onClick={onEdit}>
+            <Pencil size={15} /> Edit
+          </button>}
+        </div>
+      </div>
+      {rulesError && <div className={styles.errorBox} role="alert">
+        Could not load MR {tableName} dictionary ordering: {rulesError}
+      </div>}
+      {rules === null && !rulesError && <div className={styles.loading}>Loading metadata dictionary…</div>}
+      {rules !== null || rulesError ? (
+        fields.length === 0
+          ? <div className={styles.documentEmpty}>No populated metadata available for this record.</div>
+          : metadataOpen && <div className={styles.videoDetailsBody}>
               <dl className={styles.videoMetadataGrid}>
                 {fields.map(([key, value]) => (
                   <div key={key}>
@@ -4471,173 +4517,10 @@ function MetadataSummary({ record, expandable = false, onEdit }) {
                 ))}
               </dl>
             </div>
-          )}
-      </section>
-    );
-  }
-
-
-
-
-  const metadata = record?.metadata ?? {};
-
-
-
-
-
-
-
-  const preferredKeys = [
-
-
-
-    "CoCANoT Patient ID",
-
-
-
-    "Image ID",
-
-
-
-    "Recording ID",
-
-
-
-    "Surgery ID",
-
-
-
-    "Imaging Modality",
-
-
-
-    "Recording Modality",
-
-
-
-    "Clinical Assessment ID",
-
-
-
-  ];
-
-
-
-
-
-
-
-  const rows = preferredKeys
-
-
-
-    .filter(key => metadata[key] != null && metadata[key] !== "")
-
-
-
-    .map(key => [
-
-
-
-      key,
-
-
-
-      Array.isArray(metadata[key])
-
-
-
-        ? metadata[key].join(", ")
-
-
-
-        : String(metadata[key]),
-
-
-
-    ]);
-
-
-
-
-
-
-
-  return (
-
-
-
-    <section className={styles.metadataCard}>
-
-
-
-      <div>
-
-
-
-        <strong>CoCANoT Metadata</strong>
-
-
-
-        <span>Record {record?.record_id}</span>
-
-
-
-      </div>
-
-
-
-
-
-
-
-      <dl>
-
-
-
-        {rows.map(([key, value]) => (
-
-
-
-          <div key={key}>
-
-
-
-            <dt>{key}</dt>
-
-
-
-            <dd>{value}</dd>
-
-
-
-          </div>
-
-
-
-        ))}
-
-
-
-      </dl>
-
-
-
+      ) : null}
     </section>
-
-
-
   );
-
-
-
 }
-
-
-
-
-
-
 
 function formatDuration(seconds) {
 
