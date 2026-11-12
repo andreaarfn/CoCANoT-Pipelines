@@ -1437,6 +1437,8 @@ export default function MetadataDashboard({
           !persistedVideo ||
           !persistedVideo.exists ||
           persistedVideo.path !== savedVideo.path ||
+          persistedVideo.linked_table !== savedVideo.linked_table ||
+          persistedVideo.linked_record_id !== savedVideo.linked_record_id ||
           JSON.stringify(persistedVideo.metadata) !== JSON.stringify(savedVideo.metadata)
         ) {
           throw new Error("Video metadata could not be verified after saving. Reopen the record and retry.");
