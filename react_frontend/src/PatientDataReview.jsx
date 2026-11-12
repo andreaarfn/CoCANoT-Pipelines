@@ -302,30 +302,42 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
 
   const metadata = record?.metadata && typeof record.metadata === "object" ? record.metadata : {};
 
-  // Include every dictionary field, even when its saved value is blank.
-  // The server returns the full MR Video definition including field_order.
-  const orderedRules = [...(videoRules || [])].sort((a, b) =>
-    (Number(a.field_order) || Number.MAX_SAFE_INTEGER) -
-    (Number(b.field_order) || Number.MAX_SAFE_INTEGER)
-  );
-  const orderedFields = orderedRules.map(rule => ({
-    name: rule.field_name,
-    label: rule.ui_prompt || rule.field_name,
-    value: metadata[rule.field_name],
-  }));
+  // Respect the MR Video field_order and omit unfilled optional/conditional fields.
+  // Keep populated legacy fields not defined in the current dictionary at the end.
+  const orderedRules = [...(videoRules || [])].sort((first, second) => {
+    const fieldOrder = rule => {
+      const value = Number(rule.field_order);
+      return rule.field_order == null || rule.field_order === "" || !Number.isFinite(value)
+        ? Number.POSITIVE_INFINITY : value;
+    };
+    return fieldOrder(first) - fieldOrder(second);
+  });
+  const knownNames = new Set(orderedRules.map(rule => rule.field_name));
+  const orderedFields = [
+    ...orderedRules
+      .filter(rule => metadataHasSavedValue(metadata[rule.field_name]))
+      .map(rule => ({
+        name: rule.field_name,
+        label: rule.ui_prompt || rule.field_name,
+        value: metadata[rule.field_name],
+      })),
+    ...Object.entries(metadata)
+      .filter(([name, value]) => !knownNames.has(name) && metadataHasSavedValue(value))
+      .map(([name, value]) => ({ name, label: name, value })),
+  ];
   const fileName = record?.file_name || "Exported video";
 
   const formatValue = value => Array.isArray(value)
-    ? value.join(", ") : value && typeof value === "object"
+    ? value.filter(metadataHasSavedValue)
+      .map(item => item && typeof item === "object" ? JSON.stringify(item) : String(item)).join(", ")
+    : value && typeof value === "object"
       ? JSON.stringify(value, null, 2) : String(value);
   const renderRows = entries => (
     <dl className={styles.videoMetadataGrid}>
       {entries.map(field => (
         <div key={field.name}>
           <dt>{field.label}</dt>
-          <dd>{field.value === null || field.value === undefined || field.value === "" ||
-            (Array.isArray(field.value) && !field.value.length)
-            ? "—" : formatValue(field.value)}</dd>
+          <dd>{formatValue(field.value)}</dd>
         </div>
       ))}
     </dl>
@@ -362,7 +374,7 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
       {rulesError && <div className={styles.errorBox} role="alert">Could not load MR Video dictionary: {rulesError}</div>}
       {videoRules === null && !rulesError && <div className={styles.loading}>Loading Video dictionary…</div>}
       {videoRules !== null && orderedFields.length === 0
-        ? <div className={styles.documentEmpty}>No Video metadata fields are defined in the active dictionary.</div>
+        ? <div className={styles.documentEmpty}>No populated video metadata available for this record.</div>
         : metadataOpen && orderedFields.length > 0 && <div className={styles.videoDetailsBody}>
             {renderRows(orderedFields)}
           </div>}
