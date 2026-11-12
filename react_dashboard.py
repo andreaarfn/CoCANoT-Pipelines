@@ -752,6 +752,7 @@ class CoCANoTAPI:
                 created_at TEXT NOT NULL,
                 linked_table TEXT NOT NULL DEFAULT '',
                 linked_record_id TEXT NOT NULL DEFAULT '',
+                metadata_json TEXT NOT NULL DEFAULT '{}',
                 PRIMARY KEY(site_id, patient_id, record_id)
             )
         """)
@@ -760,6 +761,8 @@ class CoCANoTAPI:
             connection.execute("ALTER TABLE patient_video_exports ADD COLUMN linked_table TEXT NOT NULL DEFAULT ''")
         if "linked_record_id" not in columns:
             connection.execute("ALTER TABLE patient_video_exports ADD COLUMN linked_record_id TEXT NOT NULL DEFAULT ''")
+        if "metadata_json" not in columns:
+            connection.execute("ALTER TABLE patient_video_exports ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'")
         return connection
 
     def video_get_patient_exports(self, patient_id: str) -> list[dict[str, Any]]:
@@ -769,7 +772,7 @@ class CoCANoTAPI:
             return []
         with self._video_records_connection() as connection:
             rows = connection.execute(
-                """SELECT record_id, file_path, created_at, linked_table, linked_record_id FROM patient_video_exports
+                """SELECT record_id, file_path, created_at, linked_table, linked_record_id, metadata_json FROM patient_video_exports
                    WHERE site_id = ? AND patient_id = ? ORDER BY created_at DESC""",
                 (site_id, patient_id),
             ).fetchall()
@@ -778,8 +781,8 @@ class CoCANoTAPI:
              "file_name": Path(row["file_path"]).name,
              "linked_table": row["linked_table"],
              "linked_record_id": row["linked_record_id"],
+             "metadata": json.loads(row["metadata_json"] or "{}"),
              "updated_at": row["created_at"],
-             "review_status": "Exported — requires final privacy review",
              "exists": Path(row["file_path"]).is_file()}
             for row in rows
         ]
@@ -800,7 +803,8 @@ class CoCANoTAPI:
 
     def video_export_project(self, project: dict[str, Any], patient_id: str = "",
                              linked_table: str = "", linked_record_id: str = "",
-                             output_folder: str = "") -> dict[str, Any]:
+                             output_folder: str = "",
+                             metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         """Render locally and register a patient-linked MP4 only after successful export."""
         site_id = str(self.get_site_id() or "").strip().upper()
         patient_id = self._resolve_existing_patient_id(patient_id)
@@ -825,13 +829,39 @@ class CoCANoTAPI:
             )
             if not matched:
                 raise ValueError("Selected record does not belong to this patient or no longer exists.")
+        # Validate the active MR Video dictionary before rendering.
+        _dictionary, video_rules, video_validator = self._dictionary_context("Video")
+        if not isinstance(metadata, dict):
+            raise ValueError("Complete the Video metadata form before exporting.")
+        record_id = uuid.uuid4().hex
+        latest_clinical = patient_records["clinical"][0]
+        clinical_id = str(latest_clinical.get("record_id") or latest_clinical.get("assessment_id") or "").strip()
+        if not clinical_id:
+            raise ValueError("The patient's Clinical Assessment has no ID.")
+        metadata = self._normalize_metadata_values(metadata, video_rules)
+        metadata.update({
+            "CoCANoT Patient ID": patient_id,
+            "Video ID": f"VID-{record_id}",
+            "Clinical Assessment ID": clinical_id,
+            "Surgery ID": linked_record_id if linked_table == "Surgical" else "",
+            "Recording ID": linked_record_id if linked_table == "Electrophysiology" else "",
+            "Image ID": linked_record_id if linked_table == "Imaging" else "",
+        })
+        validation = video_validator.validate_record("Video", metadata)
+        failures = [
+            result for result in validation["results"]
+            if result["status"] in {"invalid", "missing_required"}
+        ]
+        if failures:
+            raise ValueError("\n".join(
+                f"{item['field_name']}: {item['message']}" for item in failures[:20]
+            ))
         # Avoid inserting identifiers into output filenames or directory names.
         if not str(output_folder or "").strip():
             raise ValueError("Select an output folder before exporting video.")
         output_dir = Path(str(output_folder)).expanduser().resolve()
         if not output_dir.is_dir():
             raise ValueError("The selected output folder does not exist. Choose another folder.")
-        record_id = uuid.uuid4().hex
         filename = output_dir / f"video_{record_id}.mp4"
         try:
             result = render_project(project, str(filename))
@@ -841,15 +871,17 @@ class CoCANoTAPI:
                 connection.execute(
                     """INSERT INTO patient_video_exports
                        (site_id, patient_id, record_id, file_path, created_at,
-                        linked_table, linked_record_id)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        linked_table, linked_record_id, metadata_json)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (site_id, patient_id, record_id, str(filename),
                      datetime.now(timezone.utc).isoformat(),
-                     linked_table, linked_record_id),
+                     linked_table, linked_record_id,
+                     json.dumps(metadata, ensure_ascii=False, allow_nan=False)),
                 )
             return {**(result or {}), "path": str(filename),
                     "record_id": record_id, "patient_id": patient_id, "registered": True,
-                    "linked_table": linked_table, "linked_record_id": linked_record_id}
+                    "linked_table": linked_table, "linked_record_id": linked_record_id,
+                    "metadata": metadata}
         except Exception:
             filename.unlink(missing_ok=True)
             raise
@@ -11791,6 +11823,7 @@ class CoCANoTAPI:
             "Surgical",
             "Imaging",
             "Electrophysiology",
+            "Video",
         }:
             raise ValueError(
                 f"Unsupported metadata table: {table_name}"
