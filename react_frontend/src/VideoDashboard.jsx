@@ -259,14 +259,17 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     } catch (error) { setNotice("Could not select output folder: " + String(error.message || error)); }
   }
   async function createClinicalAssessment() {
-    if (!newPatient || busy || !onCreateClinicalAssessment) return;
+    if (!normalizedPatientId || busy || !onCreateClinicalAssessment) return;
     try {
       setBusy(true);
       setNotice("");
-      const site = await bridge()?.get_site_id?.();
-      if (!site || !bridge()?.metadata_create_patient) throw new Error("Patient registration is unavailable.");
-      const result = await bridge().metadata_create_patient(site, normalizedPatientId);
-      const canonicalId = result?.patient_id || normalizedPatientId;
+      let canonicalId = existingPatientId;
+      if (!canonicalId) {
+        const site = await bridge()?.get_site_id?.();
+        if (!site || !bridge()?.metadata_create_patient) throw new Error("Patient registration is unavailable.");
+        const result = await bridge().metadata_create_patient(site, normalizedPatientId);
+        canonicalId = result?.patient_id || normalizedPatientId;
+      }
       onCreateClinicalAssessment(canonicalId, {
         project, selected, step: 4, patientId: canonicalId, outputFolder,
         linkedTable: "", linkedRecordId: "", reviewed: false
@@ -388,8 +391,11 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     </section>}
     {step===4 && <section className="video-panel video-export"><div><h2>Patient association</h2><label className="video-folder-field"><span>Output folder</span><div className="video-folder-control"><input type="text" aria-label="Output folder" placeholder="Select an output folder" value={outputFolder} onChange={event=>{setOutputFolder(event.target.value);setExportRecord(null);setReviewed(false);}} disabled={busy}/><button type="button" disabled={busy} onClick={pickOutputFolder}>Browse…</button></div></label><label className="video-patient-field">CoCANoT Patient ID <input type="text" list="video-patient-ids" placeholder="Enter CoCANoT Patient ID" value={patientId} onChange={e=>{setPatientId(e.target.value);setLinkedTable("");setLinkedRecordId("");setReviewed(false);setExportRecord(null);}} autoComplete="off" disabled={busy}/><datalist id="video-patient-ids">{patients.map(p=><option key={p.patient_id} value={p.patient_id}/>)}</datalist></label>
       {normalizedPatientId && patientsReady && <div className="video-patient-status">
-        {existingPatientId ? <>Patient {existingPatientId}{patientRecords?.clinical?.length ? " — Clinical Assessment available" : " — Clinical Assessment required"}</> :
-          <>New patient {normalizedPatientId}. <button type="button" onClick={createClinicalAssessment} disabled={busy || !onCreateClinicalAssessment}>Create Clinical Assessment</button></>}
+        {existingPatientId
+          ? <>Patient {existingPatientId}{patientRecords?.clinical?.length ? " — Clinical Assessment available" : " — Clinical Assessment required"}</>
+          : <>New patient {normalizedPatientId}</>}
+        {(!existingPatientId || (patientRecords && !patientRecords.clinical?.length)) &&
+          <button type="button" onClick={createClinicalAssessment} disabled={busy || !onCreateClinicalAssessment}>Create Clinical Assessment</button>}
       </div>}
       {existingPatientId && <div className="video-link-fields">
         <label>Link video to
