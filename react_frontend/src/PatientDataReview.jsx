@@ -318,7 +318,7 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
       .filter(rule => metadataHasSavedValue(metadata[rule.field_name]))
       .map(rule => ({
         name: rule.field_name,
-        label: rule.ui_prompt || rule.field_name,
+        label: rule.field_name,
         value: metadata[rule.field_name],
       })),
     ...Object.entries(metadata)
@@ -352,11 +352,11 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
       onBack={onBack}
     />
 
-    <section className={styles.videoDetailsCard} aria-label="Video metadata">
+    <section className={styles.videoDetailsCard} aria-label="CoCANoT Metadata">
       <div className={styles.videoDetailsHeader}>
         <div>
-          <strong><FileText size={16}/> Video metadata</strong>
-          <span>Information saved with this recording</span>
+          <strong>CoCANoT Metadata</strong>
+          <span>Record {record?.record_id} · {orderedFields.length} populated fields</span>
         </div>
         <div className={styles.metadataHeaderActions}>
           {orderedFields.length > 0 && <button type="button"
