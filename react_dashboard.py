@@ -713,6 +713,60 @@ class CoCANoTAPI:
             end,
         )
 
+    def video_get_session(self) -> dict[str, Any]:
+        """Restore the current site's Video editing workspace from pipeline settings."""
+        site_id = str(self.get_site_id() or "").strip().upper()
+        if not site_id:
+            return {}
+        settings = load_settings_dict()
+        video = settings.get("video", {})
+        sessions = video.get("sessions", {}) if isinstance(video, dict) else {}
+        session = sessions.get(site_id, {}) if isinstance(sessions, dict) else {}
+        return session if isinstance(session, dict) else {}
+
+    def video_save_session(self, session: dict[str, Any]) -> dict[str, Any]:
+        """Persist Video selections, edits and form state without copying source media."""
+        site_id = str(self.get_site_id() or "").strip().upper()
+        if not site_id:
+            raise ValueError("Sign in to a CoCANoT site before saving the Video workspace.")
+        if not isinstance(session, dict):
+            raise ValueError("Video workspace must be an object.")
+        project = session.get("project", {})
+        clips = project.get("clips", []) if isinstance(project, dict) else []
+        if not isinstance(clips, list) or len(clips) > 200:
+            raise ValueError("Video workspace contains an invalid clip list.")
+        # The local HTTP preview tokens expire when the app restarts; save only
+        # durable clip paths and editing data and re-register previews on load.
+        project_copy = dict(project)
+        project_copy["clips"] = [
+            {key: value for key, value in clip.items() if key != "preview_url"}
+            for clip in clips if isinstance(clip, dict)
+        ]
+        saved = {
+            "project": project_copy,
+            "selected": session.get("selected"),
+            "step": session.get("step", 1),
+            "patientId": session.get("patientId", ""),
+            "linkedTable": session.get("linkedTable", ""),
+            "linkedRecordId": session.get("linkedRecordId", ""),
+            "outputFolder": session.get("outputFolder", ""),
+            "videoMetadata": session.get("videoMetadata", {}),
+        }
+        # Verify serializability before touching the existing settings file.
+        json.dumps(saved, allow_nan=False)
+        settings = load_settings_dict()
+        video = settings.setdefault("video", {})
+        if not isinstance(video, dict):
+            video = {}
+            settings["video"] = video
+        sessions = video.setdefault("sessions", {})
+        if not isinstance(sessions, dict):
+            sessions = {}
+            video["sessions"] = sessions
+        sessions[site_id] = saved
+        save_settings_dict(settings)
+        return {"saved": True}
+
     def video_save_project(self, project: dict[str, Any]) -> dict[str, Any]:
         if self._window is None:
             raise RuntimeError("The application window is unavailable.")
