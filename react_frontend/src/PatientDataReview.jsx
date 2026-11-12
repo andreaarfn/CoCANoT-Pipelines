@@ -713,7 +713,6 @@ function MetadataDocumentPatientReview({
 
         title={`Review ${tableName.toLowerCase()} record`}
 
-        text={`Review the stored metadata and sanitized documents associated with ${tableName} record ${recordId}.`}
 
         onBack={onBack}
 
@@ -1526,7 +1525,6 @@ function ImagingPatientReview({
 
 
 
-        text="View the NIfTI associated with this Imaging metadata record. Slice controls remain linked across axial, coronal, and sagittal views."
 
 
 
@@ -2496,7 +2494,6 @@ function EphysPatientReview({
 
 
 
-        text="View the EDF signals associated with this Electrophysiology metadata record. Choose channels and move through the recording by time window."
 
 
 
