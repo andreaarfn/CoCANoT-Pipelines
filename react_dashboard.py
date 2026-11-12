@@ -894,16 +894,51 @@ class CoCANoTAPI:
                    WHERE site_id = ? AND patient_id = ? ORDER BY created_at DESC""",
                 (site_id, patient_id),
             ).fetchall()
-        return [
-            {"record_id": row["record_id"], "path": row["file_path"],
-             "file_name": Path(row["file_path"]).name,
-             "linked_table": row["linked_table"],
-             "linked_record_id": row["linked_record_id"],
-             "metadata": json.loads(row["metadata_json"] or "{}"),
-             "updated_at": row["created_at"],
-             "exists": Path(row["file_path"]).is_file()}
-            for row in rows
-        ]
+
+        # The Video summary uses the same MR Video validation as the editor.
+        # Also check that the exported MP4 and sidecar remain synchronized.
+        _dictionary, _rules, validator = self._dictionary_context("Video")
+        results = []
+        for row in rows:
+            metadata = json.loads(row["metadata_json"] or "{}")
+            video_path = Path(row["file_path"])
+            sidecar_path = video_path.with_suffix(".json")
+            review_issues = []
+            try:
+                validation = validator.validate_record("Video", metadata)
+                review_issues.extend(
+                    f"{item['field_name']}: {item['message']}"
+                    for item in validation["results"]
+                    if item["status"] in {"invalid", "missing_required"}
+                )
+            except Exception as exc:
+                review_issues.append(f"Could not validate Video metadata: {exc}")
+
+            if not video_path.is_file():
+                review_issues.append("Exported video file is missing.")
+            if not sidecar_path.is_file():
+                review_issues.append("Linked JSON sidecar is missing.")
+            else:
+                try:
+                    saved_sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                    if saved_sidecar != metadata:
+                        review_issues.append("Linked JSON does not match the saved Video metadata.")
+                except (OSError, ValueError, UnicodeError) as exc:
+                    review_issues.append(f"Linked JSON could not be read: {exc}")
+
+            results.append({
+                "record_id": row["record_id"],
+                "path": row["file_path"],
+                "file_name": video_path.name,
+                "linked_table": row["linked_table"],
+                "linked_record_id": row["linked_record_id"],
+                "metadata": metadata,
+                "updated_at": row["created_at"],
+                "exists": video_path.is_file(),
+                "review_status": "Needs Review" if review_issues else "Up to date",
+                "review_issues": review_issues,
+            })
+        return results
 
     def video_update_patient_metadata(
         self, patient_id: str, record_id: str, metadata: dict[str, Any],
