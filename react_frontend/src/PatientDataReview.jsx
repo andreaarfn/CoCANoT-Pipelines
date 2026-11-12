@@ -128,6 +128,7 @@ function AssociatedData({ patientId, tableName, recordId, onOpenAssociated }) {
   const [associations, setAssociations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -149,13 +150,19 @@ function AssociatedData({ patientId, tableName, recordId, onOpenAssociated }) {
     if (patientId && recordId) loadAssociations();
     else setLoading(false);
     return () => { active = false; };
-  }, [patientId, tableName, recordId]);
+  }, [patientId, tableName, recordId, refreshKey]);
 
   return (
     <section className={styles.associatedDataCard} aria-label="Associated data">
       <header className={styles.associatedDataHeader}>
         <strong>Associated Data</strong>
-        <span>Linked records for this patient</span>
+        <div className={styles.associatedDataHeaderActions}>
+          <span>Linked records for this patient</span>
+          <button type="button" className={styles.associatedDataLink}
+            onClick={() => setRefreshKey(value => value + 1)}>
+            <RefreshCw size={14}/> Refresh
+          </button>
+        </div>
       </header>
       {loading ? <p className={styles.associatedDataEmpty}>Loading associated data…</p>
         : error ? <p className={styles.associatedDataError} role="alert">{error}</p>
