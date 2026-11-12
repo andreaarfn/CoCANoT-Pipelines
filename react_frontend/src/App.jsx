@@ -1066,7 +1066,10 @@ export default function App() {
     );
   } else if (page === "video-processing") {
     content = <VideoDashboard
-      initialSession={navigationContext.videoSession || videoSession || null}
+      // Prefer the persistent Video workspace over an old in-memory snapshot
+      // after a Video ID rename. Explicit clinical-assessment returns carry
+      // their own up-to-date session through the navigation context.
+      initialSession={navigationContext.videoSession || null}
       onSessionChange={setVideoSession}
       onCreateClinicalAssessment={(patientId, videoSession) =>
         navigate("metadata-patients", {
