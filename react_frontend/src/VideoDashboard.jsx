@@ -52,7 +52,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             const preview = previews?.[0];
             return {...clip, id:clip.id || id(),
               masks:(clip.masks || []).map(mask => ({...mask,id:mask.id || id()})),
-              preview_url: preview?.preview_url || clip.preview_url || ""};
+              preview_url: preview?.preview_url || "", unavailable: false};
           } catch (error) {
             // Keep the remembered selection and edits even if the source has
             // moved. The missing file can be restored at its original path.
