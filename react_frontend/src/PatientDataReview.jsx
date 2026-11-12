@@ -742,7 +742,7 @@ function MetadataDocumentPatientReview({
 
 
 
-      <MetadataSummary record={record} />
+      <MetadataSummary record={record} expandable={tableName === "Surgical"} />
 
 
 
@@ -1565,7 +1565,7 @@ function ImagingPatientReview({
 
 
 
-      <MetadataSummary record={record} />
+      <MetadataSummary record={record} expandable />
 
 
 
@@ -2535,7 +2535,7 @@ function EphysPatientReview({
 
 
 
-      <MetadataSummary record={record} />
+      <MetadataSummary record={record} expandable />
 
 
 
@@ -4449,7 +4449,56 @@ function formatAmplitude(value) {
 
 
 
-function MetadataSummary({ record }) {
+function MetadataSummary({ record, expandable = false }) {
+  const [metadataOpen, setMetadataOpen] = useState(true);
+
+  if (expandable) {
+    const metadata = record?.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+      ? record.metadata : {};
+    const fields = Object.entries(metadata);
+    const formatValue = (value) => {
+      if (value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) return "—";
+      if (Array.isArray(value)) return value.map(item => item && typeof item === "object" ? JSON.stringify(item) : String(item)).join(", ");
+      return typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
+    };
+
+    return (
+      <section className={styles.videoDetailsCard} aria-label="Linked metadata">
+        <div className={styles.videoDetailsHeader}>
+          <div>
+            <strong><FileText size={16} /> Linked metadata</strong>
+            <span>Record {record?.record_id} · {fields.length} metadata fields</span>
+          </div>
+          {fields.length > 0 && (
+            <button
+              type="button"
+              className={styles.videoCollapseButton}
+              aria-expanded={metadataOpen}
+              onClick={() => setMetadataOpen(open => !open)}
+            >
+              {metadataOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              {metadataOpen ? "Hide details" : "Show details"}
+            </button>
+          )}
+        </div>
+        {fields.length === 0
+          ? <div className={styles.documentEmpty}>No saved metadata available for this record.</div>
+          : metadataOpen && (
+            <div className={styles.videoDetailsBody}>
+              <dl className={styles.videoMetadataGrid}>
+                {fields.map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{key}</dt>
+                    <dd>{formatValue(value)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+      </section>
+    );
+  }
+
 
 
 
