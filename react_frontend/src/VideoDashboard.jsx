@@ -54,11 +54,13 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
               masks:(clip.masks || []).map(mask => ({...mask,id:mask.id || id()})),
               preview_url: preview?.preview_url || clip.preview_url || ""};
           } catch (error) {
-            return null;
+            // Keep the remembered selection and edits even if the source has
+            // moved. The missing file can be restored at its original path.
+            return {...clip, preview_url: "", unavailable: true};
           }
         }));
         if (!active) return;
-        const missing = clips.filter(clip => !clip).length;
+        const missing = clips.filter(clip => !clip || clip.unavailable).length;
         const restored = {...incoming, clips:clips.filter(Boolean)};
         setProject(restored);
         setSelected(restored.clips.some(clip => clip.id === saved.selected)
