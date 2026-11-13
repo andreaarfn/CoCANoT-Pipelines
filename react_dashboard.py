@@ -16692,6 +16692,18 @@ class QuietHandler(
     ) -> None:
         pass
 
+class _FrontendHTTPServer(ThreadingHTTPServer):
+    """Ignore expected local webview disconnects, not application failures."""
+
+    def handle_error(self, request, client_address) -> None:
+        error = sys.exc_info()[1]
+        if isinstance(error, (ConnectionResetError, BrokenPipeError, ConnectionAbortedError)):
+            # The embedded browser may abandon a preview, navigation, or
+            # keep-alive connection while the handler is reading a request.
+            return
+        super().handle_error(request, client_address)
+
+
 def start_frontend_server() -> ThreadingHTTPServer:
     if not FRONTEND_DIST.is_dir():
         raise RuntimeError(
@@ -16720,7 +16732,7 @@ def start_frontend_server() -> ThreadingHTTPServer:
             **kwargs,
         )
 
-    server = ThreadingHTTPServer(
+    server = _FrontendHTTPServer(
         ("127.0.0.1", 0),
         handler,
     )
