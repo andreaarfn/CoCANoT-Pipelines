@@ -1087,6 +1087,58 @@ class CoCANoTAPI:
             })
         return results
 
+    def video_update_patient_annotations(
+        self, patient_id: str, record_id: str, annotations: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Save structured events without re-encoding the exported MP4."""
+        site_id = str(self.get_site_id() or "").strip().upper()
+        patient_id = self._resolve_existing_patient_id(patient_id)
+        record_id = str(record_id or "").strip()
+        if not site_id or not patient_id or not record_id:
+            raise ValueError("Site, patient and video record are required.")
+        with self._video_records_connection() as connection:
+            row = connection.execute(
+                """SELECT file_path, metadata_json FROM patient_video_exports
+                   WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                (site_id, patient_id, record_id),
+            ).fetchone()
+            if row is None:
+                raise ValueError("Video record not found.")
+            video = Path(row["file_path"])
+            if not video.is_file():
+                raise FileNotFoundError("Exported MP4 must exist to save annotations.")
+            # Probe the actual exported MP4 rather than trusting an old project.
+            duration = float(inspect_video(str(video))["duration"])
+            clean = validate_video_annotations(annotations, duration)
+            sidecar = video.with_suffix(".json")
+            previous = sidecar.read_bytes() if sidecar.exists() else None
+            payload = {
+                **json.loads(row["metadata_json"] or "{}"),
+                "annotations": clean,
+            }
+            staged = sidecar.with_name(f".{sidecar.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                staged.write_text(
+                    json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
+                    encoding="utf-8",
+                )
+                staged.replace(sidecar)
+                connection.execute(
+                    """UPDATE patient_video_exports SET annotations_json = ?
+                       WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                    (json.dumps(clean, ensure_ascii=False, allow_nan=False),
+                     site_id, patient_id, record_id),
+                )
+                connection.commit()
+            except Exception:
+                staged.unlink(missing_ok=True)
+                if previous is None:
+                    sidecar.unlink(missing_ok=True)
+                else:
+                    sidecar.write_bytes(previous)
+                raise
+        return {"saved": True, "annotations": clean, "record_id": record_id}
+
     def video_update_patient_metadata(
         self, patient_id: str, record_id: str, metadata: dict[str, Any],
     ) -> dict[str, Any]:
