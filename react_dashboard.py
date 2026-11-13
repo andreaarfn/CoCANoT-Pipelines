@@ -10588,20 +10588,12 @@ class CoCANoTAPI:
             exist_ok=True,
         )
 
-        if destination_path.suffix.lower() in {
-            ".jpg",
-            ".jpeg",
-        }:
-            image.save(
-                destination_path,
-                format="JPEG",
-                quality=95,
-            )
+        if destination_path.suffix.lower() == ".pdf":
+            image.save(destination_path, format="PDF")
+        elif destination_path.suffix.lower() in {".jpg", ".jpeg"}:
+            image.save(destination_path, format="JPEG", quality=95)
         else:
-            image.save(
-                destination_path,
-                format="PNG",
-            )
+            image.save(destination_path, format="PNG")
 
     @staticmethod
     def _metadata_document_filename_part(
@@ -10639,7 +10631,7 @@ class CoCANoTAPI:
             type_part = "supporting-document"
 
         return (
-            f"{patient_part}_{record_part}_"
+            f"sub-{patient_part}_{record_part}_"
             f"{type_part}_supporting-document{suffix}"
         )
 
@@ -11040,16 +11032,9 @@ class CoCANoTAPI:
         source_suffix = str(
             pending["source_suffix"]
         ).lower()
-        output_suffix = (
-            ".pdf"
-            if source_suffix == ".pdf"
-            else ".jpg"
-            if source_suffix in {
-                ".jpg",
-                ".jpeg",
-            }
-            else ".png"
-        )
+        # All new Clinical/Surgical attachments are portable sanitized PDFs,
+        # including redacted image inputs. Existing edits retain their format.
+        output_suffix = ".pdf"
 
         record_key = hashlib.sha256(
             (
@@ -11096,13 +11081,10 @@ class CoCANoTAPI:
             )
         else:
             if destination_path.exists():
-                destination_path = (
-                    destination_dir
-                    / (
-                        f"{destination_path.stem}_"
-                        f"{document_id[:8]}"
-                        f"{destination_path.suffix}"
-                    )
+                raise FileExistsError(
+                    f"A sanitized document named {destination_path.name} already "
+                    "exists for this record and document type. Choose a distinct "
+                    "document type or edit the existing attachment."
                 )
             working_output_path = destination_path
 
@@ -11207,8 +11189,8 @@ class CoCANoTAPI:
                             file_name,
                             str(destination_path),
                             json.dumps(pending.get("document_types", [])),
-                            "staged",
-                            "Redaction Reviewed",
+                            "attached",
+                            "Attached",
                             now,
                             now,
                         ),
@@ -11231,8 +11213,6 @@ class CoCANoTAPI:
             "document_types": pending.get("document_types", []),
             "status": (
                 "Attached"
-                if editing_existing
-                else "Redaction Reviewed"
             ),
             "edit_existing": editing_existing,
         }
