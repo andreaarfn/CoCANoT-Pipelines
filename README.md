@@ -75,6 +75,29 @@ The application supports individual record entry, bulk metadata uploads, field v
 
 Metadata and record associations are maintained in the application's local storage system.
 
+### Metadata Bulk Upload: Supported File Types and SQL Compatibility
+
+CoCANoT's Clinical and Surgical Metadata Bulk Upload accepts tabular data from the following local files:
+
+| File format | Extensions | Support |
+|---|---|---|
+| CSV | `.csv` | Supported |
+| Excel workbooks | `.xlsx`, `.xlsm` | Supported (worksheet rules apply) |
+| SQLite databases | `.sqlite`, `.sqlite3`, `.db` | Supported via read-only table inspection and selection |
+| SQL text scripts | `.sql` | Limited, safe data-extraction subset described below |
+
+**What should institutions export?** A **CSV or XLSX table of records** is usually the simplest and most interoperable option, including when the source data is stored in REDCap, Microsoft SQL Server, Oracle, PostgreSQL, MySQL/MariaDB, or an institutional clinical data warehouse. SQL is a database query language, not a single interchangeable export format. The database platform that generated a file does **not** by itself mean its native SQL dump is supported.
+
+**SQL scripts (`.sql`).** CoCANoT extracts literal rows from simple `INSERT INTO ... VALUES` statements, with optional simple `CREATE TABLE` definitions for column discovery. Multiple literal value tuples, comments, common quoted identifiers, `NULL`, booleans, text, and numeric literals are supported. Basic transaction wrappers (`BEGIN TRANSACTION`, `COMMIT`, `ROLLBACK`) are ignored. SQL scripts are **parsed, never executed**. Commands and features such as `DROP`, `DELETE`, `UPDATE`, `ALTER`, stored procedures, SQL functions/expressions, database-specific bulk loaders, and arbitrary queries are not importable.
+
+**SQLite files.** CoCANoT opens SQLite databases in read-only mode, lists their available tables, and imports records only from a table the user selects. Other SQL database file formats (such as SQL Server `.bak`/`.mdf`, Oracle data files, or PostgreSQL database directories) are not accepted as SQLite files.
+
+**Compatibility with common SQL platforms:** Simple literal `INSERT` scripts from SQLite, PostgreSQL, or MySQL/MariaDB **may** parse if they use the supported subset. Full PostgreSQL, MySQL/MariaDB, SQL Server (T-SQL), and Oracle dumps are **not generally supported**; their vendor-specific syntax can cause rejection. There is no live connection to a hospital database or database server. Support for additional export dialects is a potential future enhancement, **not an existing feature**.
+
+**Safety and size limits:** SQL scripts are limited to **20 MB**; SQLite files to **250 MB**; extracted data to **10,000 rows** and **250 columns** per applicable import. The importer rejects unsupported SQL rather than running it. After a source/table is selected, records enter CoCANoT's existing preview, metadata normalization, dictionary-based validation, and import workflow. Review all imported records and confirm that uploaded files contain only data authorized for local processing.
+
+**Implementation:** File formats are selected through the shared registry in `MetadataPipeline/ingestion/readers.py` (`CSVReader`, `XLSXReader`, `SQLReader`, `SQLiteReader`). Format-specific parsing is separate from shared preview and validation, allowing future formats to be added without duplicating those workflows.
+
 ## Site Authentication
 
 Participating centers access the application using their assigned Site ID and Access Code.
