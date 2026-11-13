@@ -14,13 +14,13 @@ MAX_ROWS = 10000
 MAX_COLUMNS = 250
 MAX_SQL_BYTES = 20 * 1024 * 1024
 MAX_DATABASE_BYTES = 250 * 1024 * 1024
-IDENTIFIER = r'(?:"(?:[^"]|"")*"|\x60(?:[^\x60]|\x60\x60)*\x60|\\[[^\\]]+\\]|[A-Za-z_][A-Za-z_0-9]*)'
-TABLE_IDENTIFIER = rf'({IDENTIFIER}(?:\\.{IDENTIFIER})?)'
+IDENTIFIER = r'(?:"(?:[^"]|"")*"|\x60(?:[^\x60]|\x60\x60)*\x60|\[[^\]]+\]|[A-Za-z_][A-Za-z_0-9]*)'
+TABLE_IDENTIFIER = rf'({IDENTIFIER}(?:\.{IDENTIFIER})?)'
 INSERT_PATTERN = re.compile(
-    rf'^INSERT\\s+INTO\\s+{TABLE_IDENTIFIER}\\s*(.*)$', re.I | re.S
+    rf'^INSERT\s+INTO\s+{TABLE_IDENTIFIER}\s*(.*)$', re.I | re.S
 )
 CREATE_PATTERN = re.compile(
-    rf'^CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?{TABLE_IDENTIFIER}\\s*\\((.*)\\)$',
+    rf'^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?{TABLE_IDENTIFIER}\s*\((.*)\)$',
     re.I | re.S,
 )
 
@@ -37,8 +37,8 @@ def _identifier(value: str) -> str:
 
 
 def _table_name(value: str) -> str:
-    # Do not silently import across attached database schemas.
-    parts = re.split(r"\\.(?=(?:[^\"]*\\"[^\"]*\\")*[^\"]*$)", value)
+    # Only simple table names and the optional main/public qualifier.
+    parts = value.split(".")
     if len(parts) == 2 and _identifier(parts[0]).lower() in {"main", "public"}:
         return _identifier(parts[1])
     if len(parts) == 1:
@@ -159,7 +159,7 @@ def _literal(value: str):
         return value[1:-1].replace("''", "'").replace("\\'", "'")
     if re.fullmatch(r"[-+]?[0-9]+", value):
         return int(value)
-    if re.fullmatch(r"[-+]?(?:[0-9]+\\.[0-9]*|\\.[0-9]+)(?:[eE][-+]?[0-9]+)?", value):
+    if re.fullmatch(r"[-+]?(?:[0-9]+\.[0-9]*|\.[0-9]+)(?:[eE][-+]?[0-9]+)?", value):
         return float(value)
     # Never evaluate SQL expressions, functions, hex blobs or subqueries.
     raise ValueError(f"Unsupported SQL value {value[:40]!r}; only literal INSERT values can be imported.")
@@ -182,9 +182,9 @@ def _parse_sql(path: Path) -> dict[str, list[dict]]:
             name = _table_name(match.group(1))
             columns = []
             for definition in _split_items(match.group(2)):
-                if re.match(r"^(?:PRIMARY|UNIQUE|FOREIGN|CHECK|CONSTRAINT)\\b", definition, re.I):
+                if re.match(r"^(?:PRIMARY|UNIQUE|FOREIGN|CHECK|CONSTRAINT)\b", definition, re.I):
                     continue
-                candidate = re.match(rf"^({IDENTIFIER})(?:\\s|$)", definition)
+                candidate = re.match(rf"^({IDENTIFIER})(?:\s|$)", definition)
                 if not candidate:
                     raise ValueError("Could not determine a SQL table column.")
                 columns.append(_identifier(candidate.group(1)))
@@ -209,9 +209,9 @@ def _parse_sql(path: Path) -> dict[str, list[dict]]:
             rest = rest[closing + 1:].strip()
         if not columns or len(columns) > MAX_COLUMNS or len(set(columns)) != len(columns):
             raise ValueError(f"INSERT for {name} needs valid column names or a CREATE TABLE declaration.")
-        if not re.match(r"^VALUES\\b", rest, re.I):
+        if not re.match(r"^VALUES\b", rest, re.I):
             raise ValueError("Only literal SQL INSERT ... VALUES rows are supported.")
-        rows_text = re.sub(r"^VALUES\\s*", "", rest, count=1, flags=re.I)
+        rows_text = re.sub(r"^VALUES\s*", "", rest, count=1, flags=re.I)
         tuples = _split_items(rows_text)
         for row_text in tuples:
             if not row_text.startswith("(") or not row_text.endswith(")"):
