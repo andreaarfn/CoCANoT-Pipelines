@@ -1293,25 +1293,143 @@ class CoCANoTAPI:
             "saved": True,
         }
 
-    def video_delete_patient_export(self, patient_id: str, record_id: str) -> dict[str, Any]:
-        """Remove a video association, never delete the actual recording."""
+    def video_delete_patient_exports(
+        self, patient_id: str, record_ids: list[str],
+        delete_processed_files: bool = False,
+    ) -> dict[str, Any]:
+        """Delete local Video records; optionally clean up their exact exported files.
+
+        The database path is the only file locator. Never derive a deletion
+        target from a supplied ID, or touch the original source recordings.
+        """
         site_id = str(self.get_site_id() or "").strip().upper()
-        patient_id = normalize_patient_id(patient_id)
-        if not site_id or not patient_id or not record_id:
-            raise ValueError("Site, patient and video record are required.")
-        with self._video_records_connection() as connection:
-            removed = connection.execute(
-                """DELETE FROM patient_video_exports
-                   WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
-                (site_id, patient_id, str(record_id)),
-            )
-            if removed.rowcount:
-                connection.execute(
-                    """DELETE FROM patient_video_path_aliases
+        patient_id = self._resolve_existing_patient_id(patient_id)
+        if not site_id or not patient_id:
+            raise ValueError("Site and patient are required to delete Video records.")
+        ids = list(dict.fromkeys(str(value).strip() for value in (record_ids or [])
+                                 if str(value).strip()))
+        deleted: list[str] = []
+        blocked: list[dict[str, str]] = []
+        removed_paths: list[str] = []
+        missing_paths: list[str] = []
+        shared_paths: list[str] = []
+        for record_id in ids:
+            with self._video_records_connection() as connection:
+                row = connection.execute(
+                    """SELECT file_path, metadata_json FROM patient_video_exports
                        WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
-                    (site_id, patient_id, str(record_id)),
-                )
-        return {"deleted": removed.rowcount > 0}
+                    (site_id, patient_id, record_id),
+                ).fetchone()
+                if row is None:
+                    blocked.append({"record_id": record_id, "reason": "Video record not found."})
+                    continue
+                if not delete_processed_files:
+                    connection.execute(
+                        """DELETE FROM patient_video_exports
+                           WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                        (site_id, patient_id, record_id),
+                    )
+                    connection.execute(
+                        """DELETE FROM patient_video_path_aliases
+                           WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                        (site_id, patient_id, record_id),
+                    )
+                    deleted.append(record_id)
+                    continue
+
+                video_path = Path(str(row["file_path"] or "")).expanduser()
+                if not video_path.is_absolute() or video_path.suffix.lower() != ".mp4":
+                    blocked.append({"record_id": record_id,
+                                    "reason": "Saved exported MP4 path is invalid; no files deleted."})
+                    continue
+                # Refuse to follow symlinks and prevent deleting any path still
+                # referenced by another Video export, including other patients.
+                sidecar_path = video_path.with_suffix(".json")
+                candidates = [video_path, sidecar_path]
+                used_elsewhere = connection.execute(
+                    """SELECT file_path FROM patient_video_exports
+                       WHERE record_id != ? OR site_id != ? OR patient_id != ?""",
+                    (record_id, site_id, patient_id),
+                ).fetchall()
+                other_paths = {
+                    str(Path(str(other["file_path"] or "")).expanduser())
+                    for other in used_elsewhere
+                }
+                if any(str(video_path) == other or str(sidecar_path) ==
+                       str(Path(other).with_suffix(".json")) for other in other_paths):
+                    shared_paths.extend(str(path) for path in candidates if path.exists())
+                    blocked.append({"record_id": record_id,
+                                    "reason": "Export path is still referenced by another record."})
+                    continue
+                if any(path.is_symlink() or (path.exists() and not path.is_file())
+                       for path in candidates):
+                    blocked.append({"record_id": record_id,
+                                    "reason": "Export path is not a regular file; no files deleted."})
+                    continue
+
+                # Stage both files with unique sibling names. If staging or the
+                # database operation fails, restore the original files.
+                staged: list[tuple[Path, Path]] = []
+                missing = [str(path) for path in candidates if not path.exists()]
+                try:
+                    for candidate in candidates:
+                        if not candidate.exists():
+                            continue
+                        temporary = candidate.with_name(
+                            f".{candidate.name}.{uuid.uuid4().hex}.delete-pending"
+                        )
+                        candidate.rename(temporary)
+                        staged.append((candidate, temporary))
+                    connection.execute(
+                        """DELETE FROM patient_video_exports
+                           WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                        (site_id, patient_id, record_id),
+                    )
+                    connection.execute(
+                        """DELETE FROM patient_video_path_aliases
+                           WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
+                        (site_id, patient_id, record_id),
+                    )
+                    connection.commit()
+                except Exception as exc:
+                    for original, temporary in reversed(staged):
+                        try:
+                            temporary.rename(original)
+                        except OSError:
+                            pass
+                    blocked.append({"record_id": record_id, "reason": str(exc)})
+                    continue
+
+                deleted.append(record_id)
+                missing_paths.extend(missing)
+                for original, temporary in staged:
+                    try:
+                        temporary.unlink()
+                        removed_paths.append(str(original))
+                    except OSError as exc:
+                        blocked.append({"record_id": record_id,
+                                        "reason": f"Record removed, but staged file cleanup failed: {exc}"})
+        return {
+            "deleted": deleted, "blocked": blocked,
+            "file_cleanup": {
+                "deleted_count": len(removed_paths),
+                "skipped_shared_count": len(shared_paths),
+                "missing_count": len(missing_paths),
+                "deleted_paths": removed_paths,
+                "missing_paths": missing_paths,
+                "skipped_shared": shared_paths,
+            },
+        }
+
+    def video_delete_patient_export(
+        self, patient_id: str, record_id: str,
+        delete_processed_files: bool = False,
+    ) -> dict[str, Any]:
+        """Backward-compatible single-record endpoint, defaulting to record only."""
+        result = self.video_delete_patient_exports(
+            patient_id, [record_id], delete_processed_files
+        )
+        return {**result, "deleted": bool(result["deleted"])}
 
     def video_export_project(self, project: dict[str, Any], patient_id: str = "",
                              linked_table: str = "", linked_record_id: str = "",
