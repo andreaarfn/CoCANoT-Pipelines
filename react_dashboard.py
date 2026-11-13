@@ -944,39 +944,9 @@ class CoCANoTAPI:
     def _prune_inactive_video_metadata(
         metadata: dict[str, Any], rules: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Discard stale conditional Video fields using the active MR rules.
-
-        The frontend also clears hidden fields, but older remembered sessions
-        and external callers may still submit previously applicable values.
-        """
-        from MetadataPipeline.validation.conditions import (
-            applicable_repeat_selections,
-            condition_matches,
-            surgery_month_rule_is_available,
-        )
-
-        cleaned = dict(metadata)
-        changed = True
-        while changed:
-            changed = False
-            for rule in rules:
-                name = str(rule.get("field_name") or "")
-                if not name or name not in cleaned:
-                    continue
-                parent = rule.get("required_if_field")
-                active = (
-                    (not parent or condition_matches(
-                        cleaned, parent, rule.get("required_if_operator"),
-                        rule.get("required_if_value"),
-                    ))
-                    and surgery_month_rule_is_available(rule)
-                )
-                if active and rule.get("repeat_for_each_field"):
-                    active = bool(applicable_repeat_selections(rule, cleaned))
-                if not active:
-                    cleaned.pop(name)
-                    changed = True
-        return cleaned
+        """Apply the active MR Video conditions to remembered and new values."""
+        from MetadataPipeline.validation.conditions import prune_inapplicable_fields
+        return prune_inapplicable_fields(metadata, rules)
 
     @staticmethod
     def _normalize_video_id(value: Any) -> str:
