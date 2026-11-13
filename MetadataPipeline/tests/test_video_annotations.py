@@ -66,7 +66,7 @@ def test_valid_duration_is_serialized_as_plain_number():
     )
     assert result[0]["duration"] == 2.0
     assert isinstance(result[0]["duration"], int)
-    assert result[0]["onset"] == 1.5438862
+    assert result[0]["onset"] == 1.54
     assert isinstance(result[0]["onset"], float)
 
 
@@ -78,3 +78,23 @@ def test_whole_second_times_have_no_float_notation_in_json():
     assert json.dumps(result) == (
         '[{"onset": 10, "duration": 2, "description": "Seizure"}]'
     )
+
+
+def test_annotation_times_round_to_two_decimal_places():
+    result = validate_video_annotations([
+        {"onset": 1.5438862, "duration": 2.1356,
+         "description": "Clinical event"},
+    ], 20)
+    assert result == [{
+        "onset": 1.54, "duration": 2.14, "description": "Clinical event",
+    }]
+    assert round(result[0]["onset"] + result[0]["duration"], 2) == 3.68
+
+
+def test_half_centisecond_rounds_up():
+    result = validate_video_annotations([
+        {"onset": 1.545, "duration": 0.005,
+         "description": "Brief marker"},
+    ], 20)
+    assert result[0]["onset"] == 1.55
+    assert result[0]["duration"] == 0.01
