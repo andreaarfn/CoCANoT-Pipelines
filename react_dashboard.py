@@ -11371,6 +11371,197 @@ class CoCANoTAPI:
             for patient_id in patient_ids
         ]
 
+    def metadata_choose_export_folder(self) -> str:
+        """Let the user select an existing local metadata export destination."""
+        if self._window is None:
+            raise RuntimeError("Choose an export folder in the CoCANoT desktop application.")
+        selected = self._window.create_file_dialog(webview.FileDialog.FOLDER)
+        if not selected:
+            return ""
+        folder = Path(str(selected if isinstance(selected, str) else selected[0])).expanduser().resolve()
+        if not folder.is_dir():
+            raise ValueError("Select an existing output folder.")
+        return str(folder)
+
+    def metadata_export_records(
+        self, selections: list[dict[str, Any]], output_folder: str,
+    ) -> dict[str, Any]:
+        """Export selected patient metadata across all five MR data types.
+
+        The destination manifest identifies each record by immutable internal
+        identity; identical JSON is skipped, while changed exports preserve the
+        prior file in a numbered history folder. Original records are untouched.
+        """
+        site_id = str(self.get_site_id() or "").strip().upper()
+        if not site_id:
+            raise PermissionError("Sign in before exporting metadata.")
+        destination = Path(str(output_folder or "")).expanduser().resolve()
+        if not destination.is_dir():
+            raise ValueError("Choose an existing export destination.")
+        if not isinstance(selections, list) or not selections or len(selections) > 10000:
+            raise ValueError("Select at least one metadata record to export.")
+        supported = {
+            "Clinical": ("clinical", "Clinical Assessment ID"),
+            "Surgical": ("surgical", "Surgery ID"),
+            "Imaging": ("imaging", "Image ID"),
+            "Electrophysiology": ("electrophysiology", "Recording ID"),
+            "Video": ("video", "Video ID"),
+        }
+        manifest_path = destination / "cocanot_metadata_export_manifest.json"
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest.get("schema_version") != 1 or not isinstance(manifest.get("records"), dict):
+                raise ValueError("The destination contains an incompatible CoCANoT export manifest.")
+        else:
+            manifest = {"schema_version": 1, "records": {}}
+        records_manifest = manifest["records"]
+        known_patients = set(self.repository.patient_ids_for_site(site_id))
+        summaries: dict[str, dict[str, Any]] = {}
+        results: list[dict[str, str]] = []
+        seen: set[tuple[str, str, str]] = set()
+
+        def safe_part(value: str) -> str:
+            cleaned = re.sub(r"[^A-Za-z0-9_-]+", "-", str(value or "")).strip("-_")
+            if not cleaned or cleaned in {".", ".."}:
+                raise ValueError("Metadata identifier cannot be used as a filename.")
+            return cleaned
+
+        for choice in selections:
+            try:
+                patient = self._resolve_existing_patient_id(str(choice.get("patient_id") or ""))
+                table = str(choice.get("table_name") or "")
+                record_id = str(choice.get("record_id") or "")
+                if patient not in known_patients or table not in supported or not record_id:
+                    raise ValueError("Selected record is not valid for this site.")
+                identity = (patient, table, record_id)
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                if patient not in summaries:
+                    summaries[patient] = self.metadata_get_patient(site_id, patient)
+                group, id_field = supported[table]
+                record = next(
+                    (item for item in summaries[patient].get(group, [])
+                     if str(item.get("record_id") or "") == record_id), None
+                )
+                if record is None:
+                    raise ValueError("Selected record is no longer available for this patient.")
+                metadata = record.get("metadata") or {}
+                if not isinstance(metadata, dict):
+                    raise ValueError("The selected record has invalid metadata.")
+                dictionary_version = (
+                    str(record.get("dictionary_version") or "") if table == "Clinical" else ""
+                )
+                _dictionary, rules, validator = self._dictionary_context(table, dictionary_version)
+                failures = [
+                    item for item in validator.validate_record(table, metadata)["results"]
+                    if item["status"] in {"invalid", "missing_required"}
+                ]
+                if failures:
+                    raise ValueError("Metadata validation failed: " + "; ".join(
+                        f"{item['field_name']}: {item['message']}" for item in failures[:3]
+                    ))
+                ordered = sorted(
+                    rules,
+                    key=lambda rule: (
+                        float(rule.get("field_order")) if str(rule.get("field_order") or "").strip().replace(".", "", 1).isdigit()
+                        else float("inf")
+                    ),
+                )
+                fields: dict[str, Any] = {}
+                for rule in ordered:
+                    field = str(rule.get("field_name") or "")
+                    value = metadata.get(field)
+                    if field and value is not None and value != "" and value != []:
+                        fields[field] = value
+                for field, value in metadata.items():
+                    if field not in fields and field not in {
+                        str(rule.get("field_name") or "") for rule in rules
+                    } and value is not None and value != "" and value != []:
+                        fields[field] = value
+                export_payload = {
+                    "CoCANoTMetadata": fields,
+                    "CoCANoTRecord": {
+                        "type": table,
+                        "record_id": record_id,
+                        "dictionary_version": dictionary_version or None,
+                    },
+                }
+                data = (json.dumps(export_payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
+                digest = hashlib.sha256(data).hexdigest()
+                patient_dir = f"sub-{safe_part(normalize_patient_id(patient))}"
+                visible_id = safe_part(str(metadata.get(id_field) or record_id))
+                relative = Path(patient_dir) / group / f"{patient_dir}_{visible_id}.json"
+                identity_key = hashlib.sha256(
+                    json.dumps([site_id, patient, table, record_id]).encode("utf-8")
+                ).hexdigest()
+                previous = records_manifest.get(identity_key)
+                current = destination / relative
+                if previous and previous.get("sha256") == digest and current.is_file():
+                    if hashlib.sha256(current.read_bytes()).hexdigest() == digest:
+                        results.append({"patient_id": patient, "table_name": table, "record_id": record_id, "status": "skipped", "path": str(relative)})
+                        continue
+                if current.exists() and (
+                    not previous or str(relative) != previous.get("path")
+                ):
+                    if hashlib.sha256(current.read_bytes()).hexdigest() == digest:
+                        results.append({"patient_id": patient, "table_name": table, "record_id": record_id, "status": "skipped", "path": str(relative)})
+                        continue
+                    raise FileExistsError(f"Destination filename is already used: {relative}")
+                version = int(previous.get("version", 0)) + 1 if previous else 1
+                history = list(previous.get("history", [])) if previous else []
+                if previous:
+                    old_relative = Path(str(previous.get("path") or ""))
+                    if old_relative.is_absolute() or ".." in old_relative.parts:
+                        raise ValueError("Export manifest includes an unsafe file path.")
+                    old_file = destination / old_relative
+                    if not old_file.is_file():
+                        raise FileNotFoundError(f"Previously exported metadata is missing: {old_relative}")
+                    old_hash = hashlib.sha256(old_file.read_bytes()).hexdigest()
+                    if old_hash != previous.get("sha256"):
+                        raise ValueError(f"Previously exported metadata was changed outside CoCANoT: {old_relative}")
+                    history_relative = Path(patient_dir) / group / "versions" / f"v{int(previous['version']):03d}" / old_file.name
+                    history_path = destination / history_relative
+                    history_path.parent.mkdir(parents=True, exist_ok=True)
+                    if history_path.exists():
+                        raise FileExistsError(f"Export history file already exists: {history_relative}")
+                    old_file.replace(history_path)
+                    history.append({"version": previous["version"], "path": str(history_relative), "sha256": old_hash})
+                current.parent.mkdir(parents=True, exist_ok=True)
+                temporary = current.with_name("." + current.name + "." + uuid.uuid4().hex + ".tmp")
+                try:
+                    temporary.write_bytes(data)
+                    if hashlib.sha256(temporary.read_bytes()).hexdigest() != digest:
+                        raise RuntimeError("Export verification failed before saving.")
+                    temporary.replace(current)
+                    if hashlib.sha256(current.read_bytes()).hexdigest() != digest:
+                        raise RuntimeError("Export verification failed after saving.")
+                finally:
+                    temporary.unlink(missing_ok=True)
+                records_manifest[identity_key] = {
+                    "patient_id": patient, "table_name": table,
+                    "record_id": record_id, "path": str(relative),
+                    "sha256": digest, "version": version, "history": history,
+                }
+                manifest_temp = manifest_path.with_name("." + manifest_path.name + ".tmp")
+                try:
+                    manifest_temp.write_text(
+                        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8",
+                    )
+                    manifest_temp.replace(manifest_path)
+                finally:
+                    manifest_temp.unlink(missing_ok=True)
+                results.append({"patient_id": patient, "table_name": table, "record_id": record_id, "status": "versioned" if previous else "exported", "path": str(relative)})
+            except (ValueError, OSError, TypeError, KeyError, OverflowError) as exc:
+                results.append({
+                    "patient_id": str(choice.get("patient_id") or "") if isinstance(choice, dict) else "",
+                    "table_name": str(choice.get("table_name") or "") if isinstance(choice, dict) else "",
+                    "record_id": str(choice.get("record_id") or "") if isinstance(choice, dict) else "",
+                    "status": "failed", "message": str(exc),
+                })
+        return {"destination": str(destination), "results": results}
+
     def metadata_batch_clinical_link(
         self,
         patient_id: str,
