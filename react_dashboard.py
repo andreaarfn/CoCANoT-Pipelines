@@ -34,6 +34,7 @@ import numpy as np
 from matplotlib import image as mpl_image
 
 from VideoPipeline.processing import inspect_video, save_project, load_project, render_project
+from MetadataPipeline.ingestion.sql_sources import list_source_tables, read_source_table
 
 _VIDEO_PREVIEWS: dict[str, Path] = {}
 
@@ -608,6 +609,7 @@ class CoCANoTAPI:
         self.authenticated_site_id = ""
         self._reporting_session_token = ""
         self._pending_metadata_documents: dict[str, dict[str, Any]] = {}
+        self._pending_sql_batch: dict[str, Any] = {}
 
         self.store = LocalMetadataStore()
         self.repository = MetadataRepository()
@@ -14519,34 +14521,67 @@ class CoCANoTAPI:
     def metadata_batch_choose_file(
         self,
         table_name: str,
+        source_token: str = "",
+        selected_table: str = "",
     ) -> dict[str, Any]:
         table_name = str(table_name or "").strip()
-
         if table_name not in {"Clinical", "Surgical"}:
-            raise ValueError(
-                "Batch import is supported for Clinical and Surgical metadata."
-            )
-
+            raise ValueError("Batch import is supported for Clinical and Surgical metadata.")
         if self._window is None:
             return {"ok": False, "cancelled": True}
 
-        selected = self._window.create_file_dialog(
-            webview.FileDialog.OPEN,
-            allow_multiple=False,
-            file_types=(
-                "CSV files (*.csv)",
-                "Excel files (*.xlsx;*.xlsm)",
-            ),
-        )
-
-        if not selected:
-            return {"ok": False, "cancelled": True}
-
-        if isinstance(selected, (list, tuple)):
-            selected = selected[0]
-
-        path = Path(str(selected)).expanduser()
-        rows = self._read_tabular_rows(path)
+        selected_table = str(selected_table or "").strip()
+        source_token = str(source_token or "").strip()
+        if source_token:
+            pending = self._pending_sql_batch.get(source_token)
+            if not pending or pending.get("site_id") != str(self.get_site_id() or "").strip().upper() or pending.get("table_name") != table_name:
+                raise ValueError("This SQL import selection has expired. Choose the file again.")
+            if not selected_table or selected_table not in pending["tables"]:
+                raise ValueError("Select one of the tables inspected from this file.")
+            path = Path(pending["path"])
+            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != pending["sha256"]:
+                raise ValueError("The SQL source file changed after inspection. Choose it again.")
+            rows = read_source_table(path, selected_table)
+            self._pending_sql_batch.pop(source_token, None)
+        else:
+            selected = self._window.create_file_dialog(
+                webview.FileDialog.OPEN,
+                allow_multiple=False,
+                file_types=(
+                    "Metadata files (*.csv;*.xlsx;*.xlsm;*.sql;*.sqlite;*.sqlite3;*.db)",
+                    "CSV files (*.csv)",
+                    "Excel files (*.xlsx;*.xlsm)",
+                    "SQL scripts (*.sql)",
+                    "SQLite databases (*.sqlite;*.sqlite3;*.db)",
+                ),
+            )
+            if not selected:
+                return {"ok": False, "cancelled": True}
+            if isinstance(selected, (list, tuple)):
+                selected = selected[0]
+            path = Path(str(selected)).expanduser().resolve()
+            if path.suffix.lower() in {".sql", ".sqlite", ".sqlite3", ".db"}:
+                tables = list_source_tables(path)
+                if not tables:
+                    raise ValueError("No importable data tables were found in this SQL source.")
+                token = secrets.token_urlsafe(24)
+                self._pending_sql_batch = {
+                    token: {
+                        "site_id": str(self.get_site_id() or "").strip().upper(),
+                        "table_name": table_name,
+                        "path": str(path),
+                        "tables": [item["name"] for item in tables],
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                }
+                return {
+                    "ok": True, "cancelled": False,
+                    "select_source_table": True,
+                    "source_token": token,
+                    "file_name": path.name,
+                    "tables": tables,
+                }
+            rows = self._read_tabular_rows(path)
 
         if not rows:
             raise ValueError(
@@ -14664,6 +14699,7 @@ class CoCANoTAPI:
             "table_name": table_name,
             "path": str(path),
             "file_name": path.name,
+            "source_table": selected_table or "",
             "uploaded_headers": uploaded_headers,
             # Stable fingerprint lets users distinguish two files with the same
             # name when inconsistent validation results are reported.
