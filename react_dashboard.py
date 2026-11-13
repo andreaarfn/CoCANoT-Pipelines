@@ -11408,13 +11408,58 @@ class CoCANoTAPI:
             "Video": ("video", "Video ID"),
         }
         manifest_path = destination / "cocanot_metadata_export_manifest.json"
+        # Read legacy opaque-key manifests, but write a human-readable list.
         if manifest_path.is_file():
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest.get("schema_version") != 1 or not isinstance(manifest.get("records"), dict):
+            schema = manifest.get("schema_version")
+            entries = manifest.get("records")
+            if schema == 1 and isinstance(entries, dict):
+                records_manifest = dict(entries)
+                if not all(isinstance(value, dict) for value in records_manifest.values()):
+                    raise ValueError("The previous export manifest contains invalid entries.")
+            elif schema == 2 and isinstance(entries, list):
+                records_manifest = {}
+                for entry in entries:
+                    if not isinstance(entry, dict) or not entry.get("site_id"):
+                        raise ValueError("The export manifest contains an invalid record.")
+                    identity = hashlib.sha256(json.dumps([
+                        str(entry["site_id"]), str(entry.get("patient_id") or ""),
+                        str(entry.get("table_name") or ""),
+                        str(entry.get("record_id") or ""),
+                    ]).encode("utf-8")).hexdigest()
+                    if identity in records_manifest:
+                        raise ValueError("The export manifest contains duplicate records.")
+                    records_manifest[identity] = entry
+            else:
                 raise ValueError("The destination contains an incompatible CoCANoT export manifest.")
         else:
-            manifest = {"schema_version": 1, "records": {}}
-        records_manifest = manifest["records"]
+            records_manifest = {}
+
+        def readable_manifest() -> dict[str, Any]:
+            entries = []
+            for entry in records_manifest.values():
+                display = str(entry.get("display_id") or "").strip()
+                if not display:
+                    filename = Path(str(entry.get("path") or "")).stem
+                    prefix = f"sub-{entry.get('patient_id', '')}_"
+                    display = filename.removeprefix(prefix) or str(entry.get("record_id") or "")
+                entries.append({
+                    "patient_id": entry.get("patient_id"),
+                    "table_name": entry.get("table_name"),
+                    "display_id": display,
+                    "path": entry.get("path"),
+                    "version": entry.get("version"),
+                    "history": entry.get("history", []),
+                    "sha256": entry.get("sha256"),
+                    # Internal identity is retained for reliable rename tracking.
+                    "record_id": entry.get("record_id"),
+                    "site_id": entry.get("site_id", site_id),
+                })
+            entries.sort(key=lambda item: (
+                str(item["patient_id"]), str(item["table_name"]),
+                str(item["display_id"]), str(item["record_id"]),
+            ))
+            return {"schema_version": 2, "records": entries}
         known_patients = set(self.repository.patient_ids_for_site(site_id))
         summaries: dict[str, dict[str, Any]] = {}
         results: list[dict[str, str]] = []
@@ -11507,13 +11552,14 @@ class CoCANoTAPI:
                     if not previous and current.is_file() and hashlib.sha256(current.read_bytes()).hexdigest() == digest:
                         records_manifest[identity_key] = {
                             "patient_id": patient, "table_name": table,
-                            "record_id": record_id, "path": str(relative),
+                            "record_id": record_id, "display_id": visible_id,
+                            "site_id": site_id, "path": str(relative),
                             "sha256": digest, "version": 1, "history": [],
                         }
                         manifest_temp = manifest_path.with_name("." + manifest_path.name + ".tmp")
                         try:
                             manifest_temp.write_text(
-                                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+                                json.dumps(readable_manifest(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
                             )
                             manifest_temp.replace(manifest_path)
                         finally:
@@ -11561,13 +11607,14 @@ class CoCANoTAPI:
                         raise RuntimeError("Export verification failed after saving.")
                     records_manifest[identity_key] = {
                         "patient_id": patient, "table_name": table,
-                        "record_id": record_id, "path": str(relative),
+                        "record_id": record_id, "display_id": visible_id,
+                        "site_id": site_id, "path": str(relative),
                         "sha256": digest, "version": version, "history": history,
                     }
                     manifest_temp = manifest_path.with_name("." + manifest_path.name + ".tmp")
                     try:
                         manifest_temp.write_text(
-                            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                            json.dumps(readable_manifest(), ensure_ascii=False, indent=2) + "\n",
                             encoding="utf-8",
                         )
                         manifest_temp.replace(manifest_path)
