@@ -1,4 +1,4 @@
-"""Load Clinical or Surgical metadata from CSV or XLSX files."""
+"""Load tabular metadata via the shared format reader registry."""
 
 from __future__ import annotations
 
@@ -8,35 +8,29 @@ from pathlib import Path
 import openpyxl
 
 
-SUPPORTED_EXTENSIONS = {".csv", ".xlsx"}
+SUPPORTED_EXTENSIONS = {".csv", ".xlsx", ".xlsm"}
 
 
 class MetadataFileError(ValueError):
     """Raised when an uploaded metadata file cannot be read safely."""
 
 
-def load_metadata_file(file_path):
-    """Load a CSV or XLSX file into a list of row dictionaries.
+def load_metadata_file(file_path, table_name=None):
+    """Load supported metadata sources using their registered reader.
 
-    The loader preserves column names exactly because the active dictionary
-    controls the metadata schema.
+    CSV/XLSX remain compatible with existing callers. SQL/SQLite require an
+    explicitly selected source table and use the same normalized row shape.
     """
-    path = Path(file_path)
+    from .readers import get_reader
 
-    if not path.exists():
+    path = Path(file_path)
+    if not path.is_file():
         raise MetadataFileError(f"Metadata file does not exist: {path}")
 
-    extension = path.suffix.lower()
-
-    if extension not in SUPPORTED_EXTENSIONS:
-        raise MetadataFileError(
-            "Metadata uploads must be .csv or .xlsx files."
-        )
-
-    if extension == ".csv":
-        return _load_csv(path)
-
-    return _load_xlsx(path)
+    try:
+        return get_reader(path).read(path, table_name=table_name)
+    except ValueError as exc:
+        raise MetadataFileError(str(exc)) from exc
 
 
 def _load_csv(path):
