@@ -162,6 +162,8 @@ export default function BatchImportWorkflow({
   const [step, setStep] = useState(1);
 
   const [batch, setBatch] = useState(null);
+  const [pendingSqlSource, setPendingSqlSource] = useState(null);
+  const [chosenSqlTable, setChosenSqlTable] = useState("");
 
   const [rows, setRows] = useState([]);
 
@@ -892,7 +894,7 @@ export default function BatchImportWorkflow({
 
 
 
-  async function chooseFile() {
+  async function chooseFile(sourceToken = "", sourceTable = "") {
 
     try {
 
@@ -909,7 +911,15 @@ export default function BatchImportWorkflow({
         throw new Error("The metadata upload API is not available.");
       }
 
-      const nextBatch = await bridge.metadata_batch_choose_file(tableName);
+      const nextBatch = await bridge.metadata_batch_choose_file(tableName, sourceToken, sourceTable);
+      if (nextBatch?.select_source_table) {
+        if (!nextBatch.source_token || !Array.isArray(nextBatch.tables)) {
+          throw new Error("The SQL source table listing was incomplete.");
+        }
+        setPendingSqlSource(nextBatch);
+        setChosenSqlTable(nextBatch.tables.length === 1 ? nextBatch.tables[0].name : "");
+        return;
+      }
       if (!nextBatch || nextBatch.cancelled) return;
       if (nextBatch.ok === false) {
         throw new Error(nextBatch.message || "Could not read the selected file.");
@@ -1082,6 +1092,8 @@ export default function BatchImportWorkflow({
 
 
 
+      setPendingSqlSource(null);
+      setChosenSqlTable("");
       setBatch({
 
         ...nextBatch,
@@ -2000,17 +2012,16 @@ export default function BatchImportWorkflow({
 
             <h2>
 
-              Select {tableName} CSV/XLSX
+              Select {tableName} CSV, Excel, SQL or SQLite
 
             </h2>
 
             <p>
 
-              Selecting a file does not import
-
-              anything yet. Rows are staged for
-
-              review first.
+              CSV, Excel, SQL scripts and SQLite databases are supported.
+              SQL imports are inspected without executing uploaded scripts.
+              Select a database table, map its columns, and review every row
+              before committing any records.
 
             </p>
 
@@ -2018,7 +2029,7 @@ export default function BatchImportWorkflow({
 
               className={styles.primary}
 
-              onClick={chooseFile}
+              onClick={() => chooseFile()}
 
               disabled={busy}
 
@@ -2029,6 +2040,24 @@ export default function BatchImportWorkflow({
               Choose File…
 
             </button>
+            {pendingSqlSource && <div className={styles.sqlTablePicker}>
+              <strong>Choose a source table from {pendingSqlSource.file_name}</strong>
+              <p>No records have been imported. Only the selected table will be staged for review.</p>
+              <select value={chosenSqlTable} disabled={busy}
+                aria-label="SQL table to import"
+                onChange={event => setChosenSqlTable(event.target.value)}>
+                <option value="">Select table…</option>
+                {pendingSqlSource.tables.map(item =>
+                  <option key={item.name} value={item.name}>
+                    {item.name}{item.row_count == null ? "" : ` (${item.row_count} rows)`}
+                  </option>
+                )}
+              </select>
+              <button type="button" className={styles.primary} disabled={busy || !chosenSqlTable}
+                onClick={() => chooseFile(pendingSqlSource.source_token, chosenSqlTable)}>
+                Preview selected table
+              </button>
+            </div>}
 
           </div>
 
