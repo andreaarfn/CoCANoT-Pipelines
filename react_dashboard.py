@@ -11792,17 +11792,18 @@ class CoCANoTAPI:
     def metadata_get_associated_data(
         self, patient_id: str, table_name: str, record_id: str,
     ) -> list[dict[str, Any]]:
-        """Resolve patient-scoped references and file availability on demand.
+        """Resolve saved patient-record relationships independently of exports.
 
-        Missing targets remain visible by their entered ID, allowing
-        prospective links to resolve automatically after a later upload.
-        This never associates files across patients or guesses from names.
+        Use the site's local patient records and MR identifiers, not the
+        metadata export manifest. A reference to a record uploaded later
+        becomes navigable on refresh; unavailable files do not hide records.
         """
         site_id = str(self.get_site_id() or "").strip().upper()
         patient_id = self._resolve_existing_patient_id(patient_id)
         table_name = str(table_name or "").strip()
         record_id = str(record_id or "").strip()
         keys = {
+            "Clinical": ("clinical", "Clinical Assessment ID"),
             "Surgical": ("surgical", "Surgery ID"),
             "Imaging": ("imaging", "Image ID"),
             "Electrophysiology": ("electrophysiology", "Recording ID"),
@@ -11819,35 +11820,38 @@ class CoCANoTAPI:
         if source is None:
             raise ValueError("The selected review record no longer exists for this patient.")
 
+        def normalized(value: Any) -> str:
+            return str(value or "").strip().casefold()
+
         def identifiers(item: dict[str, Any], table: str) -> set[str]:
             field = keys[table][1]
             metadata = item.get("metadata") or {}
             return {
-                str(value).strip().casefold()
+                normalized(value)
                 for value in (item.get("record_id"), metadata.get(field))
-                if str(value or "").strip()
+                if normalized(value)
             }
 
-        def availability(item: dict[str, Any], table: str) -> tuple[bool, str]:
+        def linked_file(item: dict[str, Any], table: str) -> tuple[bool, str]:
+            """File presence is informational, never a prerequisite for a link."""
             if table == "Video":
                 path = Path(str(item.get("path") or "")).expanduser()
                 return path.is_file(), path.name if path.is_file() else ""
-            if table == "Surgical":
+            if table in {"Surgical", "Clinical"}:
                 try:
                     documents = self.metadata_document_list(
                         patient_id, table, str(item["record_id"])
                     )
+                    names = [str(doc.get("file_name") or "") for doc in documents]
+                    return bool(documents), ", ".join(name for name in names if name)
                 except (OSError, ValueError):
                     return False, ""
-                return bool(documents), ", ".join(
-                    doc.get("file_name", "") for doc in documents
-                )
             try:
-                file_path = (
+                path = (
                     self._metadata_find_imaging_file(item)
                     if table == "Imaging" else self._metadata_find_edf_file(item)
                 )
-                return file_path.is_file(), file_path.name if file_path.is_file() else ""
+                return path.is_file(), path.name if path.is_file() else ""
             except (OSError, ValueError, RuntimeError, FileNotFoundError):
                 return False, ""
 
@@ -11857,18 +11861,28 @@ class CoCANoTAPI:
         source_metadata = source.get("metadata") or {}
 
         def add(table: str, requested_id: str, target: dict[str, Any] | None) -> None:
-            identity = (table, str(target.get("record_id")) if target else requested_id.casefold())
-            if identity in seen:
+            record_exists = target is not None
+            identity = (table, normalized(target.get("record_id")) if target else normalized(requested_id))
+            if not identity[1] or identity in seen:
                 return
             seen.add(identity)
-            available, filename = availability(target, table) if target else (False, "")
+            has_file, filename = linked_file(target, table) if record_exists else (False, "")
             results.append({
                 "table_name": table,
                 "requested_id": requested_id,
-                "record_id": str(target.get("record_id") or "") if target else "",
+                "record_id": str(target.get("record_id") or "") if record_exists else "",
+                "record_exists": record_exists,
+                "file_available": has_file,
                 "file_name": filename,
-                "available": available,
-                "message": "File available" if available else "File has not been uploaded",
+                # Retain the old file-availability field for older clients.
+                "available": has_file,
+                "message": (
+                    "Record available" if record_exists and has_file
+                    else "Record saved; no supporting file attached"
+                    if record_exists and table in {"Surgical", "Clinical"}
+                    else "Record saved; linked file unavailable"
+                    if record_exists else "Record has not been uploaded"
+                ),
             })
 
         for other_table, (summary_key, field) in keys.items():
@@ -11878,18 +11892,19 @@ class CoCANoTAPI:
             requested = str(source_metadata.get(field) or "").strip()
             if requested:
                 target = next(
-                    (item for item in candidates if requested.casefold() in identifiers(item, other_table)),
+                    (item for item in candidates
+                     if normalized(requested) in identifiers(item, other_table)),
                     None,
                 )
                 add(other_table, requested, target)
-            # Reverse lookup: an existing record may reference the one
-            # currently being reviewed, even if the current record has no ID
-            # for that linked Video/Surgery/Imaging/Ephys metadata row.
+
+            # Reverse links: e.g. a saved Video references SURG-001,
+            # so the Surgical review can find that Video immediately.
             source_field = keys[table_name][1]
             for item in candidates:
                 item_metadata = item.get("metadata") or {}
-                reverse_id = str(item_metadata.get(source_field) or "").strip()
-                if reverse_id and reverse_id.casefold() in source_ids:
+                reverse_id = normalized(item_metadata.get(source_field))
+                if reverse_id and reverse_id in source_ids:
                     display_id = str(item_metadata.get(field) or item.get("record_id") or "").strip()
                     add(other_table, display_id, item)
         return results
