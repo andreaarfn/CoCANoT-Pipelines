@@ -13670,79 +13670,10 @@ class CoCANoTAPI:
     def _read_tabular_rows(
         path: Path,
     ) -> list[dict[str, Any]]:
-        suffix = path.suffix.lower()
+        """Use the same reader registry as the batch metadata pipeline."""
+        from MetadataPipeline.ingestion.readers import get_reader
 
-        if suffix == ".csv":
-            with path.open(
-                "r",
-                encoding="utf-8-sig",
-                newline="",
-            ) as handle:
-                return [
-                    dict(row)
-                    for row in csv.DictReader(
-                        handle
-                    )
-                ]
-
-        if suffix in {
-            ".xlsx",
-            ".xlsm",
-        }:
-            from openpyxl import load_workbook
-
-            workbook = load_workbook(
-                path,
-                read_only=True,
-                data_only=True,
-            )
-            sheet = workbook.active
-            rows = list(
-                sheet.iter_rows(
-                    values_only=True
-                )
-            )
-            if not rows:
-                return []
-
-            headers = [
-                str(value or "").strip()
-                for value in rows[0]
-            ]
-            result: list[
-                dict[str, Any]
-            ] = []
-
-            for values in rows[1:]:
-                if not any(
-                    value not in (
-                        None,
-                        "",
-                    )
-                    for value in values
-                ):
-                    continue
-
-                result.append(
-                    {
-                        headers[index]: value
-                        for index, value in enumerate(
-                            values
-                        )
-                        if index < len(
-                            headers
-                        )
-                        and headers[
-                            index
-                        ]
-                    }
-                )
-
-            return result
-
-        raise ValueError(
-            "Choose a CSV or XLSX file."
-        )
+        return get_reader(path).read(path)["rows"]
 
     @staticmethod
     def _canonical_patient_id_for_comparison(
