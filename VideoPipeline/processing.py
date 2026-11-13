@@ -172,9 +172,10 @@ def validate_video_annotations(annotations: list, duration: float) -> list[dict]
         if not identifier or len(identifier) > 100 or identifier in seen:
             raise ValueError(f"Annotation {index + 1}: event identifier is invalid or duplicated.")
         seen.add(identifier)
-        clean.append({"id": identifier, "onset": onset, "duration": length,
-                      "description": description})
-    return sorted(clean, key=lambda row: (row["onset"], row["id"]))
+        # UI IDs are transient keys, not clinical annotation content. Never
+        # persist them to the final sidecar or the local SQLite annotation JSON.
+        clean.append({"onset": onset, "duration": length, "description": description})
+    return sorted(clean, key=lambda row: row["onset"])
 
 
 def render_project(project: dict, destination: str) -> dict:
