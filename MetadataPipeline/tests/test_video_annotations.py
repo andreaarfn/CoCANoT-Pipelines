@@ -65,4 +65,16 @@ def test_valid_duration_is_serialized_as_plain_number():
           "description": "SEIZURE"}], 20
     )
     assert result[0]["duration"] == 2.0
-    assert isinstance(result[0]["duration"], float)
+    assert isinstance(result[0]["duration"], int)
+    assert result[0]["onset"] == 1.5438862
+    assert isinstance(result[0]["onset"], float)
+
+
+def test_whole_second_times_have_no_float_notation_in_json():
+    import json
+    result = validate_video_annotations(
+        [{"onset": 10.0, "duration": 2.0, "description": "Seizure"}], 20
+    )
+    assert json.dumps(result) == (
+        '[{"onset": 10, "duration": 2, "description": "Seizure"}]'
+    )
