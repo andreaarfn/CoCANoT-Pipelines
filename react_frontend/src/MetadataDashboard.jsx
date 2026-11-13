@@ -64,6 +64,7 @@ import {
 
 
   Users,
+  Download,
 
 
 
@@ -84,6 +85,7 @@ import DocumentAttachmentRedactor from "./DocumentAttachmentRedactor";
 
 
 import BatchImportWorkflow from "./BatchImportWorkflow";
+import MetadataExporter from "./MetadataExporter";
 
 
 
@@ -2533,6 +2535,10 @@ export default function MetadataDashboard({
 
 
 
+  if (initialView === "export") {
+    return <MetadataExporter onBack={() => onNavigate("metadata-home")} />;
+  }
+
   if (view === "home") {
 
 
@@ -2557,7 +2563,7 @@ export default function MetadataDashboard({
 
 
 
-          text="Review one patient at a time or import Clinical and Surgical metadata in batches using the active machine-readable dictionary."
+          text="Review patient records, import metadata in batches, or export selected patient metadata."
 
 
 
@@ -2633,6 +2639,16 @@ export default function MetadataDashboard({
 
 
 
+          </button>
+
+
+          <button onClick={() => onNavigate("metadata-export")}>
+            <Download size={29} />
+            <strong>Export Metadata</strong>
+            <span>
+              Export all or selected Clinical, Surgical, Imaging,
+              Electrophysiology and Video metadata for one or more patients.
+            </span>
           </button>
 
 
