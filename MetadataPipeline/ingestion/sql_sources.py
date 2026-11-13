@@ -175,7 +175,7 @@ def _parse_sql(path: Path) -> dict[str, list[dict]]:
         first = statement.split(None, 1)[0].upper()
         # Standard SQLite .dump files wrap inserts in BEGIN TRANSACTION.
         # These wrappers are ignored; never executed.
-        if re.fullmatch(r"(?:BEGIN(?:\\s+TRANSACTION)?|COMMIT|END|ROLLBACK)", statement, re.I):
+        if re.fullmatch(r"(?:BEGIN(?:\s+TRANSACTION)?|COMMIT|END|ROLLBACK)", statement, re.I):
             continue
         if first == "CREATE":
             match = CREATE_PATTERN.fullmatch(statement)
