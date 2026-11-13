@@ -140,7 +140,7 @@ export default function MetadataExporter({ onBack }) {
     <header className={styles.heading}>
       <span>METADATA EXPORT</span>
       <h1>Export Metadata</h1>
-      <p>Export selected patients and records across all five data types as de-identified JSON. Identical exports are skipped; changed records retain previous versions.</p>
+      <p>Export saved CoCANoT metadata for selected patients and records as JSON. Identical exports are skipped and changed records retain previous versions. Review exported metadata before sharing.</p>
     </header>
     <section className={styles.panel}>
       <div className={styles.panelHeader}>
