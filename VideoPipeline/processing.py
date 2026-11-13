@@ -145,6 +145,38 @@ def _mux_selected_audio(clips: list[dict], silent_video: Path, ffmpeg_binary: st
             output.unlink()
 
 
+def validate_video_annotations(annotations: list, duration: float) -> list[dict]:
+    """Validate structured events against final exported-video time (seconds)."""
+    if not isinstance(annotations, list) or len(annotations) > 2000:
+        raise ValueError("Video annotations must be a list of at most 2000 events.")
+    if not math.isfinite(float(duration)) or duration < 0:
+        raise ValueError("Final video duration is invalid.")
+    clean = []
+    seen = set()
+    for index, item in enumerate(annotations):
+        if not isinstance(item, dict):
+            raise ValueError(f"Annotation {index + 1} must be an object.")
+        try:
+            onset = float(item["onset"])
+            length = float(item["duration"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Annotation {index + 1}: onset and duration must be numbers.") from exc
+        description = str(item.get("description") or "").strip()
+        if not all(math.isfinite(v) for v in (onset, length)):
+            raise ValueError(f"Annotation {index + 1}: timestamps must be finite.")
+        if onset < 0 or length < 0 or onset + length > duration + 0.02:
+            raise ValueError(f"Annotation {index + 1}: interval exceeds the final video duration.")
+        if not description or len(description) > 500:
+            raise ValueError(f"Annotation {index + 1}: add a description of 1–500 characters without PHI.")
+        identifier = str(item.get("id") or f"event-{index + 1}").strip()
+        if not identifier or len(identifier) > 100 or identifier in seen:
+            raise ValueError(f"Annotation {index + 1}: event identifier is invalid or duplicated.")
+        seen.add(identifier)
+        clean.append({"id": identifier, "onset": onset, "duration": length,
+                      "description": description})
+    return sorted(clean, key=lambda row: (row["onset"], row["id"]))
+
+
 def render_project(project: dict, destination: str) -> dict:
     clips = validate_project(project)
     target = Path(destination).expanduser().resolve()
