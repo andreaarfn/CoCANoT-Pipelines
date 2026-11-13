@@ -19,7 +19,7 @@ export default function VideoAnnotations({
   function add() {
     if (!playable || disabled) return;
     const onset = Math.min(Math.max(0, position), length);
-    const item = {id: crypto.randomUUID?.() || String(Date.now()), onset, duration: Math.min(5, length - onset), description: ""};
+    const item = {id: globalThis.crypto?.randomUUID?.() || String(Date.now()), onset, duration: Math.min(5, length - onset), description: ""};
     onChange([...annotations, item]);
     setSelectedId(item.id);
   }
