@@ -174,7 +174,12 @@ def validate_video_annotations(annotations: list, duration: float) -> list[dict]
         seen.add(identifier)
         # UI IDs are transient keys, not clinical annotation content. Never
         # persist them to the final sidecar or the local SQLite annotation JSON.
-        clean.append({"onset": onset, "duration": length, "description": description})
+        # Serialize whole-second timestamps as JSON integers. Firefox's JSON
+        # viewer otherwise displays a JS:2 conversion badge beside 2.0.
+        onset_value = int(onset) if onset.is_integer() else onset
+        duration_value = int(length) if length.is_integer() else length
+        clean.append({"onset": onset_value, "duration": duration_value,
+                      "description": description})
     return sorted(clean, key=lambda row: row["onset"])
 
 
