@@ -1350,8 +1350,8 @@ class CoCANoTAPI:
         clinical_id = str(latest_clinical.get("record_id") or latest_clinical.get("assessment_id") or "").strip()
         if not clinical_id:
             raise ValueError("The patient's Clinical Assessment has no ID.")
-        # Video ID is entered by the user and defined as non-system-generated
-        # in MR Video. Never silently replace it with a generated sequence.
+        # Video ID remains user-entered per MR Video. Normalize numeric input
+        # to the canonical VID-XXX identifier rather than generating a new number.
         video_rule = next(
             (rule for rule in video_rules if rule.get("field_name") == "Video ID"),
             None,
