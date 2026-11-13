@@ -114,12 +114,12 @@ export default function PatientDataReview({
   return (
     <>
       {viewer}
-      {tableName !== "Clinical" && <AssociatedData
+      <AssociatedData
         patientId={patientId}
         tableName={tableName}
         recordId={record?.record_id}
         onOpenAssociated={onOpenAssociated}
-      />}
+      />
     </>
   );
 }
@@ -175,12 +175,18 @@ function AssociatedData({ patientId, tableName, recordId, onOpenAssociated }) {
                 key={`${item.table_name}-${item.record_id || item.requested_id}-${index}`}>
                 <div className={styles.associatedDataDescription}>
                   <strong>{item.table_name} · {item.requested_id}</strong>
-                  <span>{item.available ? item.file_name : "File has not been uploaded"}</span>
+                  <span>{item.record_exists
+                    ? item.file_available
+                      ? item.file_name || "Linked file available"
+                      : item.table_name === "Clinical" || item.table_name === "Surgical"
+                        ? "Record saved · No supporting document attached"
+                        : "Record saved · Linked file unavailable"
+                    : "Record has not been uploaded"}</span>
                 </div>
-                {item.available && item.record_id && onOpenAssociated && (
+                {item.record_exists && item.record_id && onOpenAssociated && (
                   <button type="button" className={styles.associatedDataLink}
                     onClick={() => onOpenAssociated(item.table_name, item.record_id)}>
-                    View linked file <ArrowRight size={15}/>
+                    View record <ArrowRight size={15}/>
                   </button>
                 )}
               </div>
