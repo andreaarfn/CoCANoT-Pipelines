@@ -221,6 +221,28 @@ export function fieldIsVisible(
   );
 }
 
+/**
+ * Remove stale hidden metadata before persisting a record. The rules from the
+ * active machine-readable dictionary, not field names, control applicability.
+ * Repeat until stable so chained conditional dependencies are also cleared.
+ */
+export function pruneInactiveDictionaryFields(rules, values, context = {}) {
+  let result = {...(values ?? {})};
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const rule of rules ?? []) {
+      const field = rule.field_name;
+      if (!field || !Object.prototype.hasOwnProperty.call(result, field)) continue;
+      if (!fieldIsVisible(rule, result, context)) {
+        delete result[field];
+        changed = true;
+      }
+    }
+  }
+  return result;
+}
+
 function repeatSelections(rule, values) {
   const parent = rule?.repeat_for_each_field;
 
