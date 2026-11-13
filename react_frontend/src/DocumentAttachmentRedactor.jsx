@@ -190,59 +190,23 @@ export default function DocumentAttachmentRedactor({
 
 
   async function loadDocuments() {
-
-
-
     try {
-
-
-
-      setMessage("");
-
-
-
-      const rows = await api()?.metadata_document_list?.(
-
-
-
-        patientId,
-
-
-
-        tableName,
-
-
-
-        recordId
-
-
-
-      );
-
-
-
-      setDocuments(rows ?? []);
-
-
-
+      const bridge = api();
+      if (!bridge?.metadata_document_list) {
+        throw new Error("Associated document listing is unavailable.");
+      }
+      const [attached, staged] = await Promise.all([
+        bridge.metadata_document_list(patientId, tableName, recordId),
+        bridge.metadata_document_list_staged?.(patientId, tableName, recordId) ?? Promise.resolve([]),
+      ]);
+      setDocuments(attached ?? []);
+      // Preserve previously reviewed documents that were saved before
+      // automatic attachment existed. The user may confirm those separately.
+      setStagedDocuments(staged ?? []);
     } catch (error) {
-
-
-
-      setMessage(String(error));
-
-
-
+      setMessage(String(error?.message || error));
     }
-
-
-
   }
-
-
-
-
-
 
 
   async function chooseDocument() {
