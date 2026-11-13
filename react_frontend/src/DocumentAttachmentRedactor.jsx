@@ -67,89 +67,8 @@ const api = () => window.pywebview?.api ?? null;
 
 
 const DOCUMENT_TYPES = {
-
-
-
-  Clinical: [
-
-
-
-    "Clinic Note",
-
-
-
-    "Seizure Diary",
-
-
-
-    "Medication List",
-
-
-
-    "Neuropsychology Report",
-
-
-
-    "EEG Report",
-
-
-
-    "Imaging Report",
-
-
-
-    "Discharge Summary",
-
-
-
-    "Other",
-
-
-
-  ],
-
-
-
-  Surgical: [
-
-
-
-    "Surgical Note",
-
-
-
-    "Operative Report",
-
-
-
-    "Implant / Device Record",
-
-
-
-    "Pathology Report",
-
-
-
-    "Discharge Summary",
-
-
-
-    "EEG Report",
-
-
-
-    "Imaging Report",
-
-
-
-    "Other",
-
-
-
-  ],
-
-
-
+  Clinical: ["Clinical Note", "Seizure Log", "Neuropsychology Report", "Other"],
+  Surgical: ["Surgical Note", "Implant/Device Record", "Discharge Summary", "Other"],
 };
 
 
@@ -738,11 +657,19 @@ export default function DocumentAttachmentRedactor({
 
 
 
-        setStagedDocuments(current => [...current.filter(item => item.document_id !== saved.document_id), saved]);
-
-
-
-        setMessage("Redaction review saved. Confirm below to attach the document to this patient.");
+        // New documents are attached by the save operation itself.
+        // Verify the attachment exists before announcing success.
+        if (!saved?.ok || saved?.status !== "Attached") {
+          throw new Error("The document was not confirmed as attached.");
+        }
+        const attached = await api()?.metadata_document_list?.(patientId, tableName, recordId);
+        if (!(attached || []).some(item => item.document_id === saved.document_id)) {
+          throw new Error("The sanitized document could not be verified in this patient record.");
+        }
+        setStagedDocuments(current => current.filter(item => item.document_id !== saved.document_id));
+        setDocuments(attached);
+        await onChanged?.();
+        setMessage("Sanitized document saved and attached to this patient record.");
 
 
 
