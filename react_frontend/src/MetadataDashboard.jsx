@@ -2475,6 +2475,7 @@ export default function MetadataDashboard({
             const site = await currentSiteId();
             const refreshed = await api()?.metadata_get_patient?.(site, loadedPatientId);
             const keyByTable = {
+              Clinical: "clinical",
               Surgical: "surgical",
               Imaging: "imaging",
               Electrophysiology: "electrophysiology",
