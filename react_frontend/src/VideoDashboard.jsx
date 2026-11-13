@@ -454,7 +454,20 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       if (result?.error) throw new Error(result.error);
       if (result?.registered && result?.path) {setExportRecord(result);setVideoMetadata(current => ({...current, "Video ID": result.video_id || exportMetadata["Video ID"]}));setNotice("");setReviewed(false);}
       else setNotice("Export cancelled.");
-    }catch(e){setNotice(String(e.message || e));}finally{setBusy(false);}
+    }catch(e){
+      const message = String(e.message || e);
+      // Backend emits dictionary field names as "Field: explanation".
+      // Highlight matching inputs rather than leaving only a global error.
+      const fieldErrors = {};
+      for (const line of message.split("\n")) {
+        const rule = (videoRules || []).find(item =>
+          line.trim().startsWith(`${item.field_name}:`)
+        );
+        if (rule) fieldErrors[rule.field_name] = line.trim().slice(rule.field_name.length + 1).trim();
+      }
+      if (Object.keys(fieldErrors).length) setVideoFieldErrors(fieldErrors);
+      setNotice(message);
+    }finally{setBusy(false);}
   }
   const combinedDuration=useMemo(()=>project.clips.reduce((t,c)=>t+c.end-c.start,0),[project]);
   return <div className="video-workspace">
