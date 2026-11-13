@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, Download, FolderOpen, RefreshCw } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Download, FolderOpen, RefreshCw, Search } from "lucide-react";
 import styles from "./MetadataExporter.module.css";
 
 const bridge = () => window.pywebview?.api ?? null;
@@ -23,6 +23,9 @@ export default function MetadataExporter({ onBack }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [patientSearch, setPatientSearch] = useState("");
+  const [recordSearches, setRecordSearches] = useState({});
+  const [expandedGroups, setExpandedGroups] = useState({});
 
   async function loadPatients() {
     setLoadingPatients(true);
@@ -93,6 +96,26 @@ export default function MetadataExporter({ onBack }) {
     setResult(null);
   }
 
+  function toggleGroup(patientId, tableName, checked) {
+    setSelectedPatients(old => {
+      const prior = old[patientId];
+      if (!prior) return old;
+      const inventory = inventories[patientId] || [];
+      const keys = new Set(prior.mode === "all" ? inventory.map(keyOf) : prior.records);
+      inventory.filter(record => record.table_name === tableName).forEach(record => {
+        if (checked) keys.add(keyOf(record));
+        else keys.delete(keyOf(record));
+      });
+      return { ...old, [patientId]: { mode: "custom", records: [...keys] } };
+    });
+    setResult(null);
+  }
+
+  function toggleGroupExpanded(patientId, tableName) {
+    const key = `${patientId}:${tableName}`;
+    setExpandedGroups(old => ({ ...old, [key]: !old[key] }));
+  }
+
   const selection = useMemo(() => Object.entries(selectedPatients).flatMap(([patientId, options]) => {
     const records = inventories[patientId] || [];
     const chosen = options.mode === "all"
@@ -151,7 +174,12 @@ export default function MetadataExporter({ onBack }) {
       </div>
       {loadingPatients && <p className={styles.muted}>Loading patients…</p>}
       {!loadingPatients && patients.length === 0 && <p className={styles.muted}>No locally stored patients were found.</p>}
-      {patients.map(patient => {
+      {patients.length > 0 && <label className={styles.searchField}>
+        <Search size={15}/>
+        <input type="search" value={patientSearch} onChange={event => setPatientSearch(event.target.value)}
+          placeholder="Find a patient by ID" aria-label="Search patients"/>
+      </label>}
+      {patients.filter(patient => patient.toLowerCase().includes(patientSearch.trim().toLowerCase())).map(patient => {
         const enabled = Boolean(selectedPatients[patient]);
         const inventory = inventories[patient] || [];
         const isLoading = Boolean(loadingRecords[patient]);
@@ -175,16 +203,55 @@ export default function MetadataExporter({ onBack }) {
             </div>
             {isLoading ? <p className={styles.muted}>Loading records…</p>
               : inventory.length === 0 ? <p className={styles.muted}>No metadata records found for this patient.</p>
-              : mode === "custom" ? <div className={styles.records}>
-                  {inventory.map(record => <label className={styles.record} key={keyOf(record)}>
-                    <input type="checkbox" checked={currentKeys.has(keyOf(record))}
-                      disabled={busy}
-                      onChange={event => toggleRecord(patient, record, event.target.checked)}/>
-                    <strong>{record.table_name}</strong>
-                    <span>{record.label}</span>
-                  </label>)}
+              : mode === "custom" ? <>
+                <label className={styles.searchField}>
+                  <Search size={15}/>
+                  <input type="search" value={recordSearches[patient] || ""}
+                    onChange={event => setRecordSearches(old => ({ ...old, [patient]: event.target.value }))}
+                    placeholder="Search records by ID or data type" aria-label={`Search records for patient ${patient}`}/>
+                </label>
+                <div className={styles.groupList}>
+                  {groups.map(([tableName]) => {
+                    const records = inventory.filter(record => record.table_name === tableName);
+                    if (!records.length) return null;
+                    const query = (recordSearches[patient] || "").trim().toLowerCase();
+                    const filtered = query
+                      ? records.filter(record => (record.label + " " + record.table_name).toLowerCase().includes(query))
+                      : records;
+                    if (!filtered.length) return null;
+                    const selectedCount = records.filter(record => currentKeys.has(keyOf(record))).length;
+                    const expanded = Boolean(expandedGroups[`${patient}:${tableName}`]) || Boolean(query);
+                    return <div className={styles.group} key={tableName}>
+                      <div className={styles.groupHeader}>
+                        <input type="checkbox" checked={selectedCount === records.length}
+                          ref={node => { if (node) node.indeterminate = selectedCount > 0 && selectedCount < records.length; }}
+                          aria-label={`Select all ${tableName} for patient ${patient}`}
+                          disabled={busy}
+                          onChange={event => toggleGroup(patient, tableName, event.target.checked)}/>
+                        <button type="button" className={styles.groupToggle}
+                          aria-expanded={expanded}
+                          onClick={() => toggleGroupExpanded(patient, tableName)}>
+                          {expanded ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
+                          <strong>{tableName}</strong>
+                          <span>{selectedCount} of {records.length} selected</span>
+                        </button>
+                      </div>
+                      {expanded && <div className={styles.groupRecords}>
+                        {filtered.map(record => <label className={styles.record} key={keyOf(record)}>
+                          <input type="checkbox" checked={currentKeys.has(keyOf(record))}
+                            disabled={busy}
+                            onChange={event => toggleRecord(patient, record, event.target.checked)}/>
+                          <span>{record.label}</span>
+                        </label>)}
+                      </div>}
+                    </div>;
+                  })}
+                  {(recordSearches[patient] || "").trim() && !inventory.some(record =>
+                    (record.label + " " + record.table_name).toLowerCase().includes(recordSearches[patient].trim().toLowerCase())
+                  ) && <p className={styles.muted}>No matching records.</p>}
                 </div>
-              : <p className={styles.muted}>All {inventory.length} available metadata records will be included.</p>}
+              </>
+              : <p className={styles.muted}>All {inventory.length} metadata records will be included. Switch to individual selection to expand each data type.</p>}
           </div>}
         </div>;
       })}
