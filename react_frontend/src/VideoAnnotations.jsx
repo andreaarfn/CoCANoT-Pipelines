@@ -1,6 +1,14 @@
 import { useState } from "react";
 import "./VideoAnnotations.css";
 
+// Event IDs identify editable React rows only; they are never exported.
+export const hydrateAnnotationIds = rows => (Array.isArray(rows) ? rows : []).map(
+  (row, index) => ({
+    ...row,
+    id: row.id || (globalThis.crypto?.randomUUID?.() || `annotation-${Date.now()}-${index}`),
+  })
+);
+
 /**
  * Timeline annotations use seconds relative to the FINAL, trimmed and
  * concatenated video (not the individual original source clips).
