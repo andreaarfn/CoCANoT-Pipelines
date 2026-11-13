@@ -227,13 +227,8 @@ def _parse_sql(path: Path) -> dict[str, list[dict]]:
     return {name: rows for name, rows in tables.items() if rows}
 
 
-def list_source_tables(path: Path) -> list[dict]:
-    suffix = path.suffix.lower()
-    if suffix == ".sql":
-        tables = _parse_sql(path)
-        return [{"name": name, "row_count": len(rows)} for name, rows in sorted(tables.items())]
-    if suffix not in {".sqlite", ".sqlite3", ".db"}:
-        raise ValueError("Choose a SQL script or SQLite database.")
+def _list_sqlite_tables(path: Path) -> list[dict]:
+    """Discover SQLite tables without mutating the supplied database."""
     if path.stat().st_size > MAX_DATABASE_BYTES:
         raise ValueError("SQLite database exceeds the 250 MB safe preview limit.")
     connection = _connect_readonly(path)
@@ -252,14 +247,8 @@ def _connect_readonly(path: Path):
     return connection
 
 
-def read_source_table(path: Path, table_name: str) -> list[dict]:
-    suffix = path.suffix.lower()
-    if suffix == ".sql":
-        tables = _parse_sql(path)
-        if table_name not in tables:
-            raise ValueError("The selected SQL table is unavailable.")
-        return tables[table_name]
-    available = {item["name"] for item in list_source_tables(path)}
+def _read_sqlite_table(path: Path, table_name: str) -> list[dict]:
+    available = {item["name"] for item in _list_sqlite_tables(path)}
     if table_name not in available:
         raise ValueError("The selected SQLite table is unavailable.")
     connection = _connect_readonly(path)
@@ -279,3 +268,15 @@ def read_source_table(path: Path, table_name: str) -> list[dict]:
         return rows
     finally:
         connection.close()
+
+
+def list_source_tables(path: Path) -> list[dict]:
+    """Compatibility API used by the existing SQL source-selection dialog."""
+    from .readers import get_reader
+    return get_reader(path).list_tables(Path(path))
+
+
+def read_source_table(path: Path, table_name: str) -> list[dict]:
+    """Read selected source-table rows using its registered format reader."""
+    from .readers import get_reader
+    return get_reader(path).read(Path(path), table_name=table_name)["rows"]
