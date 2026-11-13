@@ -146,3 +146,9 @@
     align-items:stretch;
   }
 }
+
+.sqlTablePicker{margin-top:18px;padding:16px;border:1px solid #c8dce8;border-radius:10px;background:#f7fbfd;display:grid;gap:10px;max-width:520px}
+.sqlTablePicker strong{font-size:13px;color:#27455e}
+.sqlTablePicker p{font-size:12px;color:#62798d;margin:0;line-height:1.5}
+.sqlTablePicker select{min-height:40px;width:100%;max-width:100%;padding:8px 10px;border:1px solid #bfcede;border-radius:7px;color:#29445c;background:white}
+.sqlTablePicker button{justify-self:start}
