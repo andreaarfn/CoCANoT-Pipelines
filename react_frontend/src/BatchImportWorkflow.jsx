@@ -2578,7 +2578,7 @@ export default function BatchImportWorkflow({
 
                 className={styles.secondary}
 
-                onClick={chooseFile}
+                onClick={() => chooseFile()}
 
                 disabled={busy}
 
