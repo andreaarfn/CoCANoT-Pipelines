@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Scissors, ShieldCheck, Trash2, Video, GripVertical, RotateCcw, Play, Pause } from "lucide-react";
 import "./VideoDashboard.css";
-import DictionaryForm, { validateRecordAgainstRules } from "./DictionaryForm";
+import DictionaryForm, { pruneInactiveDictionaryFields, validateRecordAgainstRules } from "./DictionaryForm";
 
 const bridge = () => window.pywebview?.api;
 const id = () => (globalThis.crypto?.randomUUID?.() || String(Date.now()) + Math.random());
@@ -443,7 +443,10 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       if (!existingPatientId) throw new Error("Enter an existing CoCANoT patient ID or create a Clinical Assessment first.");
       if (!patientRecords?.clinical?.length) throw new Error("A Clinical Assessment is required before exporting video.");
       if (!videoRules) throw new Error("Load the MR Video metadata dictionary before exporting.");
-      const exportMetadata = {...linkedVideoMetadata, "Video ID": normalizeVideoId(linkedVideoMetadata["Video ID"])};
+      const exportMetadata = pruneInactiveDictionaryFields(videoRules, {
+        ...linkedVideoMetadata,
+        "Video ID": normalizeVideoId(linkedVideoMetadata["Video ID"]),
+      });
       const invalid = validateRecordAgainstRules(editableVideoRules, exportMetadata);
       setVideoFieldErrors(invalid);
       if (Object.keys(invalid).length) throw new Error("Complete the required Video metadata fields before exporting.");
@@ -569,8 +572,8 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
               values={linkedVideoMetadata}
               errors={videoFieldErrors}
               onChange={(name, value) => {
-                setVideoMetadata(current => ({...current, [name]: value}));
-                setVideoFieldErrors(current => ({...current, [name]: ""}));
+                setVideoMetadata(current => pruneInactiveDictionaryFields(videoRules, {...current, [name]: value}));
+                setVideoFieldErrors({});
                 setReviewed(false);
                 setExportRecord(null);
               }}
