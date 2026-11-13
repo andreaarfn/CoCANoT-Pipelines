@@ -16,12 +16,19 @@ export default function VideoAnnotations({
   const active = annotations.find(a => a.id === selectedId);
   const playable = Number.isFinite(length) && length > 0;
   const mark = a => { if (!disabled) onChange(annotations.map(x => x.id === a.id ? a : x)); };
-  function add() {
+  function addAt(time) {
     if (!playable || disabled) return;
-    const onset = Math.min(Math.max(0, position), length);
+    const onset = Math.min(Math.max(0, time), length);
     const item = {id: globalThis.crypto?.randomUUID?.() || String(Date.now()), onset, duration: Math.min(5, length - onset), description: ""};
     onChange([...annotations, item]);
     setSelectedId(item.id);
+  }
+  const add = () => addAt(position);
+  function seekTimeline(event) {
+    if (!playable || !onSeek) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return Math.max(0, Math.min(length,
+      ((event.clientX - bounds.left) / bounds.width) * length));
   }
   const current = annotations.filter(a => position >= Number(a.onset) && position <= Number(a.onset) + Number(a.duration));
   return <section className="video-annotation-panel" aria-label="Video annotations">
@@ -29,7 +36,10 @@ export default function VideoAnnotations({
       <div><h3>Annotations</h3><p>Mark events on the final video's timeline. Times reflect trimmed and combined clips.</p></div>
       <button type="button" onClick={add} disabled={!playable || disabled}>+ Add at playhead</button>
     </div>
-    <div className="video-annotation-timeline" aria-label="Annotated video timeline">
+    <div className="video-annotation-timeline" aria-label="Annotated video timeline"
+      title="Click to seek; double-click to add an annotation"
+      onClick={event => {if (event.target === event.currentTarget) onSeek?.(seekTimeline(event));}}
+      onDoubleClick={event => {if (event.target === event.currentTarget) addAt(seekTimeline(event));}}>
       {annotations.map(a => <button key={a.id} type="button"
         title={`${a.description || "Event"}: ${a.onset}–${Number(a.onset)+Number(a.duration)}s`}
         aria-label={`Jump to annotation ${a.description || "event"}`}
@@ -45,7 +55,7 @@ export default function VideoAnnotations({
     {showLabels && current.length > 0 && <p className="video-annotation-active" role="status">
       At {position.toFixed(2)}s: {current.map(a=>a.description || "Untitled event").join(" · ")}
     </p>}
-    {annotations.length === 0 && <p className="video-annotation-empty">No annotations yet. Move the playhead and select Add at playhead.</p>}
+    {annotations.length === 0 && <p className="video-annotation-empty">No annotations yet. Click the timeline to seek, then select Add at playhead, or double-click the timeline to add.</p>}
     {annotations.map((a,index)=><div className={`video-annotation-entry ${selectedId===a.id?"selected":""}`} key={a.id}>
       <div className="video-annotation-entry-head">
         <button type="button" onClick={()=>{setSelectedId(a.id);onSeek?.(Number(a.onset));}}>Annotation {index+1} · Jump to onset</button>
