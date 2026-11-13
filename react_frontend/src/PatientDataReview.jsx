@@ -57,6 +57,7 @@ import {
 
 
 import DocumentAttachmentRedactor from "./DocumentAttachmentRedactor";
+import VideoAnnotations from "./VideoAnnotations";
 import styles from "./PatientDataReview.module.css";
 
 
@@ -202,6 +203,23 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [metadataOpen, setMetadataOpen] = useState(true);
+  const videoRef = useRef(null);
+  const [annotations, setAnnotations] = useState(Array.isArray(record?.annotations) ? record.annotations : []);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [savingAnnotations, setSavingAnnotations] = useState(false);
+  const [annotationMessage, setAnnotationMessage] = useState("");
+  useEffect(() => {setAnnotations(Array.isArray(record?.annotations) ? record.annotations : []);}, [record?.record_id]);
+  async function saveAnnotations() {
+    if (!api()?.video_update_patient_annotations) {setAnnotationMessage("Video annotation API unavailable.");return;}
+    try {
+      setSavingAnnotations(true);setAnnotationMessage("");
+      const result = await api().video_update_patient_annotations(patientId, record.record_id, annotations);
+      setAnnotations(result.annotations || []);
+      setAnnotationMessage("Annotations saved to the local database and exported JSON sidecar.");
+    } catch (error) {setAnnotationMessage(String(error?.message || error));}
+    finally {setSavingAnnotations(false);}
+  }
   const [videoRules, setVideoRules] = useState(null);
   const [rulesError, setRulesError] = useState("");
   useEffect(() => {
@@ -334,6 +352,9 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
           playsInline
           preload="metadata"
           aria-label={`Playback of ${fileName}`}
+          ref={videoRef}
+          onLoadedMetadata={e => setVideoDuration(e.currentTarget.duration || 0)}
+          onTimeUpdate={e => setCurrentTime(e.currentTarget.currentTime)}
           onError={() => setError("Video playback failed. Check that this MP4 uses a supported codec.")}
         /> : <div className={styles.videoViewerEmpty}>
           {loading ? <><Film size={28}/>Loading video preview…</>
@@ -341,6 +362,10 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
             : <><AlertCircle size={28}/>The exported MP4 is missing from its saved location.</>}
         </div>}
       </div>
+      <VideoAnnotations annotations={annotations} onChange={next => {setAnnotations(next);setAnnotationMessage("Unsaved annotation edits.");}}
+        duration={videoDuration} position={currentTime}
+        onSeek={time => {if (videoRef.current) videoRef.current.currentTime = time;setCurrentTime(time);}}
+        disabled={!record?.exists} onSave={saveAnnotations} saving={savingAnnotations} message={annotationMessage}/>
       <div className={styles.videoLocation}>
         <span>File location</span>
         <code title={record?.path || ""}>{record?.path || "Not available"}</code>
