@@ -13,3 +13,5 @@
 .groupRecords .record{padding:9px 13px 9px 43px}
 .groupRecords .record:nth-child(even){background:#fafcfe}
 @media(max-width:650px){.groupToggle span{font-size:10px}.groupRecords .record{padding-left:18px}}
+
+.resultError{color:#a12d38!important;font-weight:650}
