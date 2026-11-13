@@ -1955,7 +1955,7 @@ export default function BatchImportWorkflow({
 
         <p>
 
-          Choose a CSV/XLSX file, review column mappings
+          Choose a CSV, Excel, SQL or SQLite file, review column mappings
 
           and row-level validation, make corrections,
 
