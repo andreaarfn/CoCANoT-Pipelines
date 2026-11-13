@@ -391,7 +391,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     try {
       if (!bridge()?.[action]) throw new Error("Desktop video bridge unavailable.");
       setBusy(true);setNotice("");
-      const result = await bridge()[action](action==="video_save_project" ? project : undefined);
+      const result = await bridge()[action](action==="video_save_project" ? {...project, annotations} : undefined);
       if (action==="video_load_project" && result?.clips) {
         const previews = await bridge().video_register_previews(result.clips.map(c => c.path));
         // Keep the same clip edits but rebind to the renamed MP4 by the
@@ -404,7 +404,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           unavailable: Boolean(previews?.[index]?.unavailable || !previews?.[index]?.preview_url),
         }));
         const loaded={...result,clips:result.clips.map(c=>({...c,id:c.id || id(),masks:(c.masks || []).map(m=>({...m,id:m.id || id()}))}))};
-        setProject(loaded);setSelected(loaded.clips[0]?.id||null);setCursor(0);setReviewed(false);
+        setProject(loaded);setAnnotations(Array.isArray(result.annotations) ? result.annotations : []);setSelected(loaded.clips[0]?.id||null);setCursor(0);setReviewed(false);
       }
       if (result?.error) throw new Error(result.error);
       if (result) setNotice(action==="video_save_project" ? "Project saved." : action==="video_load_project" ? "Project opened." : String(result?.path || "Complete."));
