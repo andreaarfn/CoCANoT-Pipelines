@@ -940,6 +940,19 @@ class CoCANoTAPI:
             )
         return connection
 
+    @staticmethod
+    def _normalize_video_id(value: Any) -> str:
+        """Canonicalize numeric Video IDs while preserving legacy custom IDs.
+
+        1, 01, 001, VID-1 and vid-001 all become VID-001.
+        Values above 999 retain all digits instead of being truncated.
+        """
+        raw = str(value or "").strip()
+        match = re.fullmatch(r"(?:VID-)?([0-9]+)", raw, re.IGNORECASE)
+        if match:
+            return f"VID-{int(match.group(1)):03d}"
+        return raw
+
     def _reserve_video_number(self, site_id: str, patient_id: str, output_dir: Path) -> int:
         """Reserve the next readable Video ID for this site/patient.
 
@@ -1115,7 +1128,7 @@ class CoCANoTAPI:
             else next(iter(linked_records), "")
         )
         new_linked_record_id = linked_records.get(new_linked_table, "")
-        new_id = str(clean.get("Video ID") or "").strip()
+        new_id = self._normalize_video_id(clean.get("Video ID"))
         if not new_id or not re.fullmatch(r"[A-Za-z0-9_-]+", new_id):
             raise ValueError("Video ID must contain only letters, numbers, underscores or hyphens.")
         clean["Video ID"] = new_id
@@ -1149,7 +1162,7 @@ class CoCANoTAPI:
                 (site_id, patient_id, record_id),
             ).fetchall()
         for other in others:
-            if str(json.loads(other["metadata_json"] or "{}").get("Video ID") or "") == new_id:
+            if self._normalize_video_id(json.loads(other["metadata_json"] or "{}").get("Video ID")) == new_id:
                 raise ValueError("This Video ID is already assigned to another video for this patient.")
 
         json_payload = json.dumps(clean, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
@@ -1348,7 +1361,7 @@ class CoCANoTAPI:
                 "The active MR Video dictionary must define Video ID as a "
                 "required, user-entered identifier (system_generated = FALSE)."
             )
-        video_id = str(metadata.get("Video ID") or "").strip()
+        video_id = self._normalize_video_id(metadata.get("Video ID"))
         if not video_id:
             raise ValueError("Enter a Video ID in Step 4 before exporting.")
         if not re.fullmatch(r"[A-Za-z0-9_-]+", video_id):
@@ -1384,7 +1397,7 @@ class CoCANoTAPI:
                 prior_metadata = {}
             prior_id = str(prior_metadata.get("Video ID") or "").strip()
             prior_filename = Path(previous["file_path"]).stem
-            if prior_id == video_id or prior_filename == filename.stem:
+            if self._normalize_video_id(prior_id) == video_id or prior_filename == filename.stem:
                 raise ValueError(
                     f"Video ID {video_id} is already registered for patient {patient_id}. "
                     "Enter another Video ID."
