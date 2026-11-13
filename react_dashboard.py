@@ -1403,14 +1403,30 @@ class CoCANoTAPI:
                     "Enter another Video ID."
                 )
         metadata = self._normalize_metadata_values(metadata, video_rules)
+        # The MR Video dictionary owns optional associations. Do not overwrite
+        # any of its identifier fields when the legacy single-link arguments
+        # are blank; several links may legitimately be populated together.
         metadata.update({
             "CoCANoT Patient ID": patient_id,
             "Video ID": video_id,
             "Clinical Assessment ID": clinical_id,
-            "Surgery ID": linked_record_id if linked_table == "Surgical" else "",
-            "Recording ID": linked_record_id if linked_table == "Electrophysiology" else "",
-            "Image ID": linked_record_id if linked_table == "Imaging" else "",
         })
+        if linked_table and linked_record_id:
+            # Compatibility with older callers: look up the related field via
+            # the active dictionary and the patient's source record metadata.
+            for rule in video_rules:
+                field = rule.get("field_name", "")
+                if field in {"CoCANoT Patient ID", "Video ID", "Clinical Assessment ID"}:
+                    continue
+                if rule.get("input_type") != "identifier":
+                    continue
+                for record in patient_records.get(allowed[linked_table], []):
+                    source = record.get("metadata") or {}
+                    if str(record.get("record_id") or "") == linked_record_id or str(source.get(field) or "") == linked_record_id:
+                        if field in source:
+                            metadata[field] = str(source.get(field) or linked_record_id)
+                            break
+
         validation = video_validator.validate_record("Video", metadata)
         failures = [
             result for result in validation["results"]
