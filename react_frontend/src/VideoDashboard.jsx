@@ -9,6 +9,11 @@ const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const seconds = value => Number(value || 0).toFixed(2);
 const initial = { schema_version: 1, clips: [] };
 const normalizePatientId = value => { const text = String(value ?? "").trim(); return /^[0-9]+$/.test(text) ? (text.replace(/^0+(?=\d)/, "") || "0").padStart(3, "0") : text; };
+const normalizeVideoId = value => {
+  const text = String(value ?? "").trim();
+  const match = /^(?:VID-)?(\d+)$/i.exec(text);
+  return match ? `VID-${(match[1].replace(/^0+(?=\d)/, "") || "0").padStart(3, "0")}` : text;
+};
 
 export default function VideoDashboard({ initialSession = null, onCreateClinicalAssessment, onSessionChange }) {
   const [project, setProject] = useState(initialSession?.project || initial);
@@ -447,15 +452,16 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       if (!existingPatientId) throw new Error("Enter an existing CoCANoT patient ID or create a Clinical Assessment first.");
       if (!patientRecords?.clinical?.length) throw new Error("A Clinical Assessment is required before exporting video.");
       if (!videoRules) throw new Error("Load the MR Video metadata dictionary before exporting.");
-      const invalid = validateRecordAgainstRules(editableVideoRules, linkedVideoMetadata);
+      const exportMetadata = {...linkedVideoMetadata, "Video ID": normalizeVideoId(linkedVideoMetadata["Video ID"])};
+      const invalid = validateRecordAgainstRules(editableVideoRules, exportMetadata);
       setVideoFieldErrors(invalid);
       if (Object.keys(invalid).length) throw new Error("Complete the required Video metadata fields before exporting.");
       if (linkedTable && (!linkedRecordId || !linkedRecords.some(r => String(r.record_id) === linkedRecordId))) {
         throw new Error("Choose a valid record from the selected category.");
       }
-      const result=await bridge().video_export_project(project, existingPatientId, linkedTable, linkedRecordId, outputFolder, linkedVideoMetadata);
+      const result=await bridge().video_export_project(project, existingPatientId, linkedTable, linkedRecordId, outputFolder, exportMetadata);
       if (result?.error) throw new Error(result.error);
-      if (result?.registered && result?.path) {setExportRecord(result);setNotice("");setReviewed(false);}
+      if (result?.registered && result?.path) {setExportRecord(result);setVideoMetadata(current => ({...current, "Video ID": result.video_id || exportMetadata["Video ID"]}));setNotice("");setReviewed(false);}
       else setNotice("Export cancelled.");
     }catch(e){setNotice(String(e.message || e));}finally{setBusy(false);}
   }
