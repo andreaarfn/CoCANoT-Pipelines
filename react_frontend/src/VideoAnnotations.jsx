@@ -2,6 +2,8 @@ import { useState } from "react";
 import "./VideoAnnotations.css";
 
 // Event IDs identify editable React rows only; they are never exported.
+const roundCentiseconds = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
 export const hydrateAnnotationIds = rows => (Array.isArray(rows) ? rows : []).map(
   (row, index) => ({
     ...row,
@@ -26,8 +28,8 @@ export default function VideoAnnotations({
   const mark = a => { if (!disabled) onChange(annotations.map(x => x.id === a.id ? a : x)); };
   function addAt(time) {
     if (!playable || disabled) return;
-    const onset = Math.min(Math.max(0, time), length);
-    const item = {id: globalThis.crypto?.randomUUID?.() || String(Date.now()), onset, duration: Math.min(5, length - onset), description: ""};
+    const onset = roundCentiseconds(Math.min(Math.max(0, time), length));
+    const item = {id: globalThis.crypto?.randomUUID?.() || String(Date.now()), onset, duration: roundCentiseconds(Math.max(0, Math.min(5, length - onset))), description: ""};
     onChange([...annotations, item]);
     setSelectedId(item.id);
   }
@@ -49,7 +51,7 @@ export default function VideoAnnotations({
       onClick={event => {if (event.target === event.currentTarget) onSeek?.(seekTimeline(event));}}
       onDoubleClick={event => {if (event.target === event.currentTarget) addAt(seekTimeline(event));}}>
       {annotations.map(a => <button key={a.id} type="button"
-        title={`${a.description || "Event"}: ${a.onset}–${Number(a.onset)+Number(a.duration)}s`}
+        title={`${a.description || "Event"}: ${Number(a.onset).toFixed(2)}–${(Number(a.onset)+Number(a.duration)).toFixed(2)}s`}
         aria-label={`Jump to annotation ${a.description || "event"}`}
         className="video-annotation-interval"
         style={{left:`${Math.max(0,Number(a.onset))/Math.max(length,1)*100}%`,width:`${Math.max(0.5,Number(a.duration)/Math.max(length,1)*100)}%`}}
@@ -71,9 +73,11 @@ export default function VideoAnnotations({
       </div>
       <div className="video-annotation-fields">
         <label>Onset (seconds)<input type="number" min="0" max={length} step="any" disabled={disabled}
-          value={a.onset} onChange={e=>mark({...a,onset:e.target.value === "" ? "" : Number(e.target.value)})}/></label>
+          value={a.onset} onChange={e=>mark({...a,onset:e.target.value === "" ? "" : Number(e.target.value)})}
+          onBlur={() => {if (a.onset !== "" && Number.isFinite(Number(a.onset))) mark({...a,onset:roundCentiseconds(a.onset)});}}/></label>
         <label>Duration (seconds)<input type="number" min="0" step="any" disabled={disabled}
-          value={a.duration} onChange={e=>mark({...a,duration:e.target.value === "" ? "" : Number(e.target.value)})}/></label>
+          value={a.duration} onChange={e=>mark({...a,duration:e.target.value === "" ? "" : Number(e.target.value)})}
+          onBlur={() => {if (a.duration !== "" && Number.isFinite(Number(a.duration))) mark({...a,duration:roundCentiseconds(a.duration)});}}/></label>
       </div>
       <label>Event description<input type="text" value={a.description} disabled={disabled}
         placeholder="e.g. Clinical seizure — no identifying information"
