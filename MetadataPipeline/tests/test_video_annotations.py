@@ -10,7 +10,8 @@ def test_annotations_are_sorted_and_final_video_relative():
         {"id": "a", "onset": 10, "duration": 5, "description": "Seizure"},
     ]
     result = validate_video_annotations(items, 60)
-    assert [item["id"] for item in result] == ["a", "b"]
+    assert [item["description"] for item in result] == ["Seizure", "Movement"]
+    assert all("id" not in item for item in result)
     assert result[0]["onset"] == 10.0
     assert result[1]["duration"] == 4.0
 
@@ -46,3 +47,12 @@ def test_reject_duplicate_event_ids():
 def test_reject_too_many_events():
     with pytest.raises(ValueError):
         validate_video_annotations([{}] * 2001, 10)
+
+
+def test_internal_ids_are_not_exported():
+    result = validate_video_annotations(
+        [{"id": "internal-key", "onset": 2, "duration": 3,
+          "description": "Observed event"}], 10
+    )
+    assert result == [{"onset": 2.0, "duration": 3.0,
+                       "description": "Observed event"}]
