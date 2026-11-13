@@ -1399,6 +1399,7 @@ export default function App() {
 
 
     page === "metadata-home" ||
+    page === "metadata-export" ||
 
 
 
@@ -1451,6 +1452,8 @@ export default function App() {
 
 
               ? "bulk"
+              : page === "metadata-export"
+                ? "export"
 
 
 
