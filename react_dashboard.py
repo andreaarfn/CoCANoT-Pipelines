@@ -10692,6 +10692,37 @@ class CoCANoTAPI:
             for row in rows
         ]
 
+    def metadata_document_list_staged(
+        self, patient_id: str, table_name: str, record_id: str,
+    ) -> list[dict[str, Any]]:
+        """Expose previously reviewed, not-yet-attached documents for recovery."""
+        site_id, patient_id, table_name, record_id = (
+            self._validated_metadata_document_identity(
+                patient_id, table_name, record_id
+            )
+        )
+        with self._metadata_document_connection() as connection:
+            rows = connection.execute(
+                """SELECT document_id, file_name, sanitized_path, document_types
+                   FROM metadata_documents
+                   WHERE site_id = ? AND patient_id = ?
+                     AND table_name = ? AND record_id = ?
+                     AND attachment_state = 'staged'
+                   ORDER BY created_at DESC""",
+                (site_id, patient_id, table_name, record_id),
+            ).fetchall()
+        root = self._metadata_document_root().resolve()
+        return [
+            {
+                "document_id": row["document_id"],
+                "file_name": row["file_name"],
+                "document_types": json.loads(row["document_types"] or "[]"),
+            }
+            for row in rows
+            if Path(row["sanitized_path"]).resolve().is_relative_to(root)
+            and Path(row["sanitized_path"]).is_file()
+        ]
+
     def metadata_document_get_preview(
         self,
         patient_id: str,
