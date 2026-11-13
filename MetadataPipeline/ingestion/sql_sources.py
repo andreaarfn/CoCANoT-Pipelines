@@ -173,7 +173,9 @@ def _parse_sql(path: Path) -> dict[str, list[dict]]:
     schemas = {}
     for statement in _split_statements(script):
         first = statement.split(None, 1)[0].upper()
-        if first in {"BEGIN", "COMMIT", "ROLLBACK", "END"} and len(statement.split()) == 1:
+        # Standard SQLite .dump files wrap inserts in BEGIN TRANSACTION.
+        # These wrappers are ignored; never executed.
+        if re.fullmatch(r"(?:BEGIN(?:\\s+TRANSACTION)?|COMMIT|END|ROLLBACK)", statement, re.I):
             continue
         if first == "CREATE":
             match = CREATE_PATTERN.fullmatch(statement)
