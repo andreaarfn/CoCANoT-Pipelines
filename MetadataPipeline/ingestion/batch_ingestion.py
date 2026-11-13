@@ -9,9 +9,9 @@ from .record_normalizer import normalize_record
 from .table_detector import detect_upload_table
 
 
-def validate_uploaded_metadata(dictionary, file_path):
-    """Load one upload, detect its table, and validate every row."""
-    loaded = load_metadata_file(file_path)
+def validate_uploaded_metadata(dictionary, file_path, source_table=None):
+    """Load one source through its reader, detect its table and validate rows."""
+    loaded = load_metadata_file(file_path, table_name=source_table)
 
     table_name = detect_upload_table(
         dictionary,
