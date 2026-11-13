@@ -202,3 +202,35 @@ def surgery_month_rule_is_available(
     return completed >= int(
         threshold
     )
+
+
+def prune_inapplicable_fields(record, rules, context=None):
+    """Remove values whose dictionary conditions no longer apply.
+
+    Dependencies are evaluated repeatedly so a parent becoming inapplicable
+    also clears any children, without hardcoding field names.
+    """
+    result = dict(record or {})
+    changed = True
+    while changed:
+        changed = False
+        for rule in rules:
+            name = str(rule.get("field_name") or "")
+            if not name or name not in result:
+                continue
+            parent = rule.get("required_if_field")
+            applies = (
+                (not parent or condition_matches(
+                    result,
+                    parent,
+                    rule.get("required_if_operator"),
+                    rule.get("required_if_value"),
+                ))
+                and surgery_month_rule_is_available(rule, context)
+            )
+            if applies and rule.get("repeat_for_each_field"):
+                applies = bool(applicable_repeat_selections(rule, result))
+            if not applies:
+                result.pop(name)
+                changed = True
+    return result
