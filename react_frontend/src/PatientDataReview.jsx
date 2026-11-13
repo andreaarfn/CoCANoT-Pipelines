@@ -57,7 +57,7 @@ import {
 
 
 import DocumentAttachmentRedactor from "./DocumentAttachmentRedactor";
-import VideoAnnotations from "./VideoAnnotations";
+import VideoAnnotations, { hydrateAnnotationIds } from "./VideoAnnotations";
 import styles from "./PatientDataReview.module.css";
 
 
@@ -204,18 +204,18 @@ function VideoPatientReview({ patientId, record, onBack, onEdit }) {
   const [error, setError] = useState("");
   const [metadataOpen, setMetadataOpen] = useState(true);
   const videoRef = useRef(null);
-  const [annotations, setAnnotations] = useState(Array.isArray(record?.annotations) ? record.annotations : []);
+  const [annotations, setAnnotations] = useState(() => hydrateAnnotationIds(record?.annotations));
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [savingAnnotations, setSavingAnnotations] = useState(false);
   const [annotationMessage, setAnnotationMessage] = useState("");
-  useEffect(() => {setAnnotations(Array.isArray(record?.annotations) ? record.annotations : []);}, [record?.record_id]);
+  useEffect(() => {setAnnotations(hydrateAnnotationIds(record?.annotations));}, [record?.record_id]);
   async function saveAnnotations() {
     if (!api()?.video_update_patient_annotations) {setAnnotationMessage("Video annotation API unavailable.");return;}
     try {
       setSavingAnnotations(true);setAnnotationMessage("");
       const result = await api().video_update_patient_annotations(patientId, record.record_id, annotations);
-      setAnnotations(result.annotations || []);
+      setAnnotations(hydrateAnnotationIds(result.annotations));
       setAnnotationMessage("Annotations saved to the local database and exported JSON sidecar.");
     } catch (error) {setAnnotationMessage(String(error?.message || error));}
     finally {setSavingAnnotations(false);}
