@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+from decimal import Decimal, ROUND_HALF_UP
 import shutil
 import subprocess
 from pathlib import Path
@@ -174,10 +175,17 @@ def validate_video_annotations(annotations: list, duration: float) -> list[dict]
         seen.add(identifier)
         # UI IDs are transient keys, not clinical annotation content. Never
         # persist them to the final sidecar or the local SQLite annotation JSON.
-        # Serialize whole-second timestamps as JSON integers. Firefox's JSON
-        # viewer otherwise displays a JS:2 conversion badge beside 2.0.
-        onset_value = int(onset) if onset.is_integer() else onset
-        duration_value = int(length) if length.is_integer() else length
+        # Store onset and duration to centisecond precision. The end time
+        # (onset + duration) therefore also has at most two decimal places.
+        # Whole-second values are JSON integers to avoid viewer JS badges.
+        rounded_onset = float(Decimal(str(onset)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        ))
+        rounded_length = float(Decimal(str(length)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        ))
+        onset_value = int(rounded_onset) if rounded_onset.is_integer() else rounded_onset
+        duration_value = int(rounded_length) if rounded_length.is_integer() else rounded_length
         clean.append({"onset": onset_value, "duration": duration_value,
                       "description": description})
     return sorted(clean, key=lambda row: row["onset"])
