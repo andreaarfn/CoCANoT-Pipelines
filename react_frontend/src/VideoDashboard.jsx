@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Scissors, ShieldCheck, Trash2, Video, GripVertical, RotateCcw, Play, Pause } from "lucide-react";
 import "./VideoDashboard.css";
 import DictionaryForm, { pruneInactiveDictionaryFields, validateRecordAgainstRules } from "./DictionaryForm";
-import VideoAnnotations from "./VideoAnnotations";
+import VideoAnnotations, { hydrateAnnotationIds } from "./VideoAnnotations";
 
 const bridge = () => window.pywebview?.api;
 const id = () => (globalThis.crypto?.randomUUID?.() || String(Date.now()) + Math.random());
@@ -36,7 +36,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const [outputFolder, setOutputFolder] = useState(initialSession?.outputFolder || "");
   const [videoRules, setVideoRules] = useState(null);
   const [videoMetadata, setVideoMetadata] = useState(initialSession?.videoMetadata || {});
-  const [annotations, setAnnotations] = useState(initialSession?.annotations || []);
+  const [annotations, setAnnotations] = useState(() => hydrateAnnotationIds(initialSession?.annotations));
   const [videoFieldErrors, setVideoFieldErrors] = useState({});
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const latestSession = useRef(null);
@@ -80,7 +80,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         setOutputFolder(saved.outputFolder || "");
         setVideoMetadata(saved.videoMetadata && typeof saved.videoMetadata === "object"
           ? saved.videoMetadata : {});
-        setAnnotations(Array.isArray(saved.annotations) ? saved.annotations : []);
+        setAnnotations(hydrateAnnotationIds(saved.annotations));
         setReviewed(false);
         if (missing) setNotice(
           `${missing} previously selected video file(s) could not be reopened. Check whether the source files were moved or deleted.`
@@ -404,7 +404,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           unavailable: Boolean(previews?.[index]?.unavailable || !previews?.[index]?.preview_url),
         }));
         const loaded={...result,clips:result.clips.map(c=>({...c,id:c.id || id(),masks:(c.masks || []).map(m=>({...m,id:m.id || id()}))}))};
-        setProject(loaded);setAnnotations(Array.isArray(result.annotations) ? result.annotations : []);setSelected(loaded.clips[0]?.id||null);setCursor(0);setReviewed(false);
+        setProject(loaded);setAnnotations(hydrateAnnotationIds(result.annotations));setSelected(loaded.clips[0]?.id||null);setCursor(0);setReviewed(false);
       }
       if (result?.error) throw new Error(result.error);
       if (result) setNotice(action==="video_save_project" ? "Project saved." : action==="video_load_project" ? "Project opened." : String(result?.path || "Complete."));
@@ -455,7 +455,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       if (Object.keys(invalid).length) throw new Error("Complete the required Video metadata fields before exporting.");
       const result=await bridge().video_export_project(project, existingPatientId, "", "", outputFolder, exportMetadata, annotations);
       if (result?.error) throw new Error(result.error);
-      if (result?.registered && result?.path) {setExportRecord(result);setAnnotations(result.annotations || []);setVideoMetadata(current => ({...current, "Video ID": result.video_id || exportMetadata["Video ID"]}));setNotice("");setReviewed(false);}
+      if (result?.registered && result?.path) {setExportRecord(result);setAnnotations(hydrateAnnotationIds(result.annotations));setVideoMetadata(current => ({...current, "Video ID": result.video_id || exportMetadata["Video ID"]}));setNotice("");setReviewed(false);}
       else setNotice("Export cancelled.");
     }catch(e){
       const message = String(e.message || e);
