@@ -2148,19 +2148,6 @@ export default function MetadataDashboard({
 
 
   function deleteSelected(tableName) {
-    if (tableName === "Video") {
-      const ids = selected.Video ?? [];
-      if (!ids.length) { setMessage("Select video records first."); return; }
-      if (!window.confirm("Remove selected video links from this patient? The MP4 files will remain on disk.")) return;
-      (async () => {
-        try {
-          for (const recordId of ids) await api()?.video_delete_patient_export?.(loadedPatientId,recordId);
-          await loadPatient(loadedPatientId);
-          setMessage("Video record link(s) removed. Files were not deleted.");
-        } catch(error) { setMessage(String(error)); }
-      })();
-      return;
-    }
 
 
 
@@ -2228,7 +2215,9 @@ export default function MetadataDashboard({
 
 
 
-      const result = await api()?.metadata_delete_records?.(
+      const result = tableName === "Video"
+        ? await api()?.video_delete_patient_exports?.(loadedPatientId, ids, Boolean(deleteProcessedFiles))
+        : await api()?.metadata_delete_records?.(
 
 
 
@@ -3568,7 +3557,7 @@ export default function MetadataDashboard({
 
 
 
-                  <strong>{(deleteRequest.tableName === "Imaging" || deleteRequest.tableName === "Electrophysiology") ? "Delete record only" : "Delete record"}</strong>
+                  <strong>{(deleteRequest.tableName === "Imaging" || deleteRequest.tableName === "Electrophysiology" || deleteRequest.tableName === "Video") ? "Delete record only" : "Delete record"}</strong>
 
 
 
@@ -3588,11 +3577,14 @@ export default function MetadataDashboard({
 
 
 
-                  deleteRequest.tableName === "Electrophysiology")
+                  deleteRequest.tableName === "Electrophysiology" ||
+                  deleteRequest.tableName === "Video")
 
 
 
-                  ? `Removes ${deleteRequest.ids.length === 1 ? "this record" : "these records"} from CoCANoT. Processed files will remain in the derivatives folder and final output folder selected when ${deleteRequest.ids.length === 1 ? "this record was" : "these records were"} processed.`
+                  ? deleteRequest.tableName === "Video"
+                    ? `Removes ${deleteRequest.ids.length === 1 ? "this video record" : "these video records"} from CoCANoT's local database. The exported MP4 and JSON sidecar remain in their original output folder.`
+                    : `Removes ${deleteRequest.ids.length === 1 ? "this record" : "these records"} from CoCANoT. Processed files will remain in the derivatives folder and final output folder selected when ${deleteRequest.ids.length === 1 ? "this record was" : "these records were"} processed.`
 
 
 
@@ -3612,7 +3604,8 @@ export default function MetadataDashboard({
 
 
 
-              deleteRequest.tableName === "Electrophysiology") && (
+              deleteRequest.tableName === "Electrophysiology" ||
+                  deleteRequest.tableName === "Video") && (
 
 
 
@@ -3644,7 +3637,9 @@ export default function MetadataDashboard({
 
 
 
-                  Removes {deleteRequest.ids.length === 1 ? "this record" : "these records"} from CoCANoT and deletes the linked processed files from the derivatives folder and final output folder used during processing. Raw source files are not deleted.
+                  {deleteRequest.tableName === "Video"
+                    ? "Removes the selected video records from CoCANoT and deletes only their exported MP4 and JSON sidecar from the originally selected final output folder. Original source videos are not deleted."
+                    : <>Removes {deleteRequest.ids.length === 1 ? "this record" : "these records"} from CoCANoT and deletes the linked processed files from the derivatives folder and final output folder used during processing. Raw source files are not deleted.</>}
 
 
 
@@ -3680,7 +3675,7 @@ export default function MetadataDashboard({
 
 
 
-                {(deleteRequest.tableName === "Imaging" || deleteRequest.tableName === "Electrophysiology") ? "Delete Record Only" : "Delete Record"}
+                {(deleteRequest.tableName === "Imaging" || deleteRequest.tableName === "Electrophysiology" || deleteRequest.tableName === "Video") ? "Delete Record Only" : "Delete Record"}
 
 
 
@@ -3692,7 +3687,8 @@ export default function MetadataDashboard({
 
 
 
-                deleteRequest.tableName === "Electrophysiology") && (
+                deleteRequest.tableName === "Electrophysiology" ||
+                  deleteRequest.tableName === "Video") && (
 
 
 
