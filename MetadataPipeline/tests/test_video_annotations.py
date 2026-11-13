@@ -28,6 +28,7 @@ def test_instant_events_can_have_zero_duration():
     {"onset": 8, "duration": 3, "description": "Beyond end"},
     {"onset": 1, "duration": -1, "description": "Invalid duration"},
     {"onset": "nan", "duration": 1, "description": "Not finite"},
+    {"onset": 1, "duration": "2.0JS:2", "description": "Invalid suffix"},
     {"onset": 1, "duration": 1, "description": ""},
 ])
 def test_reject_bad_or_incomplete_events(item):
@@ -56,3 +57,12 @@ def test_internal_ids_are_not_exported():
     )
     assert result == [{"onset": 2.0, "duration": 3.0,
                        "description": "Observed event"}]
+
+
+def test_valid_duration_is_serialized_as_plain_number():
+    result = validate_video_annotations(
+        [{"onset": 1.5438862, "duration": "2.0",
+          "description": "SEIZURE"}], 20
+    )
+    assert result[0]["duration"] == 2.0
+    assert isinstance(result[0]["duration"], float)
