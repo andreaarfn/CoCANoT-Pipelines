@@ -248,6 +248,17 @@ export default function AppShell({
                       >
                         Bulk Upload
                       </button>
+
+                      <button
+                        className={`${styles.subItem} ${
+                          page === "metadata-export"
+                            ? styles.subItemActive
+                            : ""
+                        }`}
+                        onClick={() => onNavigate("metadata-export")}
+                      >
+                        Export Metadata
+                      </button>
                     </>
                   )}
               </div>
