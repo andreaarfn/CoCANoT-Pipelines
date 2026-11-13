@@ -845,6 +845,7 @@ class CoCANoTAPI:
             "linkedRecordId": session.get("linkedRecordId", ""),
             "outputFolder": session.get("outputFolder", ""),
             "videoMetadata": rebound_session.get("videoMetadata", {}),
+            "annotations": session.get("annotations", []),
         }
         # Verify serializability before touching the existing settings file.
         json.dumps(saved, allow_nan=False)
