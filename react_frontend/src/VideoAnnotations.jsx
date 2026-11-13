@@ -71,9 +71,9 @@ export default function VideoAnnotations({
       </div>
       <div className="video-annotation-fields">
         <label>Onset (seconds)<input type="number" min="0" max={length} step="any" disabled={disabled}
-          value={a.onset} onChange={e=>mark({...a,onset:e.target.value})}/></label>
+          value={a.onset} onChange={e=>mark({...a,onset:e.target.value === "" ? "" : Number(e.target.value)})}/></label>
         <label>Duration (seconds)<input type="number" min="0" step="any" disabled={disabled}
-          value={a.duration} onChange={e=>mark({...a,duration:e.target.value})}/></label>
+          value={a.duration} onChange={e=>mark({...a,duration:e.target.value === "" ? "" : Number(e.target.value)})}/></label>
       </div>
       <label>Event description<input type="text" value={a.description} disabled={disabled}
         placeholder="e.g. Clinical seizure — no identifying information"
