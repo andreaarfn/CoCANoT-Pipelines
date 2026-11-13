@@ -14539,7 +14539,7 @@ class CoCANoTAPI:
             if not selected_table or selected_table not in pending["tables"]:
                 raise ValueError("Select one of the tables inspected from this file.")
             path = Path(pending["path"])
-            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != pending["sha256"]:
+            if not path.is_file() or self._file_hash(path) != pending["sha256"]:
                 raise ValueError("The SQL source file changed after inspection. Choose it again.")
             rows = read_source_table(path, selected_table)
             self._pending_sql_batch.pop(source_token, None)
@@ -14571,7 +14571,7 @@ class CoCANoTAPI:
                         "table_name": table_name,
                         "path": str(path),
                         "tables": [item["name"] for item in tables],
-                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                        "sha256": self._file_hash(path),
                     }
                 }
                 return {
@@ -14703,7 +14703,7 @@ class CoCANoTAPI:
             "uploaded_headers": uploaded_headers,
             # Stable fingerprint lets users distinguish two files with the same
             # name when inconsistent validation results are reported.
-            "file_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "file_sha256": self._file_hash(path),
             "dictionary_file": _active_dictionary_path().name,
             "dictionary_sha256": hashlib.sha256(
                 _active_dictionary_path().read_bytes()
