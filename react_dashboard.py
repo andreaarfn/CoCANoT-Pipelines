@@ -33,7 +33,7 @@ import nibabel as nib
 import numpy as np
 from matplotlib import image as mpl_image
 
-from VideoPipeline.processing import inspect_video, save_project, load_project, render_project
+from VideoPipeline.processing import inspect_video, save_project, load_project, render_project, validate_video_annotations
 
 _VIDEO_PREVIEWS: dict[str, Path] = {}
 
@@ -905,6 +905,8 @@ class CoCANoTAPI:
             )
         """)
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(patient_video_exports)")}
+        if "annotations_json" not in columns:
+            connection.execute("ALTER TABLE patient_video_exports ADD COLUMN annotations_json TEXT NOT NULL DEFAULT '[]'")
         if "linked_table" not in columns:
             connection.execute("ALTER TABLE patient_video_exports ADD COLUMN linked_table TEXT NOT NULL DEFAULT ''")
         if "linked_record_id" not in columns:
@@ -1024,7 +1026,7 @@ class CoCANoTAPI:
             return []
         with self._video_records_connection() as connection:
             rows = connection.execute(
-                """SELECT record_id, file_path, created_at, linked_table, linked_record_id, metadata_json FROM patient_video_exports
+                """SELECT record_id, file_path, created_at, linked_table, linked_record_id, metadata_json, annotations_json FROM patient_video_exports
                    WHERE site_id = ? AND patient_id = ? ORDER BY created_at DESC""",
                 (site_id, patient_id),
             ).fetchall()
@@ -1035,6 +1037,7 @@ class CoCANoTAPI:
         results = []
         for row in rows:
             metadata = json.loads(row["metadata_json"] or "{}")
+            annotations = json.loads(row["annotations_json"] or "[]")
             video_path = Path(row["file_path"])
             sidecar_path = video_path.with_suffix(".json")
             review_issues = []
@@ -1055,7 +1058,7 @@ class CoCANoTAPI:
             else:
                 try:
                     saved_sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
-                    if saved_sidecar != metadata:
+                    if saved_sidecar != {**metadata, "annotations": annotations} and not (not annotations and saved_sidecar == metadata):
                         review_issues.append("Linked JSON does not match the saved Video metadata.")
                 except (OSError, ValueError, UnicodeError) as exc:
                     review_issues.append(f"Linked JSON could not be read: {exc}")
@@ -1076,6 +1079,7 @@ class CoCANoTAPI:
                     if str(metadata.get(field) or "").strip()
                 },
                 "metadata": metadata,
+                "annotations": annotations,
                 "updated_at": row["created_at"],
                 "exists": video_path.is_file(),
                 "review_status": "Needs Review" if review_issues else "Up to date",
@@ -1097,7 +1101,7 @@ class CoCANoTAPI:
 
         with self._video_records_connection() as connection:
             row = connection.execute(
-                """SELECT file_path, metadata_json, linked_table, linked_record_id
+                """SELECT file_path, metadata_json, annotations_json, linked_table, linked_record_id
                    FROM patient_video_exports
                    WHERE site_id = ? AND patient_id = ? AND record_id = ?""",
                 (site_id, patient_id, record_id),
@@ -1175,7 +1179,7 @@ class CoCANoTAPI:
             if self._normalize_video_id(json.loads(other["metadata_json"] or "{}").get("Video ID")) == new_id:
                 raise ValueError("This Video ID is already assigned to another video for this patient.")
 
-        json_payload = json.dumps(clean, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+        json_payload = json.dumps({**clean, "annotations": json.loads(row["annotations_json"] or "[]")}, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
         # Preserve existing JSON until the database update succeeds; restore
         # the previous contents if anything fails after staging the new file.
         previous_json = original_json.read_bytes() if original_json.exists() else None
@@ -1238,7 +1242,7 @@ class CoCANoTAPI:
                     raise RuntimeError("Updated Video MP4 could not be found.")
                 if not proposed_json.is_file() or json.loads(
                     proposed_json.read_text(encoding="utf-8")
-                ) != clean:
+                ) != {**clean, "annotations": json.loads(row["annotations_json"] or "[]")}:
                     raise RuntimeError("Video JSON verification failed; changes were not saved.")
         except Exception:
             temp_json.unlink(missing_ok=True)
@@ -1444,7 +1448,8 @@ class CoCANoTAPI:
     def video_export_project(self, project: dict[str, Any], patient_id: str = "",
                              linked_table: str = "", linked_record_id: str = "",
                              output_folder: str = "",
-                             metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+                             metadata: dict[str, Any] | None = None,
+                             annotations: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         """Render locally and register a patient-linked MP4 only after successful export."""
         site_id = str(self.get_site_id() or "").strip().upper()
         patient_id = self._resolve_existing_patient_id(patient_id)
@@ -1566,6 +1571,8 @@ class CoCANoTAPI:
             raise ValueError("\n".join(
                 f"{item['field_name']}: {item['message']}" for item in failures[:20]
             ))
+        final_duration = sum(float(clip["end"]) - float(clip["start"]) for clip in project.get("clips", []))
+        clean_annotations = validate_video_annotations(annotations or [], final_duration)
         # Both exports use the same stem. Stage the JSON before making it
         # visible so failed writes never leave a truncated metadata sidecar.
         # The database remains the source for Patient Data Review.
@@ -1576,7 +1583,7 @@ class CoCANoTAPI:
             if not filename.is_file() or filename.stat().st_size == 0:
                 raise RuntimeError("Video renderer did not produce a valid MP4 file.")
             temporary_metadata.write_text(
-                json.dumps(metadata, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+                json.dumps({**metadata, "annotations": clean_annotations}, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
                 encoding="utf-8",
             )
             if metadata_filename.exists():
@@ -1587,17 +1594,18 @@ class CoCANoTAPI:
                 connection.execute(
                     """INSERT INTO patient_video_exports
                        (site_id, patient_id, record_id, file_path, created_at,
-                        linked_table, linked_record_id, metadata_json)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        linked_table, linked_record_id, metadata_json, annotations_json)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (site_id, patient_id, record_id, str(filename),
                      datetime.now(timezone.utc).isoformat(),
                      linked_table, linked_record_id,
-                     json.dumps(metadata, ensure_ascii=False, allow_nan=False)),
+                     json.dumps(metadata, ensure_ascii=False, allow_nan=False),
+                     json.dumps(clean_annotations, ensure_ascii=False, allow_nan=False)),
                 )
             return {**(result or {}), "path": str(filename),
                     "record_id": record_id, "patient_id": patient_id, "registered": True,
                     "linked_table": linked_table, "linked_record_id": linked_record_id,
-                    "metadata": metadata, "video_id": video_id,
+                    "metadata": metadata, "annotations": clean_annotations, "video_id": video_id,
                     "file_name": filename.name,
                     "metadata_path": str(metadata_filename),
                     "metadata_file_name": metadata_filename.name}
