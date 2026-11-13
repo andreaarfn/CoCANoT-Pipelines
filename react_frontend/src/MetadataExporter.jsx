@@ -151,8 +151,23 @@ export default function MetadataExporter({ onBack }) {
     finally { setBusy(false); }
   }
 
+  // Keep the export log approachable without changing backend statuses:
+  // newly exported and versioned files are both successful exports.
+  const exportOutcome = item => {
+    if (item.status === "exported" || item.status === "versioned") {
+      return { label: "Success", detail: "" };
+    }
+    if (item.status === "skipped") {
+      return { label: "Skipped", detail: "" };
+    }
+    return {
+      label: "Failed",
+      detail: String(item.message || `Unexpected export status: ${item.status || "unknown"}`),
+    };
+  };
   const totals = (result?.results || []).reduce((counts, item) => {
-    counts[item.status] = (counts[item.status] || 0) + 1;
+    const outcome = exportOutcome(item);
+    counts[outcome.label] = (counts[outcome.label] || 0) + 1;
     return counts;
   }, {});
 
@@ -277,13 +292,18 @@ export default function MetadataExporter({ onBack }) {
     {result && <section className={styles.panel} aria-live="polite">
       <h2><CheckCircle2 size={17}/> Export results</h2>
       <p className={styles.muted}>
-        {totals.exported || 0} new · {totals.skipped || 0} identical skipped · {totals.versioned || 0} versioned · {totals.failed || 0} failed
+        {totals.Success || 0} successful · {totals.Skipped || 0} skipped · {totals.Failed || 0} failed
       </p>
       <div className={styles.results}>
-        {result.results.map((item, index) => <div key={index} className={styles.result}>
-          <strong>{item.patient_id} · {item.table_name} · {item.record_id}</strong>
-          <span>{item.status}{item.message ? `: ${item.message}` : item.path ? ` · ${item.path}` : ""}</span>
-        </div>)}
+        {result.results.map((item, index) => {
+          const outcome = exportOutcome(item);
+          return <div key={index} className={styles.result}>
+            <strong>{item.patient_id} · {item.table_name} · {item.record_id}</strong>
+            <span className={outcome.label === "Failed" ? styles.resultError : undefined}>
+              {outcome.label}{outcome.detail ? `: ${outcome.detail}` : ""}
+            </span>
+          </div>;
+        })}
       </div>
     </section>}
   </main>;
