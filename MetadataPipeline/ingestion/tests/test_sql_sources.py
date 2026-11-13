@@ -15,7 +15,9 @@ class SqlMetadataImportTests(unittest.TestCase):
             sql = root / "clinical.sql"
             sql.write_text(
                 "CREATE TABLE clinical (\"CoCANoT Patient ID\" TEXT, \"Clinical Assessment ID\" TEXT);\n"
-                "INSERT INTO clinical VALUES ('001', 'CA-001'), ('002', 'CA-002');\n",
+                "BEGIN TRANSACTION;\n"
+                "INSERT INTO clinical VALUES ('001', 'CA-001'), ('002', 'CA-002');\n"
+                "COMMIT;\n",
                 encoding="utf-8",
             )
             self.assertEqual(list_source_tables(sql), [{"name": "clinical", "row_count": 2}])
