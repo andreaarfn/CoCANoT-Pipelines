@@ -11502,8 +11502,25 @@ class CoCANoTAPI:
                         results.append({"patient_id": patient, "table_name": table, "record_id": record_id, "status": "skipped", "path": str(relative)})
                         continue
                 if current.exists() and (not previous or str(relative) != previous.get("path")):
-                    # A file that was not recorded for this logical record is
-                    # never overwritten, even if another export looks similar.
+                    # Files predating the manifest can be recognized as
+                    # identical without duplicating their contents.
+                    if not previous and current.is_file() and hashlib.sha256(current.read_bytes()).hexdigest() == digest:
+                        records_manifest[identity_key] = {
+                            "patient_id": patient, "table_name": table,
+                            "record_id": record_id, "path": str(relative),
+                            "sha256": digest, "version": 1, "history": [],
+                        }
+                        manifest_temp = manifest_path.with_name("." + manifest_path.name + ".tmp")
+                        try:
+                            manifest_temp.write_text(
+                                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+                            )
+                            manifest_temp.replace(manifest_path)
+                        finally:
+                            manifest_temp.unlink(missing_ok=True)
+                        results.append({"patient_id": patient, "table_name": table, "record_id": record_id, "status": "skipped", "path": str(relative)})
+                        continue
+                    # A conflicting filename is never silently overwritten.
                     raise FileExistsError(f"Destination filename is already used: {relative}")
                 version = int(previous.get("version", 0)) + 1 if previous else 1
                 history = list(previous.get("history", [])) if previous else []
@@ -11525,6 +11542,8 @@ class CoCANoTAPI:
                         raise FileExistsError(f"Export history file already exists: {history_relative}")
                     history.append({"version": previous["version"], "path": str(history_relative), "sha256": old_hash})
                 current.parent.mkdir(parents=True, exist_ok=True)
+                if not current.parent.resolve().is_relative_to(destination):
+                    raise ValueError("Export target resolves outside the selected folder.")
                 temporary = current.with_name("." + current.name + "." + uuid.uuid4().hex + ".tmp")
                 moved_old = False
                 wrote_current = False
