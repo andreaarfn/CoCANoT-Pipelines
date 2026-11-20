@@ -765,27 +765,16 @@ export default function DictionaryForm({
   const [clearedHistory, setClearedHistory] = useState([]);
   const inapplicable = inapplicablePopulatedFields(rules, values, context);
 
-  function confirmAndClear(items, reason) {
-    if (!items.length) return false;
-    const detail = items.map(item =>
-      `• ${item.field_name}: ${formatClearedValue(item.value)}`
-    ).join("\\n");
-    if (!window.confirm(
-      `Clear these ${items.length} inapplicable field value(s)?\\n\\n` +
-      detail + "\\n\\nThe original values will remain visible in this " +
-      "editing session until you close it. No changes are saved until you save the record."
-    )) return false;
+  function clearInapplicable(items, reason) {
+    if (!items.length) return;
+    // The action button is the user's explicit confirmation. No browser
+    // dialogs or automatic loss of uploaded values.
     setClearedHistory(current => [
       ...current,
-      ...items.map(item => ({
-        ...item,
-        reason,
-      })),
+      ...items.map(item => ({ ...item, reason })),
     ]);
     items.forEach(item => onChange(item.field_name, null));
-    return true;
   }
-
 
   useEffect(() => {
     if (!initiallyValidate) {
@@ -852,17 +841,9 @@ export default function DictionaryForm({
       ...values,
       [rule.field_name]: nextValue,
     };
-    const madeInapplicable = inapplicablePopulatedFields(
-      rules, nextValues, context
-    ).filter(item =>
-      !inapplicable.some(before => before.field_name === item.field_name)
-    );
-    // Let the parent selection change even if the user opts to keep the
-    // child value; backend validation will still report that value as invalid.
+    // Parent changes can make child values inapplicable. Keep those values
+    // available for review until the user explicitly clears them below.
     onChange(rule.field_name, nextValue);
-    if (madeInapplicable.length) {
-      confirmAndClear(madeInapplicable, `Changed ${rule.field_name}`);
-    }
 
     const nextErrors = validateRecordAgainstRules(
       [rule],
@@ -878,40 +859,85 @@ export default function DictionaryForm({
   return (
     <div className={styles.form}>
       {inapplicable.length > 0 && (
-        <section role="status" style={{
-          border: "1px solid #d6a2a2",
-          borderRadius: 8,
-          padding: 12,
-          marginBottom: 14,
-        }}>
-          <strong>{inapplicable.length} populated field(s) do not apply</strong>
-          <p>These values conflict with the active metadata dictionary.
-            They have not been removed.</p>
-          <ul>
+        <section className={styles.conditionalPanel} aria-label="Conditional metadata review">
+          <div className={styles.conditionalHeader}>
+            <div>
+              <span className={styles.conditionalEyebrow}>CONDITIONAL FIELD REVIEW</span>
+              <h3>
+                {inapplicable.length === 1
+                  ? "1 value doesn't apply"
+                  : `${inapplicable.length} values don't apply`}
+              </h3>
+              <p>
+                These fields are inactive based on your current selections.
+                Review their values before saving.
+              </p>
+            </div>
+            <span className={styles.conditionalCount}>
+              {inapplicable.length} to review
+            </span>
+          </div>
+          <div className={styles.conditionalItems}>
             {inapplicable.map(item => (
-              <li key={item.field_name}>
-                <strong>{item.field_name}</strong>
-                {item.parent ? ` (depends on ${item.parent})` : ""}
-                {": "}{formatClearedValue(item.value)}
-              </li>
+              <div className={styles.conditionalItem} key={item.field_name}>
+                <div className={styles.conditionalItemDetails}>
+                  <strong>{item.label}</strong>
+                  {item.parent && (
+                    <span className={styles.conditionalDependency}>
+                      Depends on {item.parent}
+                    </span>
+                  )}
+                  <div className={styles.conditionalValue}>
+                    <span>Current value</span>
+                    <span className={styles.conditionalValueText}>
+                      {formatClearedValue(item.value)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={styles.conditionalClear}
+                  onClick={() => clearInapplicable(
+                    [item], "Cleared inapplicable value"
+                  )}
+                >
+                  Clear value
+                </button>
+              </div>
             ))}
-          </ul>
-          <button type="button" onClick={() =>
-            confirmAndClear(inapplicable, "Reviewed inapplicable values")
-          }>Review and clear inapplicable values</button>
+          </div>
+          <div className={styles.conditionalFooter}>
+            <span>The original upload is unchanged. Cleared values can be reviewed below.</span>
+            {inapplicable.length > 1 && (
+              <button
+                type="button"
+                className={styles.conditionalClearAll}
+                onClick={() => clearInapplicable(
+                  inapplicable, "Cleared inapplicable values"
+                )}
+              >
+                Clear all {inapplicable.length} values
+              </button>
+            )}
+          </div>
         </section>
       )}
       {clearedHistory.length > 0 && (
-        <details style={{ marginBottom: 12 }}>
-          <summary>{clearedHistory.length} cleared value(s) — view original values</summary>
+        <details className={styles.clearedHistory}>
+          <summary>
+            <span className={styles.clearedHistoryIcon}>✓</span>
+            {clearedHistory.length} value(s) cleared
+            <span className={styles.clearedHistoryHint}>View originals</span>
+          </summary>
           <ul>
             {clearedHistory.map((item, index) => (
               <li key={index}>
-                {item.field_name}: {formatClearedValue(item.value)}
-                {" — "}{item.reason}
+                <strong>{item.label || item.field_name}</strong>
+                <span>{formatClearedValue(item.value)}</span>
               </li>
             ))}
           </ul>
+          <p>Original values are available for this editing session. The source file is unchanged.</p>
         </details>
       )}
       {visibleRules.map(rule => {
