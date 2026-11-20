@@ -15,49 +15,47 @@ processing and stripped when loading or saving a project.
 - OpenCV for motion tracking and moving-mask export:
   `python -m pip install opencv-python`
 
-## Optional MediaPipe AI face first pass
+## YuNet-only AI face detection experiment
 
-The **Scan faces (AI)** button in Process Video runs a *local*, optional
-MediaPipe Tasks face detector. It does not upload patient footage or automatically
-approve censoring. MediaPipe detects faces on sampled frames; CoCANoT groups
-nearby consecutive detections into **unapproved suggestions**.
+This branch swaps the face detector to **OpenCV YuNet** while preserving the
+same user interface and frame-sampling schedule as the MediaPipe test branch.
+No MediaPipe dependency is needed for YuNet inference. All processing remains local.
 
-Install into the **same Python environment that runs CoCANoT**:
+Install OpenCV into the Python environment launching CoCANoT:
 
 ```bash
-python -m pip install mediapipe opencv-python
+~/Library/cocanot-pipelines/bin/python -m pip install "opencv-python>=4.8,<5"
 ```
 
-The model is a separate local file (download once on an approved machine):
+Download the official OpenCV Zoo YuNet model on an approved computer
+(before scanning patient videos):
 
 ```bash
 mkdir -p VideoPipeline/models
-curl -fL "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite" \
-  -o VideoPipeline/models/blaze_face_short_range.tflite
+curl -fL "https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" \
+  -o VideoPipeline/models/face_detection_yunet_2023mar.onnx
 ```
 
-Run from the repository root. Alternatively set
-`COCANOT_MEDIAPIPE_FACE_MODEL` to the absolute path of a locally approved
-`.tflite` model. **The scan does not download models or send footage to the
-internet.** The detector only recognizes faces, not text, identifiers, or all
-sensitive body regions. The short-range model is intended for relatively close
-faces. This optional dependency is not yet bundled in the installer.
+Alternatively set `COCANOT_YUNET_FACE_MODEL` to the full path of the local
+ONNX file. The scanner never uploads video or downloads the model itself.
+The OpenCV Zoo model has its own license; review the source repository before
+redistributing model weights in a packaged installer.
 
-1. Select a clip in **Process Video**, then click **Scan faces (AI)**.
-2. Use **View**, **Accept box**, or **Reject** for each suggestion.
-3. Accepted suggestions become ordinary editable solid censor boxes. The
-   position is initially a *sampled estimate*, not verified tracking; use
-   **Track censor interval** as needed and inspect the entire interval.
-4. Continue through the existing manual review, correcting any missed faces
-   or other identifiers. Pending AI suggestions block export.
-5. Re-scan a clip if it was trimmed or split: edits invalidate old suggestions.
+1. Import and trim a clip in **Process Video**.
+2. Click **Scan faces (AI)**. YuNet scans sampled frames using a score
+   threshold of 0.50 and pads proposed face boxes by 20%.
+3. Select **View box** to inspect an unapproved detection, then **Accept box**
+   or **Reject**. Accepted boxes can be moved, resized and tracked through the
+   existing manual OpenCV workflow.
+4. Review all footage (not just detections), then inspect the rendered export.
 
-Sampling scans up to 1,200 frames across a clip (normally 2 frames/second);
-a detection gap ends a suggestion, rather than silently bridging it. Even an
-accepted region may drift or leave frames uncovered. **The presence or absence
-of AI suggestions is never proof of de-identification.** Inspect the complete
-rendered output before sharing. Scores describe model detections, not the
-probability that a face is safely censored.
+**Comparison protocol:** Scan the *same trimmed clip* on both branches.
+The sample schedule is unchanged (approximately two frames/second, up to
+1,200 frames). Thresholds of 0.50 are *not calibrated across models*, and
+raw detector confidence scores should not be compared as equivalent
+probabilities. Count detected/missed face instances and record review time.
+Neither detector guarantees privacy coverage, especially for profile, tilted,
+occluded, or small faces. Pending suggestions block export.
 
 ## Working with censor boxes
 
