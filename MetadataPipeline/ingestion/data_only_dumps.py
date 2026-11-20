@@ -87,7 +87,7 @@ def parse_postgres_data_only(path):
             i += 1
             continue
         name = _table_name(match.group(1))
-        columns = [_identifier(x) for x in _split_items(match.group(2))]
+        columns = [_identifier(x) for x in _mysql_split(match.group(2), ",")]
         i += 1
         terminated = False
         while i < len(lines):
@@ -137,21 +137,92 @@ def _mysql_value(value):
     return "".join(out)
 
 
+def _mysql_split(text, separator=";"):
+    """Split MySQL dump tokens without stripping escaped characters.
+
+    Keep escape sequences intact for the MySQL value decoder. Reject executable
+    comments (which can contain commands that cannot be silently discarded).
+    """
+    parts, buffer = [], []
+    quote = None
+    depth = 0
+    i = 0
+    while i < len(text):
+        c = text[i]
+        n = text[i + 1] if i + 1 < len(text) else ""
+        if quote:
+            buffer.append(c)
+            if c == "\\" and n:
+                buffer.append(n)
+                i += 2
+                continue
+            if c == quote:
+                if n == quote:
+                    buffer.append(n)
+                    i += 2
+                    continue
+                quote = None
+        elif c in ("'", '"', "\x60"):
+            quote = c
+            buffer.append(c)
+        elif c == "-" and n == "-" and (i + 2 == len(text) or text[i + 2].isspace()):
+            i = text.find("\n", i)
+            if i == -1:
+                break
+            buffer.append(" ")
+            continue
+        elif c == "#":
+            i = text.find("\n", i)
+            if i == -1:
+                break
+            buffer.append(" ")
+            continue
+        elif c == "/" and n == "*":
+            if text[i:i + 3] == "/*!":
+                raise ValueError("Executable MySQL dump comments are not supported.")
+            end = text.find("*/", i + 2)
+            if end == -1:
+                raise ValueError("Unterminated MySQL comment.")
+            buffer.append(" ")
+            i = end + 2
+            continue
+        elif c == "(":
+            depth += 1
+            buffer.append(c)
+        elif c == ")":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("Unbalanced MySQL parentheses.")
+            buffer.append(c)
+        elif c == separator and depth == 0:
+            if "".join(buffer).strip():
+                parts.append("".join(buffer).strip())
+            buffer = []
+        else:
+            buffer.append(c)
+        i += 1
+    if quote or depth:
+        raise ValueError("Unterminated MySQL string or unbalanced tuple.")
+    if "".join(buffer).strip():
+        parts.append("".join(buffer).strip())
+    return parts
+
+
 def parse_mysql_data_only(path):
     """Read explicit-column INSERT statements from compact data-only mysqldump."""
     tables, schemas = {}, {}
-    for statement in _split_statements(_read(path)):
+    for statement in _mysql_split(_read(path)):
         match = MYSQL_INSERT.fullmatch(statement)
         if not match:
             raise ValueError("Unsupported MySQL data-only dump command: "
                              + statement[:100])
         name = _identifier(match.group(1))
         columns = [_identifier(x) for x in _split_items(match.group(2))]
-        for item in _split_items(match.group(3)):
+        for item in _mysql_split(match.group(3), ","):
             if not item.startswith("(") or not item.endswith(")"):
                 raise ValueError("Malformed MySQL INSERT VALUES tuple.")
             _append(tables, schemas, name, columns,
-                    [_mysql_value(x) for x in _split_items(item[1:-1])])
+                    [_mysql_value(x) for x in _mysql_split(item[1:-1], ",")])
     if not tables:
         raise ValueError("No MySQL INSERT records found.")
     return tables
