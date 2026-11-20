@@ -16,6 +16,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const [cursor, setCursor] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [maskMode, setMaskMode] = useState(false);
+  const [previewSuggestion, setPreviewSuggestion] = useState(null);
   const dragAnchor = useRef(null);
   const draggedClip = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -182,6 +183,15 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const masks = clip?.masks || [];
   const suggestions = clip?.ai_suggestions || [];
   const totalPending = project.clips.reduce((n,c)=>n+(c.ai_suggestions || []).length,0);
+  const activeSuggestion = previewSuggestion?.clipId === clip?.id
+    ? suggestions.find(s=>s.id===previewSuggestion.id) : null;
+  const suggestionPosition = activeSuggestion?.sampled_positions?.length
+    ? activeSuggestion.sampled_positions.reduce((best,p)=>
+        Math.abs(p.t-cursor) < Math.abs(best.t-cursor) ? p : best)
+    : activeSuggestion;
+  const suggestionSampleTime = suggestionPosition?.t;
+  const showSuggestion = Boolean(activeSuggestion && suggestionPosition
+    && cursor >= activeSuggestion.start - 0.001 && cursor <= activeSuggestion.end + 0.001);
   const trackedRegion = (mask, at) => {
     const points = mask.keyframes || [];
     if (!points.length) return mask;
@@ -244,6 +254,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       setNotice("");
       player.current?.pause();
       const clipId = clip.id;
+      setPreviewSuggestion(null);
       const result = await bridge().video_scan_faces(clip);
       if (!Array.isArray(result?.suggestions)) throw new Error("Face scan did not return suggestions.");
       const pending = result.suggestions.map(item=>({...item, id:id()}));
@@ -260,6 +271,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     }
   }
   function resolveSuggestion(suggestion, accept) {
+    if (previewSuggestion?.id === suggestion.id) setPreviewSuggestion(null);
     mutateClip(c=>({
       ...c,
       ai_suggestions:(c.ai_suggestions||[]).filter(s=>s.id!==suggestion.id),
@@ -280,6 +292,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     setReviewed(false);
   }
   function selectClip(c) {
+    setPreviewSuggestion(null);
     setSelected(c.id);
     setCursor(0);
     setMaskMode(false);
@@ -344,6 +357,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     if (!clip || cursor <= 0.05 || cursor >= duration - 0.05) return;
     player.current?.pause();
     setIsPlaying(false);
+    setPreviewSuggestion(null);
     const splitAt = clip.start + cursor;
     const left = {...clip, ai_suggestions:[], ai_scan_summary:null, end:splitAt, masks:clip.masks.map(m => ({...m, keyframes:[], tracked_until:null, end:Math.min(m.end,cursor)})).filter(m => m.end > m.start)};
     const right = {...clip, ai_suggestions:[], ai_scan_summary:null, id:id(), start:splitAt, masks:clip.masks.map(m => ({...m, keyframes:[], tracked_until:null, start:Math.max(0,m.start-cursor), end:m.end-cursor})).filter(m => m.end > m.start)};
@@ -360,6 +374,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     if (!Number.isFinite(next)) return;
     const start = side === "start" ? next : oldStart;
     const end = side === "end" ? next : oldEnd;
+    setPreviewSuggestion(null);
     const shift = start - oldStart;
     mutateClip(c => ({...c, start, end, ai_suggestions:[], ai_scan_summary:null,
       masks: c.masks.map(m => ({...m,
@@ -546,6 +561,10 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           onTimeUpdate={event=>{const video=event.currentTarget;const time=video.currentTime;if(time>=clip.end){video.pause();setCursor(duration);}else{setCursor(clamp(time-clip.start,0,duration));}}}/>
           <div className="video-mask-capture" aria-label="Draw censor region" onMouseDown={startMaskDrag} onMouseUp={finishMaskDrag} onClick={event=>{event.preventDefault();event.stopPropagation();}} style={{pointerEvents:maskMode?"auto":"none",cursor:maskMode?"crosshair":"default"}} />
           <div className="video-mask-overlay">
+            {showSuggestion && <div className="video-ai-preview-box" aria-label="AI suggested face location" style={{
+              left:`${suggestionPosition.x*100}%`,top:`${suggestionPosition.y*100}%`,
+              width:`${suggestionPosition.w*100}%`,height:`${suggestionPosition.h*100}%`
+            }}><span>AI suggestion · unapproved</span></div>}
             {masks.filter(m=>cursor>=m.start && cursor<=m.end).map(m=>{
               const at=trackedRegion(m,cursor);
               return <div key={m.id} className="video-mask" style={{left:`${at.x*100}%`,top:`${at.y*100}%`,width:`${at.w*100}%`,height:`${at.h*100}%`}}/>;
@@ -553,6 +572,11 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           </div>
         </> : <div className="video-empty">Import a recording to begin. Original footage is never modified.</div>}
       </div>
+      {activeSuggestion && <div className="video-ai-preview-banner" role="status">
+        <strong>Previewing AI suggestion</strong> · outlined box is not yet approved.
+        {Number.isFinite(suggestionSampleTime) && <> Nearest sampled position: {seconds(suggestionSampleTime)}s.</>}
+        <button type="button" onClick={()=>setPreviewSuggestion(null)}>Hide preview</button>
+      </div>}
       <div className="video-scrub"><button type="button" aria-label={isPlaying?"Pause video":"Play video"} onClick={toggleClipPlayback} disabled={!clip || busy || maskMode}>{isPlaying?<Pause size={16}/>:<Play size={16}/>} {isPlaying?"Pause":"Play"}</button><input type="range" aria-label="Video playhead, also used for Split at playhead" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip || busy} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
       
       
@@ -582,7 +606,14 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
               <small> · {s.sample_count} sampled detection(s) · lowest detector score {Math.round(s.confidence*100)}%</small>
             </div>
             <div className="video-ai-buttons">
-              <button type="button" onClick={()=>{setCursor(s.start);if(player.current)player.current.currentTime=clip.start+s.start;}}>View</button>
+              <button type="button" aria-pressed={activeSuggestion?.id===s.id} onClick={()=>{
+                player.current?.pause();
+                setMaskMode(false);
+                setPreviewSuggestion({clipId:clip.id,id:s.id});
+                const sampleTime = s.sampled_positions?.[0]?.t ?? (s.start+s.end)/2;
+                setCursor(sampleTime);
+                if(player.current)player.current.currentTime=clip.start+sampleTime;
+              }}>{activeSuggestion?.id===s.id?"Viewing":"View box"}</button>
               <button type="button" onClick={()=>resolveSuggestion(s,true)}>Accept box</button>
               <button type="button" onClick={()=>resolveSuggestion(s,false)}>Reject</button>
             </div>
