@@ -74,6 +74,38 @@ class RealExportParity(unittest.TestCase):
                         else:
                             self.assertNotEqual(results[laterality]["status"], "missing_required")
 
+    def test_more_dictionary_conditionals(self):
+        clinical = "Clinical"
+        payer = {
+            "CoCANoT Patient ID": "000125",
+            "Primary Payer": "Other",
+        }
+        results = self.validator.validate_record(clinical, payer)["results"]
+        statuses = {r["field_name"]: r["status"] for r in results}
+        other_payer = "Other Primary Payer (if applicable; free text)"
+        self.assertEqual(statuses[other_payer], "missing_required")
+        payer["Other Primary Payer (if applicable; free text)"] = "Synthetic payer"
+        statuses = {r["field_name"]: r["status"] for r in
+                    self.validator.validate_record(clinical, payer)["results"]}
+        self.assertEqual(statuses[other_payer], "manual_review")
+        payer["Primary Payer"] = "Private"
+        statuses = {r["field_name"]: r["status"] for r in
+                    self.validator.validate_record(clinical, payer)["results"]}
+        self.assertEqual(statuses[other_payer], "invalid")
+
+        surgical = "Surgical"
+        device = {
+            "CoCANoT Patient ID": "000125",
+            "Surgery ID": "SUR-003",
+            "Type(s) of surgery - device (multiselect)": ["Neurostimulation"],
+        }
+        statuses = {r["field_name"]: r["status"] for r in
+                    self.validator.validate_record(surgical, device)["results"]}
+        self.assertEqual(statuses["Type of device (if applicable; multiselect)"],
+                         "missing_required")
+        self.assertEqual(statuses["Therapeutic Stimulation Delivered"],
+                         "missing_required")
+
     def test_postgres_export_parity(self):
         self.check_export(DATA_DIR / "postgres.pg.sql")
 
