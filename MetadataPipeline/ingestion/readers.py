@@ -54,8 +54,8 @@ class SQLReader(MetadataReader):
     extensions = (".sql",)
 
     def list_tables(self, path: Path) -> list[dict]:
-        from .dialect_sources import parse_sql_export
-        tables = parse_sql_export(path)
+        from .sql_sources import _parse_sql
+        tables = _parse_sql(path)
         return [{"name": name, "row_count": len(rows)}
                 for name, rows in sorted(tables.items())]
 
