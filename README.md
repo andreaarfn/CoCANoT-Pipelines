@@ -92,7 +92,16 @@ CoCANoT's Clinical and Surgical Metadata Bulk Upload accepts tabular data from t
 
 **SQLite files.** CoCANoT opens SQLite databases in read-only mode, lists their available tables, and imports records only from a table the user selects. Other SQL database file formats (such as SQL Server `.bak`/`.mdf`, Oracle data files, or PostgreSQL database directories) are not accepted as SQLite files.
 
-**Compatibility with common SQL platforms:** Simple literal `INSERT` scripts from SQLite, PostgreSQL, or MySQL/MariaDB **may** parse if they use the supported subset. Full PostgreSQL, MySQL/MariaDB, SQL Server (T-SQL), and Oracle dumps are **not generally supported**; their vendor-specific syntax can cause rejection. There is no live connection to a hospital database or database server. Support for additional export dialects is a potential future enhancement, **not an existing feature**.
+**Compatibility with common SQL platforms (limited text-export support):** CoCANoT now includes a non-executing text adapter for selected vendor export conventions. These are **not complete database dialect interpreters**:
+
+| Platform | Accepted subset of `.sql` text exports | Not supported |
+|---|---|---|
+| PostgreSQL | Literal `INSERT ... VALUES` and tab-delimited `COPY ... FROM stdin` text blocks terminated by `\\.` | Custom/directory/tar archives, binary `COPY`, server-side `COPY`, full `pg_dump` DDL |
+| MySQL / MariaDB | Simple `INSERT` / extended multirow `INSERT`, simple `CREATE TABLE` with basic `ENGINE` / `CHARSET` suffixes, selected `SET` statements | Full `mysqldump` syntax, vendor routines/triggers, arbitrary executable comments or expressions |
+| Microsoft SQL Server | Simple `INSERT` statements, common `[dbo].[table]` identifiers, `N'...'` Unicode literals, `GO` batch separators and selected `SET` wrappers | Native `.bak` / `.mdf`, `BULK INSERT`, full T-SQL schema dumps |
+| Oracle | Simple `INSERT ... VALUES` and limited literal `INSERT ALL ... SELECT 1 FROM DUAL` text scripts | Data Pump `.dmp`, PL/SQL, full Oracle DDL, complex `INSERT ALL` expressions |
+
+Unsupported constructs are rejected rather than executed or silently imported. If a native export fails, **export the desired table to CSV or XLSX** instead. Database-server connections remain unsupported. These extensions are intended for common *data-only text exports*, not arbitrary backups or restoration scripts.
 
 **Safety and size limits:** SQL scripts are limited to **20 MB**; SQLite files to **250 MB**; extracted data to **10,000 rows** and **250 columns** per applicable import. The importer rejects unsupported SQL rather than running it. After a source/table is selected, records enter CoCANoT's existing preview, metadata normalization, dictionary-based validation, and import workflow. Review all imported records and confirm that uploaded files contain only data authorized for local processing.
 
