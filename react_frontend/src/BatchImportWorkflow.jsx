@@ -20,7 +20,7 @@ import {
 
 } from "lucide-react";
 
-import DictionaryForm from "./DictionaryForm";
+import DictionaryForm, { inapplicablePopulatedFields } from "./DictionaryForm";
 
 import styles from "./BatchImportWorkflow.module.css";
 
@@ -175,6 +175,7 @@ export default function BatchImportWorkflow({
   const [editingProblemField, setEditingProblemField] = useState("");
 
   const [validation, setValidation] = useState(null);
+  const [cleanupReview, setCleanupReview] = useState([]);
 
   const [result, setResult] = useState(null);
 
@@ -1128,6 +1129,50 @@ export default function BatchImportWorkflow({
   }
 
 
+
+  const cleanupCandidates = useMemo(() => rows.flatMap((row, index) =>
+    inapplicablePopulatedFields(rules, row?.metadata ?? {}, {
+      actual_surgery_date: row?.actual_surgery_date ?? "",
+    }).map(item => ({ ...item, index, row_number: row?.row_number ?? index + 1 }))
+  ), [rows, rules]);
+
+  async function clearBatchInapplicable() {
+    if (!cleanupCandidates.length) return;
+    const summary = cleanupCandidates.slice(0, 20).map(item =>
+      `Row ${item.row_number} — ${item.field_name}: ${JSON.stringify(item.value)}`
+    ).join("\n");
+    const suffix = cleanupCandidates.length > 20
+      ? `\n... and ${cleanupCandidates.length - 20} more field values.` : "";
+    if (!window.confirm(
+      `Clear ${cleanupCandidates.length} inapplicable field values across the staged rows?\n\n` +
+      summary + suffix +
+      "\n\nOnly staged values change. The uploaded file remains unchanged; you can inspect the original values below."
+    )) return;
+    try {
+      setBusy(true);
+      setError("");
+      const byIndex = new Map();
+      for (const item of cleanupCandidates) {
+        const existing = byIndex.get(item.index) ?? [];
+        existing.push(item.field_name);
+        byIndex.set(item.index, existing);
+      }
+      const nextRows = rows.map((row, index) => {
+        if (!byIndex.has(index)) return row;
+        const metadata = { ...(row.metadata ?? {}) };
+        byIndex.get(index).forEach(field => { metadata[field] = null; });
+        return { ...row, metadata, reviewed: true };
+      });
+      const checked = await validateRowsAgainstBackend(nextRows);
+      setRows(checked.rows ?? nextRows);
+      setCleanupReview(current => [...current, ...cleanupCandidates]);
+      setValidation(null);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function toggleInclude(index) {
     const selected = rows[index];
@@ -2593,6 +2638,30 @@ export default function BatchImportWorkflow({
             </div>
 
 
+
+            {cleanupCandidates.length > 0 && (
+              <div style={{ padding: "12px 0" }}>
+                <strong>{cleanupCandidates.length} inapplicable values found</strong>
+                <p>Review values that conflict with conditional dictionary rules.
+                  Nothing is cleared unless you confirm.</p>
+                <button type="button" className={styles.secondary}
+                  disabled={busy} onClick={clearBatchInapplicable}>
+                  Review and clear inapplicable values
+                </button>
+              </div>
+            )}
+            {cleanupReview.length > 0 && (
+              <details style={{ marginBottom: 12 }}>
+                <summary>View {cleanupReview.length} original value(s) cleared during this review</summary>
+                <ul>{cleanupReview.map((item, index) => (
+                  <li key={index}>
+                    Row {item.row_number} — {item.field_name}: {JSON.stringify(item.value)}
+                  </li>
+                ))}</ul>
+                <p>These original values are retained in this review session only;
+                  the uploaded file itself has not changed.</p>
+              </details>
+            )}
 
             <BatchTable
 
