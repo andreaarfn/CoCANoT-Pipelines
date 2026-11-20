@@ -206,3 +206,13 @@
 .video-metadata-fields{margin:20px 0 16px;padding-top:16px;border-top:1px solid #dbe6ef;min-width:0}
 .video-metadata-fields h2{margin:0 0 12px}
 .video-metadata-fields > div{max-width:100%}
+
+/* Optional local AI first-pass suggestions, always subject to researcher review. */
+.video-ai-panel{border:1px solid #bdd7e7;background:#f3f9fd;border-radius:12px;padding:12px;margin:16px 0}
+.video-ai-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
+.video-ai-panel p{margin:8px 0;color:#506d85;font-size:12px;line-height:1.5}
+.video-ai-suggestions{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow:auto;margin-top:12px}
+.video-ai-suggestion{background:white;border:1px solid #d5e4ed;border-radius:9px;padding:9px;font-size:12px}
+.video-ai-suggestion small{color:#62768a}
+.video-ai-buttons{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.video-ai-buttons button{padding:5px 8px}
