@@ -166,9 +166,14 @@ def _literal(value: str):
 
 
 def _parse_sql(path: Path) -> dict[str, list[dict]]:
+    """Legacy strict SQL parser used by the new dialect adapter."""
     if path.stat().st_size > MAX_SQL_BYTES:
         raise ValueError("SQL file exceeds the 20 MB safe preview limit.")
-    script = path.read_text(encoding="utf-8-sig")
+    return _parse_sql_text(path.read_text(encoding="utf-8-sig"))
+
+
+def _parse_sql_text(script: str) -> dict[str, list[dict]]:
+    """Parse supported literals and CREATE declarations; never execute SQL."""
     tables = {}
     schemas = {}
     for statement in _split_statements(script):
