@@ -1,0 +1,52 @@
+name: Rebuild SQL branch desktop frontend
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/sql-sqlite-metadata-bulk-import-20261113
+    paths:
+      - 'react_frontend/src/**'
+      - 'react_frontend/package.json'
+      - 'react_frontend/package-lock.json'
+      - '.github/workflows/rebuild-sql-frontend.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: react_frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: react_frontend
+        run: npm ci
+      - name: Build current React source
+        working-directory: react_frontend
+        run: npm run build
+      - name: Verify SQL import UI bundled
+        run: |
+          grep -R -q 'SQL or SQLite' react_frontend/dist/assets/*.js
+          grep -R -q 'Select table' react_frontend/dist/assets/*.js
+          if grep -R -q 'Choose a CSV/XLSX file' react_frontend/dist/assets/*.js; then
+            echo "Outdated import copy found in built assets."
+            exit 1
+          fi
+      - name: Commit built frontend into SQL feature branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -f react_frontend/dist
+          if git diff --cached --quiet; then
+            echo "Frontend bundle already up to date"
+          else
+            git commit -m "Rebuild React desktop UI with SQL and SQLite bulk-import support"
+            git push origin HEAD:feat/sql-sqlite-metadata-bulk-import-20261113
+          fi
