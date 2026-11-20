@@ -3,7 +3,6 @@
 All records are synthetic. Never use real patient identifiers or PHI in CI.
 """
 import json
-import sys
 import unittest
 from pathlib import Path
 
@@ -14,7 +13,7 @@ from MetadataPipeline.validation.validator import MetadataValidator
 
 ROOT = Path(__file__).resolve().parents[3]
 DICTIONARY = ROOT / "MetadataPipeline/dictionaries/CoCANoT_Metadata_Phase1.0.xlsx"
-DATA_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / ".test-sql-exports"
+DATA_DIR = ROOT / ".test-sql-exports"
 
 EXPECTED = {
     "clinical": [
