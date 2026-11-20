@@ -361,7 +361,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     const start = side === "start" ? next : oldStart;
     const end = side === "end" ? next : oldEnd;
     const shift = start - oldStart;
-    mutateClip(c => ({...c, start, end,
+    mutateClip(c => ({...c, start, end, ai_suggestions:[], ai_scan_summary:null,
       masks: c.masks.map(m => ({...m,
         start: clamp(m.start - shift, 0, end - start),
         end: clamp(m.end - shift, 0, end - start),
@@ -560,7 +560,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       <div className="video-edit-action"><strong>Audio</strong><label className="video-audio-option"><input type="checkbox" checked={Boolean(clip.remove_audio)} disabled={busy || clip.audio === false} onChange={e=>mutateClip(c=>({...c,remove_audio:e.target.checked}))}/><span>{clip.audio === false ? "No audio in this clip" : "Remove audio from this clip"}</span></label></div>
       <div className="video-edit-action"><strong>Split clip</strong><button disabled={!clip || busy || cursor <= .05 || cursor >= duration-.05} onClick={split}><Scissors size={16}/> Split at playhead</button></div>
       <div className="video-trim-editor">
-        <div className="video-trim-heading"><strong>Trim selected clip</strong><button title="Restore full clip length" disabled={busy || (clip.start===0 && clip.end===clip.duration)} onClick={()=>{const oldStart=clip.start;mutateClip(c=>({...c,start:0,end:c.duration,masks:c.masks.map(m=>({...m,start:m.start+oldStart,end:m.end+oldStart,keyframes:[],tracked_until:null,tracking_complete:null}))}));setCursor(0);if(player.current){player.current.pause();player.current.currentTime=0;}}}><RotateCcw size={14}/> Reset</button></div>
+        <div className="video-trim-heading"><strong>Trim selected clip</strong><button title="Restore full clip length" disabled={busy || (clip.start===0 && clip.end===clip.duration)} onClick={()=>{const oldStart=clip.start;mutateClip(c=>({...c,start:0,end:c.duration,ai_suggestions:[],ai_scan_summary:null,masks:c.masks.map(m=>({...m,start:m.start+oldStart,end:m.end+oldStart,keyframes:[],tracked_until:null,tracking_complete:null}))}));setCursor(0);if(player.current){player.current.pause();player.current.currentTime=0;}}}><RotateCcw size={14}/> Reset</button></div>
         
         <div className="video-trim-track" aria-hidden="true"><div style={{left:`${clip.start / (clip.duration||1)*100}%`,right:`${(1-clip.end/(clip.duration||1))*100}%`}} /></div>
         <label>Start <strong>{seconds(clip.start)}s</strong><input aria-label="Trim clip start" type="range" min="0" max={Math.max(0,clip.end-.1)} step=".05" value={clip.start} disabled={busy} onChange={e=>trimClip("start",e.target.value)}/></label>
