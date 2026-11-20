@@ -16452,6 +16452,18 @@ class QuietHandler(
     SimpleHTTPRequestHandler
 ):
 
+    def end_headers(self) -> None:
+        # The embedded WebKit view can retain an earlier React bundle even after
+        # the local checkout has been updated. Never cache the entrypoint or
+        # compiled frontend files served by the desktop's loopback server.
+        from urllib.parse import urlsplit
+        route = urlsplit(self.path).path
+        if route == "/" or route == "/index.html" or route.startswith("/assets/"):
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+        super().end_headers()
+
     def do_GET(self) -> None:
         from urllib.parse import urlsplit
         prefix = "/__cocanot_video_preview/"
@@ -16557,6 +16569,9 @@ def main() -> None:
     api = CoCANoTAPI()
 
     server = start_frontend_server()
+    print(f"[CoCANoT] Application: {Path(__file__).resolve()}", flush=True)
+    print(f"[CoCANoT] React frontend: {FRONTEND_DIST.resolve()}", flush=True)
+    print(f"[CoCANoT] Frontend entry: {(FRONTEND_DIST / 'index.html').resolve()}", flush=True)
     port = server.server_address[1]
 
     window = webview.create_window(
