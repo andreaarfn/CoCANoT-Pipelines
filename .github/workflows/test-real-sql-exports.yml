@@ -30,11 +30,11 @@ jobs:
             sleep 2
           done
           for i in $(seq 1 90); do
-            docker exec cocanot-mysql mysqladmin ping -uroot -ptest_only --silent >/dev/null 2>&1 && break
+            docker exec cocanot-mysql mysql -uroot -ptest_only -e 'SELECT 1' >/dev/null 2>&1 && break
             sleep 2
           done
           docker exec cocanot-postgres pg_isready -U postgres -d cocanot_test
-          docker exec cocanot-mysql mysqladmin ping -uroot -ptest_only --silent
+          docker exec cocanot-mysql mysql -uroot -ptest_only -e 'SELECT 1'
 
       - name: Seed synthetic clinical and surgical source tables
         run: |
