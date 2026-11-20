@@ -53,6 +53,32 @@ class SqlMetadataImportTests(unittest.TestCase):
                 "Patient's note; no execute",
             )
 
+    def test_sql_discovery_and_read_use_same_strict_parser(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "clinical.sql"
+            path.write_text(
+                "INSERT INTO clinical (id, visit) VALUES ('001', 'V1');",
+                encoding="utf-8",
+            )
+            self.assertEqual(list_source_tables(path), [{"name": "clinical", "row_count": 1}])
+            self.assertEqual(read_source_table(path, "clinical"), [{"id": "001", "visit": "V1"}])
+
+    def test_unverified_vendor_dump_syntax_is_rejected_at_preview(self):
+        scripts = (
+            "COPY clinical (id) FROM stdin;\\n001\\n\\\\.\\n",
+            "SET NAMES utf8mb4;\\nINSERT INTO clinical (id) VALUES ('001');",
+            "SET IDENTITY_INSERT [dbo].[clinical] ON;\\n"
+            "INSERT INTO [dbo].[clinical] (id) VALUES ('001');",
+            "INSERT ALL INTO clinical (id) VALUES ('001') SELECT 1 FROM DUAL;",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "vendor.sql"
+            for script in scripts:
+                with self.subTest(script=script):
+                    path.write_text(script, encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        list_source_tables(path)
+
     def test_sqlite_reads_without_mutating_database(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "clinical.sqlite3"
