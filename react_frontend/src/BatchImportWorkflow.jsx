@@ -1812,33 +1812,58 @@ export default function BatchImportWorkflow({
     setValidation(null);
   }
 
-  function useUploadedClinical(rowIndex) {
-    setRows(current =>
-      current.map((row, index) => {
-        if (index !== rowIndex) return row;
-
-        const unchanged =
-          row?.difference_status === "Duplicate";
-
-        return {
-          ...row,
-          metadata: {
-            ...editingValues,
-          },
-          include:
-            !unchanged &&
-            row?.import_allowed !== false,
-          reviewed: true,
-          clinical_resolution:
-            unchanged ? "existing" : "uploaded",
-        };
-      })
-    );
-
-    setEditingIndex(null);
-    setEditingProblemField("");
-    setEditingValues({});
-    setValidation(null);
+  async function useUploadedClinical(rowIndex) {
+    // Keep the Clinical review choice, but persist the backend's validated
+    // problems/status/difference instead of the stale pre-edit row.
+    if (rowIndex === null || !rows[rowIndex]) return;
+    try {
+      setBusy(true);
+      setError("");
+      const nextRows = rows.map((row, index) =>
+        index === rowIndex
+          ? {
+              ...row,
+              metadata: { ...editingValues },
+              reviewed: true,
+              clinical_resolution: "uploaded",
+              // A deliberate "Use Uploaded Assessment" should reselect a
+              // previously invalid row only if it passes revalidation.
+              include: !scopedPatientId ||
+                rowPatientId({
+                  ...row,
+                  metadata: { ...editingValues },
+                }) === normalizedPatientId(scopedPatientId),
+            }
+          : row
+      );
+      const checked = await validateRowsAgainstBackend(nextRows);
+      if (!Array.isArray(checked?.rows) ||
+          checked.rows.length !== nextRows.length) {
+        throw new Error("Could not verify the updated Clinical row.");
+      }
+      const updatedRows = checked.rows.map((row, index) =>
+        index === rowIndex
+          ? {
+              ...row,
+              clinical_resolution:
+                row.difference_status === "Duplicate" ? "existing" : "uploaded",
+              // Do not include records still carrying validation problems.
+              include: rowCanImport(row) && Boolean(row.include),
+            }
+          : row
+      );
+      setRows(updatedRows);
+      setEditingIndex(null);
+      setEditingProblemField("");
+      setEditingValues({});
+      setLiveEditProblems(null);
+      setValidation(null);
+    } catch (err) {
+      setError(String(err));
+      // Keep the editor open and its draft intact if save validation fails.
+    } finally {
+      setBusy(false);
+    }
   }
 
   const clinicalReviewComplete = useMemo(() => {
@@ -3273,7 +3298,8 @@ export default function BatchImportWorkflow({
                   } else {
                     saveRowEdit();
                   }
-                }}
+                }                disabled={busy}
+              }
               >
                 {tableName === "Clinical"
                   ? "Use Uploaded Assessment"
