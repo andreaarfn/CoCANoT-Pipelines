@@ -1,0 +1,104 @@
+name: Real SQL database export integration
+
+on:
+  push:
+    branches: [feat/sql-sqlite-metadata-bulk-import-20261113]
+    paths:
+      - 'MetadataPipeline/ingestion/**'
+      - 'MetadataPipeline/validation/**'
+      - '.github/workflows/test-real-sql-exports.yml'
+  workflow_dispatch:
+
+jobs:
+  official-database-exports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install metadata test dependencies
+        run: python -m pip install openpyxl pandas
+
+      - name: Start official PostgreSQL and MySQL containers
+        run: |
+          docker run -d --name cocanot-postgres -e POSTGRES_PASSWORD=test_only -e POSTGRES_DB=cocanot_test postgres:16
+          docker run -d --name cocanot-mysql -e MYSQL_ROOT_PASSWORD=test_only -e MYSQL_DATABASE=cocanot_test mysql:8.0
+          for i in $(seq 1 90); do
+            docker exec cocanot-postgres pg_isready -U postgres -d cocanot_test >/dev/null 2>&1 && break
+            sleep 2
+          done
+          for i in $(seq 1 90); do
+            docker exec cocanot-mysql mysqladmin ping -uroot -ptest_only --silent >/dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec cocanot-postgres pg_isready -U postgres -d cocanot_test
+          docker exec cocanot-mysql mysqladmin ping -uroot -ptest_only --silent
+
+      - name: Seed synthetic clinical and surgical source tables
+        run: |
+          cat > /tmp/cocanot-postgres-seed.sql <<'SQL'
+          CREATE TABLE clinical (
+            "CoCANoT Patient ID" text, "Race" text,
+            "Other Race (if applicable; free text)" text,
+            "Etiology (multiselect)" text,
+            "Structural Etiology (multiselect)" text);
+          INSERT INTO clinical VALUES
+            ('000123', 'Other', E'Synthetic label, O''Brien; \n日本語', 'Structural', 'Stroke'),
+            ('000124', 'White', NULL, 'Unknown', NULL);
+          CREATE TABLE surgical (
+            "CoCANoT Patient ID" text, "Surgery ID" text,
+            "Location of resection or device placement (multiselect)" text,
+            "Laterality of resection or device placement (multiselect)" text);
+          INSERT INTO surgical VALUES
+            ('000123', 'SUR-001', 'Frontal', 'Left'),
+            ('000124', 'SUR-002', 'N/A', NULL);
+          SQL
+          docker exec -i cocanot-postgres psql -v ON_ERROR_STOP=1 -U postgres -d cocanot_test < /tmp/cocanot-postgres-seed.sql
+
+          cat > /tmp/cocanot-mysql-seed.sql <<'SQL'
+          CREATE TABLE clinical (
+            `CoCANoT Patient ID` varchar(30), `Race` text,
+            `Other Race (if applicable; free text)` text,
+            `Etiology (multiselect)` text,
+            `Structural Etiology (multiselect)` text
+          ) CHARACTER SET utf8mb4;
+          INSERT INTO clinical VALUES
+            ('000123', 'Other', 'Synthetic label, O''Brien; \n日本語', 'Structural', 'Stroke'),
+            ('000124', 'White', NULL, 'Unknown', NULL);
+          CREATE TABLE surgical (
+            `CoCANoT Patient ID` varchar(30), `Surgery ID` varchar(30),
+            `Location of resection or device placement (multiselect)` text,
+            `Laterality of resection or device placement (multiselect)` text
+          ) CHARACTER SET utf8mb4;
+          INSERT INTO surgical VALUES
+            ('000123', 'SUR-001', 'Frontal', 'Left'),
+            ('000124', 'SUR-002', 'N/A', NULL);
+          SQL
+          docker exec -i cocanot-mysql mysql -uroot -ptest_only --default-character-set=utf8mb4 cocanot_test < /tmp/cocanot-mysql-seed.sql
+
+      - name: Export actual pg_dump and mysqldump data-only text
+        run: |
+          mkdir -p .test-sql-exports
+          docker exec cocanot-postgres pg_dump -U postgres -d cocanot_test --data-only --format=plain --no-owner --no-privileges > .test-sql-exports/postgres.pg.sql
+          docker exec cocanot-mysql mysqldump -uroot -ptest_only --default-character-set=utf8mb4 --no-create-info --complete-insert --skip-triggers --skip-add-locks --skip-disable-keys --skip-set-charset --skip-comments --compact cocanot_test clinical surgical > .test-sql-exports/mysql.mysql.sql
+          test -s .test-sql-exports/postgres.pg.sql
+          test -s .test-sql-exports/mysql.mysql.sql
+          echo "Source database exports generated; no test records contain actual patient data."
+
+      - name: Test every exported value and dictionary conditional rules
+        run: |
+          python -m compileall -q MetadataPipeline/ingestion
+          python -m unittest MetadataPipeline.ingestion.tests.real_export_parity -v
+
+      - name: Run existing unit regressions
+        run: python -m unittest discover -s MetadataPipeline/ingestion/tests -p 'test_*.py' -v
+
+      - name: Publish test summary
+        if: always()
+        run: |
+          echo "### Real SQL export integration" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tests use synthetic records and the repository's MR Clinical / MR Surgical dictionary." >> "$GITHUB_STEP_SUMMARY"
+          echo "Exports generated by PostgreSQL 16 pg_dump and MySQL 8.0 mysqldump." >> "$GITHUB_STEP_SUMMARY"
+          echo "No clinical PHI is used or uploaded." >> "$GITHUB_STEP_SUMMARY"
