@@ -155,6 +155,11 @@ def parse_sql_export(path: Path) -> dict[str, list[dict]]:
         raise ValueError("SQL file exceeds the 20 MB safe preview limit.")
     script = path.read_text(encoding="utf-8-sig")
     script = _expand_copy(script)
+    # SQL Server SET statements and GO batches commonly omit semicolons.
+    script = re.sub(
+        r"(?im)^(\s*SET\s+(?:ANSI_NULLS|QUOTED_IDENTIFIER|ANSI_PADDING|NOCOUNT)\s+(?:ON|OFF))\s*$",
+        r"\1;", script,
+    )
     # GO and Oracle slash are standalone batch delimiters, not SQL.
     script = re.sub(r"(?im)^\s*(?:GO|/)\s*$", "", script)
     # Explicitly reject unsupported COPY forms; no silent partial imports.
