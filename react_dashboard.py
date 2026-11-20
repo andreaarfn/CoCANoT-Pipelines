@@ -1314,6 +1314,9 @@ class CoCANoTAPI:
                              output_folder: str = "",
                              metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         """Render locally and register a patient-linked MP4 only after successful export."""
+        if any(clip.get("ai_suggestions") for clip in project.get("clips", [])):
+            raise ValueError("Review all AI face suggestions before exporting video.")
+
         site_id = str(self.get_site_id() or "").strip().upper()
         patient_id = self._resolve_existing_patient_id(patient_id)
         if not site_id:
