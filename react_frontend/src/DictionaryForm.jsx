@@ -338,6 +338,33 @@ export function validateRecordAgainstRules(
   return errors;
 }
 
+// Shared, dictionary-driven detection. Never discard uploaded values here.
+export function inapplicablePopulatedFields(rules, values, context = {}) {
+  return (rules ?? []).filter(rule => {
+    const name = rule?.field_name;
+    if (!name || rule.system_generated) return false;
+    const value = values?.[name];
+    const hasValue = !isEmptyValue(value) &&
+      !(value && typeof value === "object" && !Array.isArray(value) &&
+        Object.keys(value).length === 0);
+    if (!hasValue) return false;
+    if (rule.repeat_for_each_field) {
+      return repeatSelections(rule, values).length === 0;
+    }
+    return !fieldIsVisible(rule, values, context);
+  }).map(rule => ({
+    field_name: rule.field_name,
+    label: rule.ui_prompt || rule.field_name,
+    value: values[rule.field_name],
+    parent: rule.required_if_field || rule.repeat_for_each_field || "",
+  }));
+}
+
+function formatClearedValue(value) {
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return String(value ?? "");
+}
+
 function HelpPopover({ text }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -734,6 +761,31 @@ export default function DictionaryForm({
   prioritizeSurgeryMilestones = false,
 }) {
   const [touched, setTouched] = useState({});
+  // Only a review-session copy: original import files are never changed.
+  const [clearedHistory, setClearedHistory] = useState([]);
+  const inapplicable = inapplicablePopulatedFields(rules, values, context);
+
+  function confirmAndClear(items, reason) {
+    if (!items.length) return false;
+    const detail = items.map(item =>
+      `• ${item.field_name}: ${formatClearedValue(item.value)}`
+    ).join("\\n");
+    if (!window.confirm(
+      `Clear these ${items.length} inapplicable field value(s)?\\n\\n` +
+      detail + "\\n\\nThe original values will remain visible in this " +
+      "editing session until you close it. No changes are saved until you save the record."
+    )) return false;
+    setClearedHistory(current => [
+      ...current,
+      ...items.map(item => ({
+        ...item,
+        reason,
+      })),
+    ]);
+    items.forEach(item => onChange(item.field_name, null));
+    return true;
+  }
+
 
   useEffect(() => {
     if (!initiallyValidate) {
@@ -796,12 +848,21 @@ export default function DictionaryForm({
   }
 
   function handleChange(rule, nextValue) {
-    onChange(rule.field_name, nextValue);
-
     const nextValues = {
       ...values,
       [rule.field_name]: nextValue,
     };
+    const madeInapplicable = inapplicablePopulatedFields(
+      rules, nextValues, context
+    ).filter(item =>
+      !inapplicable.some(before => before.field_name === item.field_name)
+    );
+    // Let the parent selection change even if the user opts to keep the
+    // child value; backend validation will still report that value as invalid.
+    onChange(rule.field_name, nextValue);
+    if (madeInapplicable.length) {
+      confirmAndClear(madeInapplicable, `Changed ${rule.field_name}`);
+    }
 
     const nextErrors = validateRecordAgainstRules(
       [rule],
@@ -816,6 +877,43 @@ export default function DictionaryForm({
 
   return (
     <div className={styles.form}>
+      {inapplicable.length > 0 && (
+        <section role="status" style={{
+          border: "1px solid #d6a2a2",
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 14,
+        }}>
+          <strong>{inapplicable.length} populated field(s) do not apply</strong>
+          <p>These values conflict with the active metadata dictionary.
+            They have not been removed.</p>
+          <ul>
+            {inapplicable.map(item => (
+              <li key={item.field_name}>
+                <strong>{item.field_name}</strong>
+                {item.parent ? ` (depends on ${item.parent})` : ""}
+                {": "}{formatClearedValue(item.value)}
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={() =>
+            confirmAndClear(inapplicable, "Reviewed inapplicable values")
+          }>Review and clear inapplicable values</button>
+        </section>
+      )}
+      {clearedHistory.length > 0 && (
+        <details style={{ marginBottom: 12 }}>
+          <summary>{clearedHistory.length} cleared value(s) — view original values</summary>
+          <ul>
+            {clearedHistory.map((item, index) => (
+              <li key={index}>
+                {item.field_name}: {formatClearedValue(item.value)}
+                {" — "}{item.reason}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {visibleRules.map(rule => {
         const derived = derivedFields.includes(
           rule.field_name
