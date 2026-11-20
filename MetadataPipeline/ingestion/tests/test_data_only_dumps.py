@@ -47,11 +47,11 @@ class DataOnlyDumpTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             pg = self.source(root, "export.sql",
-                "-- PostgreSQL database dump\\n"
-                "COPY public.clinical (id) FROM stdin;\\n001\\n\\\\.\\n")
+                "-- PostgreSQL database dump\n"
+                "COPY public.clinical (id) FROM stdin;\n001\n\\.\n")
             self.assertEqual(read_source_table(pg, "clinical"), [{"id": "001"}])
             my = self.source(root, "export.sql",
-                "-- MySQL dump 10.13\\n"
+                "-- MySQL dump 10.13\n"
                 "INSERT INTO clinical (id) VALUES ('001');")
             self.assertEqual(read_source_table(my, "clinical"), [{"id": "001"}])
 
