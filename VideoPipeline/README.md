@@ -32,7 +32,7 @@ Download the official OpenCV Zoo YuNet model on an approved computer
 
 ```bash
 mkdir -p VideoPipeline/models
-curl -fL "https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" \
+curl -fL "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" \
   -o VideoPipeline/models/face_detection_yunet_2023mar.onnx
 ```
 
