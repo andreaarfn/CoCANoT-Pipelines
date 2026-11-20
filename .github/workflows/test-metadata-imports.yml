@@ -1,0 +1,25 @@
+name: Metadata import regression tests
+
+on:
+  push:
+    branches:
+      - feat/sql-sqlite-metadata-bulk-import-20261113
+    paths:
+      - 'MetadataPipeline/ingestion/**'
+      - '.github/workflows/test-metadata-imports.yml'
+  workflow_dispatch:
+
+jobs:
+  test-readers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install metadata ingestion test dependencies
+        run: python -m pip install openpyxl pandas
+      - name: Check Python syntax
+        run: python -m compileall -q MetadataPipeline/ingestion
+      - name: Run reader regression tests
+        run: python -m unittest discover -s MetadataPipeline/ingestion/tests -p 'test_*.py' -v
