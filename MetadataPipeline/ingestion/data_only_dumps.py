@@ -80,7 +80,21 @@ def parse_postgres_data_only(path):
     lines = _read(path).splitlines()
     tables, schemas, outside = {}, {}, []
     i = 0
+    restriction = None
     while i < len(lines):
+        directive = re.fullmatch(r"\\(restrict|unrestrict)\s+([A-Za-z0-9]+)", lines[i].strip())
+        if directive:
+            kind, token = directive.groups()
+            if kind == "restrict":
+                if restriction is not None:
+                    raise ValueError("Nested PostgreSQL dump restriction.")
+                restriction = token
+            else:
+                if token != restriction:
+                    raise ValueError("Mismatched PostgreSQL dump restriction marker.")
+                restriction = None
+            i += 1
+            continue
         match = COPY.fullmatch(lines[i].strip())
         if not match:
             outside.append(lines[i])
@@ -100,6 +114,8 @@ def parse_postgres_data_only(path):
                     [_pg_text(x) for x in line.split("\t")])
         if not terminated:
             raise ValueError("Unterminated PostgreSQL COPY block.")
+    if restriction is not None:
+        raise ValueError("Unterminated PostgreSQL dump restriction marker.")
     for statement in _split_statements("\n".join(outside)):
         if (PG_SETTINGS.fullmatch(statement) or PG_SETCFG.fullmatch(statement)
                 or PG_SETVAL.fullmatch(statement)
