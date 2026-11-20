@@ -246,7 +246,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
 
   async function scanFaces() {
     if (!clip || !bridge()?.video_scan_faces) {
-      setNotice("MediaPipe face scanning is unavailable in this desktop build.");
+      setNotice("YuNet face scanning is unavailable in this desktop build.");
       return;
     }
     try {
@@ -278,7 +278,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       masks:accept ? [...c.masks,{
         id:id(),type:"solid",x:suggestion.x,y:suggestion.y,
         w:suggestion.w,h:suggestion.h,start:suggestion.start,end:suggestion.end,
-        source:"mediapipe-reviewed", keyframes:[],
+        source:"yunet-reviewed", keyframes:[],
       }] : c.masks
     }));
     setNotice(accept
@@ -592,7 +592,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         <div className="video-trim-result">Kept: {seconds(duration)}s of {seconds(clip.duration)}s</div>
       </div>
       <div className="video-ai-panel">
-        <div className="video-ai-heading"><strong>AI first pass · MediaPipe face detection</strong>
+        <div className="video-ai-heading"><strong>AI first pass · YuNet face detection</strong>
           <button type="button" className="video-primary" disabled={busy || clip.unavailable} onClick={scanFaces}>Scan faces (AI)</button>
         </div>
         <p>Runs locally on sampled frames. Suggestions are never added to the final video until you accept them. AI can miss faces and other identifying details.</p>
