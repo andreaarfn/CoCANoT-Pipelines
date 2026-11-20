@@ -92,16 +92,16 @@ CoCANoT's Clinical and Surgical Metadata Bulk Upload accepts tabular data from t
 
 **SQLite files.** CoCANoT opens SQLite databases in read-only mode, lists their available tables, and imports records only from a table the user selects. Other SQL database file formats (such as SQL Server `.bak`/`.mdf`, Oracle data files, or PostgreSQL database directories) are not accepted as SQLite files.
 
-**Compatibility with common SQL platforms (limited text-export support):** CoCANoT now includes a non-executing text adapter for selected vendor export conventions. These are **not complete database dialect interpreters**:
+**Database-specific SQL exports: not currently supported as complete formats.** Although a simple literal `INSERT INTO ... VALUES` statement may be readable regardless of which database produced it, CoCANoT does **not** claim compatibility with PostgreSQL `pg_dump`, MySQL/MariaDB `mysqldump`, SQL Server T-SQL scripts, or Oracle SQL/Data Pump exports. In particular:
 
-| Platform | Accepted subset of `.sql` text exports | Not supported |
+| Source | Current status | Recommended export |
 |---|---|---|
-| PostgreSQL | Literal `INSERT ... VALUES` and tab-delimited `COPY ... FROM stdin` text blocks terminated by `\\.` | Custom/directory/tar archives, binary `COPY`, server-side `COPY`, full `pg_dump` DDL |
-| MySQL / MariaDB | Simple `INSERT` / extended multirow `INSERT`, simple `CREATE TABLE` with basic `ENGINE` / `CHARSET` suffixes, selected `SET` statements | Full `mysqldump` syntax, vendor routines/triggers, arbitrary executable comments or expressions |
-| Microsoft SQL Server | Simple `INSERT` statements, common `[dbo].[table]` identifiers, `N'...'` Unicode literals, `GO` batch separators and selected `SET` wrappers | Native `.bak` / `.mdf`, `BULK INSERT`, full T-SQL schema dumps |
-| Oracle | Simple `INSERT ... VALUES` and limited literal `INSERT ALL ... SELECT 1 FROM DUAL` text scripts | Data Pump `.dmp`, PL/SQL, full Oracle DDL, complex `INSERT ALL` expressions |
+| PostgreSQL | Native/custom backups, `COPY` data blocks, and complete `pg_dump` exports are not supported | CSV or XLSX table export |
+| MySQL / MariaDB | Complete `mysqldump` exports and vendor-specific SQL are not supported | CSV or XLSX table export |
+| Microsoft SQL Server | T-SQL export scripts, `GO` batches, `.bak` and `.mdf` files are not supported | CSV or XLSX table export |
+| Oracle | PL/SQL, `INSERT ALL` exports, Data Pump `.dmp` files, and complete Oracle SQL dumps are not supported | CSV or XLSX table export |
 
-Unsupported constructs are rejected rather than executed or silently imported. If a native export fails, **export the desired table to CSV or XLSX** instead. Database-server connections remain unsupported. These extensions are intended for common *data-only text exports*, not arbitrary backups or restoration scripts.
+**Support policy:** A format is only advertised as supported after its exact export specification, representative fixtures, negative tests, and full preview-to-import workflow have been verified. Experimental dialect adapters are not enabled as official import formats. For SQL text scripts, the accepted contract remains simple literal `INSERT INTO ... VALUES` statements, optional simple `CREATE TABLE` declarations, and supported transaction wrappers. A valid-looking filename does not guarantee that a vendor's dump is compatible. CoCANoT does not execute uploaded SQL or connect directly to database servers.
 
 **Safety and size limits:** SQL scripts are limited to **20 MB**; SQLite files to **250 MB**; extracted data to **10,000 rows** and **250 columns** per applicable import. The importer rejects unsupported SQL rather than running it. After a source/table is selected, records enter CoCANoT's existing preview, metadata normalization, dictionary-based validation, and import workflow. Review all imported records and confirm that uploaded files contain only data authorized for local processing.
 
