@@ -3298,8 +3298,8 @@ export default function BatchImportWorkflow({
                   } else {
                     saveRowEdit();
                   }
-                }                disabled={busy}
-              }
+                }}
+                disabled={busy}
               >
                 {tableName === "Clinical"
                   ? "Use Uploaded Assessment"
