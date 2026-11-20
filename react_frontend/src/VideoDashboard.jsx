@@ -180,6 +180,8 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const clip = project.clips.find(c => c.id === selected) || project.clips[0];
   const duration = clip ? Math.max(0, clip.end - clip.start) : 0;
   const masks = clip?.masks || [];
+  const suggestions = clip?.ai_suggestions || [];
+  const totalPending = project.clips.reduce((n,c)=>n+(c.ai_suggestions || []).length,0);
   const trackedRegion = (mask, at) => {
     const points = mask.keyframes || [];
     if (!points.length) return mask;
@@ -230,6 +232,46 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     } finally {
       setBusy(false);
     }
+  }
+
+  async function scanFaces() {
+    if (!clip || !bridge()?.video_scan_faces) {
+      setNotice("MediaPipe face scanning is unavailable in this desktop build.");
+      return;
+    }
+    try {
+      setBusy(true);
+      setNotice("");
+      player.current?.pause();
+      const clipId = clip.id;
+      const result = await bridge().video_scan_faces(clip);
+      if (!Array.isArray(result?.suggestions)) throw new Error("Face scan did not return suggestions.");
+      const pending = result.suggestions.map(item=>({...item, id:id()}));
+      setProject(current=>({...current,clips:current.clips.map(c=>c.id===clipId
+        ? {...c,ai_suggestions:pending,ai_scan_summary:{
+            sampled_frames:result.sampled_frames,unreadable_frames:result.unreadable_frames,
+            sample_interval:result.sample_interval}} : c)}));
+      setReviewed(false);
+      setNotice(`AI sampled ${result.sampled_frames} frames; ${pending.length} unapproved face suggestions. ${result.warning || "Review the entire recording."}`);
+    } catch (error) {
+      setNotice("Face scan unavailable: " + (error.message || error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  function resolveSuggestion(suggestion, accept) {
+    mutateClip(c=>({
+      ...c,
+      ai_suggestions:(c.ai_suggestions||[]).filter(s=>s.id!==suggestion.id),
+      masks:accept ? [...c.masks,{
+        id:id(),type:"solid",x:suggestion.x,y:suggestion.y,
+        w:suggestion.w,h:suggestion.h,start:suggestion.start,end:suggestion.end,
+        source:"mediapipe-reviewed", keyframes:[],
+      }] : c.masks
+    }));
+    setNotice(accept
+      ? "Suggestion added as an editable censor box. Its position is only a sampled estimate: track the interval and inspect the complete recording."
+      : "AI suggestion dismissed. Inspect the recording to ensure no identifier was missed.");
   }
 
   function mutateClip(updater) {
@@ -303,8 +345,8 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     player.current?.pause();
     setIsPlaying(false);
     const splitAt = clip.start + cursor;
-    const left = {...clip, end:splitAt, masks:clip.masks.map(m => ({...m, keyframes:[], tracked_until:null, end:Math.min(m.end,cursor)})).filter(m => m.end > m.start)};
-    const right = {...clip, id:id(), start:splitAt, masks:clip.masks.map(m => ({...m, keyframes:[], tracked_until:null, start:Math.max(0,m.start-cursor), end:m.end-cursor})).filter(m => m.end > m.start)};
+    const left = {...clip, ai_suggestions:[], ai_scan_summary:null, end:splitAt, masks:clip.masks.map(m => ({...m, keyframes:[], tracked_until:null, end:Math.min(m.end,cursor)})).filter(m => m.end > m.start)};
+    const right = {...clip, ai_suggestions:[], ai_scan_summary:null, id:id(), start:splitAt, masks:clip.masks.map(m => ({...m, keyframes:[], tracked_until:null, start:Math.max(0,m.start-cursor), end:m.end-cursor})).filter(m => m.end > m.start)};
     setProject(p => {const i=p.clips.findIndex(c=>c.id===clip.id); const clips=[...p.clips];clips.splice(i,1,left,right);return {...p,clips};});
     setSelected(right.id); setCursor(0); setReviewed(false);
   }
@@ -493,7 +535,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     {step===2 && <section className="video-panel video-stage"><h2>Process Video</h2></section>}
     {step===3 && <section className="video-panel video-stage"><h2>Review</h2></section>}
     {step===4 && <section className="video-panel video-stage"><h2>Export</h2></section>}
-    {step===3 && <CombinedVideoReview clips={project.clips} trackedRegion={trackedRegion} />}
+    {step===3 && <>{totalPending>0 && <div className="video-notice" role="alert">{totalPending} AI face suggestions are awaiting review. Return to Process Video, select each clip, and accept or reject them before export.</div>}<CombinedVideoReview clips={project.clips} trackedRegion={trackedRegion} /></>}
     {step===2 && <div className="video-layout"><section className="video-panel video-preview-panel"><div className="video-panel-title"><Video size={18}/> Preview {clip && <small>{clip.name}</small>}</div>
       <div className="video-player" ref={frame} style={{cursor:maskMode?"crosshair":"pointer"}}>
         {clip ? <><video key={clip.id} ref={player} src={clip.preview_url || ""} playsInline preload="metadata" muted={Boolean(clip.remove_audio)}
@@ -524,6 +566,29 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         <label>Start <strong>{seconds(clip.start)}s</strong><input aria-label="Trim clip start" type="range" min="0" max={Math.max(0,clip.end-.1)} step=".05" value={clip.start} disabled={busy} onChange={e=>trimClip("start",e.target.value)}/></label>
         <label>End <strong>{seconds(clip.end)}s</strong><input aria-label="Trim clip end" type="range" min={Math.min(clip.duration,clip.start+.1)} max={clip.duration} step=".05" value={clip.end} disabled={busy} onChange={e=>trimClip("end",e.target.value)}/></label>
         <div className="video-trim-result">Kept: {seconds(duration)}s of {seconds(clip.duration)}s</div>
+      </div>
+      <div className="video-ai-panel">
+        <div className="video-ai-heading"><strong>AI first pass · MediaPipe face detection</strong>
+          <button type="button" className="video-primary" disabled={busy || clip.unavailable} onClick={scanFaces}>Scan faces (AI)</button>
+        </div>
+        <p>Runs locally on sampled frames. Suggestions are never added to the final video until you accept them. AI can miss faces and other identifying details.</p>
+        {clip.ai_scan_summary && <p role="status">Scanned {clip.ai_scan_summary.sampled_frames} frames (every ~{seconds(clip.ai_scan_summary.sample_interval)}s).
+          {clip.ai_scan_summary.unreadable_frames > 0 && <> {clip.ai_scan_summary.unreadable_frames} frames could not be read.</>}
+        </p>}
+        {suggestions.length>0 && <div className="video-ai-suggestions">
+          <strong>{suggestions.length} suggestions awaiting review</strong>
+          {suggestions.map(s=><div className="video-ai-suggestion" key={s.id}>
+            <div><strong>Possible face</strong> · {seconds(s.start)}–{seconds(s.end)}s
+              <small> · {s.sample_count} sampled detection(s) · lowest detector score {Math.round(s.confidence*100)}%</small>
+            </div>
+            <div className="video-ai-buttons">
+              <button type="button" onClick={()=>{setCursor(s.start);if(player.current)player.current.currentTime=clip.start+s.start;}}>View</button>
+              <button type="button" onClick={()=>resolveSuggestion(s,true)}>Accept box</button>
+              <button type="button" onClick={()=>resolveSuggestion(s,false)}>Reject</button>
+            </div>
+          </div>)}
+        </div>}
+        {clip.ai_scan_summary && suggestions.length===0 && <p>All suggestions reviewed. Continue with manual inspection and corrections; this scan does not certify de-identification.</p>}
       </div>
       <div className="video-edit-action"><strong>Censor boxes</strong><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
       <h3>Censor regions ({masks.length})</h3>
@@ -598,7 +663,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
                 setExportRecord(null);
               }}
             />}
-      </div><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the video and can confirm all PHI has been censored or removed.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || !clip || !reviewed || !outputFolder.trim() || !existingPatientId || !patientRecords?.clinical?.length || !videoRules || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
+      </div><label className="video-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/> I have reviewed the video and can confirm all PHI has been censored or removed.</label></div><button className="video-primary" onClick={exportVideo} disabled={busy || totalPending>0 || !clip || !reviewed || !outputFolder.trim() || !existingPatientId || !patientRecords?.clinical?.length || !videoRules || Boolean(linkedTable && !linkedRecordId)}>{busy?"Processing…":"Export to Patient Data Review"}</button></section>}
     {step===4 && exportRecord && <div className="video-notice" role="status"><strong>Video linked to patient {exportRecord.patient_id}</strong><p>Video saved locally: {exportRecord.path}</p>{exportRecord.metadata_path && <p>Metadata JSON saved locally: {exportRecord.metadata_path}</p>}{exportRecord.linked_table && <p>Linked to {exportRecord.linked_table} record {exportRecord.linked_record_id}.</p>}</div>}
     {step>1 && step<4 && <div className="video-stage-navigation"><button onClick={()=>setStep(step-1)}>← Previous step</button><button className="video-primary" onClick={()=>{player.current?.pause();setMaskMode(false);setStep(step+1);}}>Continue →</button></div>}
     {notice && <div className="video-notice" role="status">{notice}</div>}
