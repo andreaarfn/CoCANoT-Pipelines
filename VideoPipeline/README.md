@@ -15,49 +15,58 @@ processing and stripped when loading or saving a project.
 - OpenCV for motion tracking and moving-mask export:
   `python -m pip install opencv-python`
 
-## Optional MediaPipe AI face first pass
+## Experimental RetinaFace-only AI first pass
 
-The **Scan faces (AI)** button in Process Video runs a *local*, optional
-MediaPipe Tasks face detector. It does not upload patient footage or automatically
-approve censoring. MediaPipe detects faces on sampled frames; CoCANoT groups
-nearby consecutive detections into **unapproved suggestions**.
+This branch uses the **RetinaFace** detector, independently of YuNet and
+MediaPipe. It preserves the same sampling cadence (approximately two
+frames/second, up to 1,200 frames), 20% extra bounding-box padding, suggestion
+grouping, review controls, manual tracking, and export safeguards. Matching
+threshold values across detectors does not mean their scores are calibrated.
 
-Install into the **same Python environment that runs CoCANoT**:
+### Install once in CoCANoT's Python environment
 
-```bash
-python -m pip install mediapipe opencv-python
-```
-
-The model is a separate local file (download once on an approved machine):
+On macOS, from the CoCANoT repository root:
 
 ```bash
-mkdir -p VideoPipeline/models
-curl -fL "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite" \
-  -o VideoPipeline/models/blaze_face_short_range.tflite
+~/Library/cocanot-pipelines/bin/python -m pip install "retina-face" "opencv-python"
 ```
 
-Run from the repository root. Alternatively set
-`COCANOT_MEDIAPIPE_FACE_MODEL` to the absolute path of a locally approved
-`.tflite` model. **The scan does not download models or send footage to the
-internet.** The detector only recognizes faces, not text, identifiers, or all
-sensitive body regions. The short-range model is intended for relatively close
-faces. This optional dependency is not yet bundled in the installer.
+This uses the serengil/retinaface Python implementation. The current project
+documents an ONNX Runtime default backend, but some versions require
+TensorFlow/PyTorch or an explicit backend selection. If a backend import
+fails, check the installed release's documentation before installing heavy
+dependencies. Do not change the normal CoCANoT installers for this experiment.
 
-1. Select a clip in **Process Video**, then click **Scan faces (AI)**.
-2. Use **View**, **Accept box**, or **Reject** for each suggestion.
-3. Accepted suggestions become ordinary editable solid censor boxes. The
-   position is initially a *sampled estimate*, not verified tracking; use
-   **Track censor interval** as needed and inspect the entire interval.
-4. Continue through the existing manual review, correcting any missed faces
-   or other identifiers. Pending AI suggestions block export.
-5. Re-scan a clip if it was trimmed or split: edits invalidate old suggestions.
+**Important privacy and setup note:** This package may automatically download
+pretrained model weights when first calling `RetinaFace.build_model()`.
+Before processing patient footage, initialize it using an approved machine
+and a **non-sensitive synthetic test**, then confirm the model works offline.
+The implementation passes video frames in memory to the local detector;
+it does not contain any upload operation for frames. However, a first-time
+weight download may use the network. For strictly offline environments,
+preinstall and verify the weights before use; do not run the first scan
+on identifiable recordings. Avoid automatically bundling third-party model
+weights until their redistribution terms have been checked.
 
-Sampling scans up to 1,200 frames across a clip (normally 2 frames/second);
-a detection gap ends a suggestion, rather than silently bridging it. Even an
-accepted region may drift or leave frames uncovered. **The presence or absence
-of AI suggestions is never proof of de-identification.** Inspect the complete
-rendered output before sharing. Scores describe model detections, not the
-probability that a face is safely censored.
+### Review workflow
+
+1. Select the same short test clip and trim interval as on the other branches.
+2. Click **Scan faces (AI)** in **Process Video**.
+3. Choose **View box** to see the dashed, unapproved suggestion overlay.
+4. Use **Accept box** to make an editable censor box or **Reject** to dismiss.
+5. If accepted, **Track censor interval**, manually correct failures, and
+   review the entire source and final output. Pending suggestions block export.
+
+An accepted suggestion starts as a stationary box; sampled positions are
+only visual hints and are **not validated motion tracks**. Detection is
+not identity recognition and does not detect text or all PHI. Any detection
+can miss faces, including profiles, small/obscured faces, and frames
+between samples. A scan with zero detections is not proof of de-identification.
+
+For comparison, count missed faces (particularly side/downward poses), false
+suggestions, total manual edits, and processing time. The MediaPipe
+(`video-ai-pipeline`) and YuNet (`feat/video-yunet-experiment`) branches
+are unchanged.
 
 ## Working with censor boxes
 
