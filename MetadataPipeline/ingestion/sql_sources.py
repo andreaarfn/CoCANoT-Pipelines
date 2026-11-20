@@ -166,9 +166,23 @@ def _literal(value: str):
 
 
 def _parse_sql(path: Path) -> dict[str, list[dict]]:
-    """Legacy strict SQL parser used by the new dialect adapter."""
+    """Read an explicitly recognized vendor data-only profile or strict literal SQL."""
     if path.stat().st_size > MAX_SQL_BYTES:
         raise ValueError("SQL file exceeds the 20 MB safe preview limit.")
+    # Explicit vendor profiles use the same pathway for discovery and reading.
+    # Names ending .pg.sql or .mysql.sql can be used when the export omits
+    # the vendor header (e.g. PostgreSQL --no-comments).
+    from .data_only_dumps import parse_postgres_data_only, parse_mysql_data_only
+    source_name = path.name.lower()
+    if source_name.endswith(".pg.sql"):
+        return parse_postgres_data_only(path)
+    if source_name.endswith(".mysql.sql"):
+        return parse_mysql_data_only(path)
+    header = path.open("r", encoding="utf-8-sig").read(4096)
+    if re.search(r"(?m)^-- PostgreSQL database dump\\s*$", header):
+        return parse_postgres_data_only(path)
+    if re.search(r"(?m)^-- MySQL dump\\b", header):
+        return parse_mysql_data_only(path)
     return _parse_sql_text(path.read_text(encoding="utf-8-sig"))
 
 
