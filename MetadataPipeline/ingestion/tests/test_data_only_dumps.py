@@ -28,9 +28,7 @@ class DataOnlyDumpTests(unittest.TestCase):
             self.assertEqual(read_source_table(path, "clinical"), [
                 {"patient_id": "001", "note": "José\tstable"},
                 {"patient_id": "002", "note": None}])
-            self.assertEqual(load_metadata_file(path, "clinical")["row_count"]
-                             if "row_count" in load_metadata_file(path, "clinical")
-                             else len(load_metadata_file(path, "clinical")["rows"]), 2)
+            self.assertEqual(len(load_metadata_file(path, "clinical")["rows"]), 2)
 
     def test_mysql_explicit_columns_multivalue_and_escapes(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -44,6 +42,18 @@ class DataOnlyDumpTests(unittest.TestCase):
                 {"patient_id": "001", "note": "a'b"},
                 {"patient_id": "002", "note": None},
                 {"patient_id": "003", "note": "line\nnext"}])
+
+    def test_standard_dump_headers_trigger_dispatch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            pg = self.source(root, "export.sql",
+                "-- PostgreSQL database dump\\n"
+                "COPY public.clinical (id) FROM stdin;\\n001\\n\\\\.\\n")
+            self.assertEqual(read_source_table(pg, "clinical"), [{"id": "001"}])
+            my = self.source(root, "export.sql",
+                "-- MySQL dump 10.13\\n"
+                "INSERT INTO clinical (id) VALUES ('001');")
+            self.assertEqual(read_source_table(my, "clinical"), [{"id": "001"}])
 
     def test_multiple_postgres_tables_selected_independently(self):
         with tempfile.TemporaryDirectory() as folder:
