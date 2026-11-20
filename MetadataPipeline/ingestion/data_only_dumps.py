@@ -101,7 +101,7 @@ def parse_postgres_data_only(path):
             i += 1
             continue
         name = _table_name(match.group(1))
-        columns = [_identifier(x) for x in _mysql_split(match.group(2), ",")]
+        columns = [_identifier(x) for x in _split_items(match.group(2))]
         i += 1
         terminated = False
         while i < len(lines):
