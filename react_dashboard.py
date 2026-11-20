@@ -805,9 +805,9 @@ class CoCANoTAPI:
         )
 
     def video_scan_faces(self, clip: dict[str, Any]) -> dict[str, Any]:
-        """Return unapproved local MediaPipe suggestions for a trimmed video clip."""
+        """Return unapproved local YuNet suggestions for a trimmed video clip."""
         from VideoPipeline.processing import validate_project
-        from VideoPipeline.ai_faces import scan_faces
+        from VideoPipeline.ai_yunet import scan_faces
         validated = validate_project({"clips": [{**clip, "path": self._video_current_path(clip.get("path", "")), "masks": []}]})[0]
         return scan_faces(validated["media"]["path"], validated["start"], validated["end"])
 
