@@ -178,10 +178,11 @@ def _parse_sql(path: Path) -> dict[str, list[dict]]:
         return parse_postgres_data_only(path)
     if source_name.endswith(".mysql.sql"):
         return parse_mysql_data_only(path)
-    with path.open("r", encoding="utf-8-sig") as source:\n        header = source.read(4096)
-    if re.search(r"(?m)^-- PostgreSQL database dump\\s*$", header):
+    with path.open("r", encoding="utf-8-sig") as source:
+        header = source.read(4096)
+    if re.search(r"(?m)^-- PostgreSQL database dump\s*$", header):
         return parse_postgres_data_only(path)
-    if re.search(r"(?m)^-- MySQL dump\\b", header):
+    if re.search(r"(?m)^-- MySQL dump\b", header):
         return parse_mysql_data_only(path)
     return _parse_sql_text(path.read_text(encoding="utf-8-sig"))
 
