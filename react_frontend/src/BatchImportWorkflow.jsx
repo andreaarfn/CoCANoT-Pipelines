@@ -173,6 +173,10 @@ export default function BatchImportWorkflow({
 
   const [editingValues, setEditingValues] = useState({});
   const [editingProblemField, setEditingProblemField] = useState("");
+  const [liveEditProblems, setLiveEditProblems] = useState(null);
+  const [liveEditChecking, setLiveEditChecking] = useState(false);
+  const [liveEditError, setLiveEditError] = useState("");
+
 
   const [validation, setValidation] = useState(null);
   const [cleanupReview, setCleanupReview] = useState([]);
@@ -1224,6 +1228,8 @@ export default function BatchImportWorkflow({
 
 
   function editRow(index, problemField = "") {
+    setLiveEditProblems(null);
+    setLiveEditError("");
     setEditingIndex(index);
     setEditingProblemField(
       String(problemField ?? "").trim()
@@ -1234,6 +1240,56 @@ export default function BatchImportWorkflow({
   }
 
 
+
+  // Validate the staged draft, not the last saved row. Backend validation
+  // is authoritative for required_if, allowed values, repeated fields and
+  // surgical context. Ignore stale responses after edits or closing the modal.
+  useEffect(() => {
+    if (editingIndex === null || !rows[editingIndex]) {
+      setLiveEditProblems(null);
+      setLiveEditChecking(false);
+      setLiveEditError("");
+      return;
+    }
+    let cancelled = false;
+    setLiveEditChecking(true);
+    setLiveEditError("");
+    const timeout = window.setTimeout(async () => {
+      try {
+        const bridge = api();
+        if (!bridge?.metadata_batch_validate) {
+          throw new Error("Live metadata validation is unavailable.");
+        }
+        const active = {
+          ...rows[editingIndex],
+          metadata: { ...editingValues },
+        };
+        const checked = await bridge.metadata_batch_validate(tableName, [active]);
+        if (!cancelled) {
+          const validated = checked?.rows?.[0];
+          if (!validated || !Array.isArray(validated.problems)) {
+            throw new Error("Live validation returned an incomplete result.");
+          }
+          setLiveEditProblems(validated.problems);
+          setLiveEditChecking(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setLiveEditError(String(err));
+          setLiveEditChecking(false);
+          // Do not misrepresent the row as clean if validation fails.
+          setLiveEditProblems(null);
+        }
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [editingIndex, editingValues, tableName]);
+
+  const visibleEditProblems = liveEditProblems ??
+    (editingIndex === null ? [] : rows[editingIndex]?.problems ?? []);
 
   function jumpToEditingProblem(fieldName) {
     const field = String(fieldName ?? "").trim();
@@ -3067,13 +3123,30 @@ export default function BatchImportWorkflow({
 
 
 
-            {(rows[editingIndex]?.problems ?? []).length > 0 && (
-              <section className={styles.editProblemBanner}>
+            {liveEditChecking && (
+              <p role="status" aria-live="polite">
+                Checking your changes against the metadata dictionary…
+              </p>
+            )}
+            {liveEditError && (
+              <p role="alert">
+                Unable to refresh validation: {liveEditError}. The last
+                validated warnings remain visible. Saving will revalidate.
+              </p>
+            )}
+            {!liveEditChecking && !liveEditError &&
+              liveEditProblems !== null && liveEditProblems.length === 0 && (
+              <p role="status" aria-live="polite">
+                All current row validation warnings are resolved.
+              </p>
+            )}
+            {visibleEditProblems.length > 0 && (
+              <section className={styles.editProblemBanner} aria-live="polite">
                 <div>
                   <strong>
-                    {rows[editingIndex].problems.length === 1
+                    {visibleEditProblems.length === 1
                       ? "1 field needs attention"
-                      : `${rows[editingIndex].problems.length} fields need attention`}
+                      : `${visibleEditProblems.length} fields need attention`}
                   </strong>
                   <span>
                     Click a problem to jump directly to that field.
@@ -3081,7 +3154,7 @@ export default function BatchImportWorkflow({
                 </div>
 
                 <div className={styles.editProblemList}>
-                  {rows[editingIndex].problems.map(
+                  {visibleEditProblems.map(
                     (problem, problemIndex) => (
                       <button
                         type="button"
