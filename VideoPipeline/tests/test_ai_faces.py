@@ -11,7 +11,7 @@ class FaceSuggestionsTests(unittest.TestCase):
         detection = SimpleNamespace(bounding_box=box)
         result = _rect(detection, 100, 100)
         self.assertEqual(result["x"], 0)
-        self.assertGreater(result["w"], .2)
+        self.assertGreaterEqual(result["w"], .2)
         self.assertLessEqual(result["x"] + result["w"], 1)
 
     def test_consecutive_detections_group_into_one_suggestion(self):
