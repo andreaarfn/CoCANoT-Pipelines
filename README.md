@@ -129,6 +129,19 @@ The reader recognizes literal SQL `INSERT` rows with explicit columns (including
 
 **Implementation:** File formats are selected through the shared registry in `MetadataPipeline/ingestion/readers.py` (`CSVReader`, `XLSXReader`, `SQLReader`, `SQLiteReader`). Format-specific parsing is separate from shared preview and validation, allowing future formats to be added without duplicating those workflows.
 
+### Empirical SQL Import Verification
+
+The branch includes two separate automated checks:
+
+- **Metadata import regression tests** (`.github/workflows/test-metadata-imports.yml`): checks reader syntax, malformed SQL rejection, SQL/SQLite handling, and standardized output.
+- **Real SQL database export integration** (`.github/workflows/test-real-sql-exports.yml`): starts official PostgreSQL 16 and MySQL 8.0 containers, seeds **synthetic** Clinical and Surgical metadata, exports the tables using **real `pg_dump` and `mysqldump`**, and compares every extracted row and value to the synthetic reference data. It also exercises conditional rules from the active machine-readable Clinical/Surgical metadata dictionary, including Race/Other Race, Structural Etiology, Surgical Laterality, Primary Payer, and device-related requirements.
+
+Run these workflows from GitHub **Actions** → the workflow name → **Run workflow**, selecting the SQL feature branch. Every import-code push also triggers them. The tests fail if records are lost, parsed values change, or conditional validation differs from the expected result. No patient data are used for automated testing.
+
+The attached/reference clinical research dictionary is the source of field definitions; the CI job loads the version **tracked in this repository** at `MetadataPipeline/dictionaries/CoCANoT_Metadata_Phase1.0.xlsx`. If a center uses a different dictionary version, repeat the validation against that version before deployment.
+
+**Testing boundary:** The integration job verifies real vendor text exports, reader selection, extracted data, and dictionary validation. It does **not** automate clicking through the desktop Bulk Upload UI, verify persistent database commits, or prove compatibility with all export variants or database versions. A separate acceptance test should import a synthetic file into a clean CoCANoT desktop installation, review the preview, commit records, verify Patient Data Review, and repeat the import to check duplicate handling.
+
 ## Site Authentication
 
 Participating centers access the application using their assigned Site ID and Access Code.
