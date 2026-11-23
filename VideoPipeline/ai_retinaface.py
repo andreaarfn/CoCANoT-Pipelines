@@ -141,6 +141,7 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval,
             )
             tr["box"] = predicted
             tr["last_t"] = at
+            tr["last_sample_index"] = sample_no
             tr["sample_count"] += 1
             tr["confidence"] = min(tr["confidence"], face["score"])
             tr["tracking_complete"] = True
@@ -152,6 +153,8 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval,
             box = dict(face["box"])
             next_active.append({
                 "box": box, "start": at, "last_t": at,
+                "first_sample_index": sample_no,
+                "last_sample_index": sample_no,
                 "keyframes": [{"t": round(at, 4), **box}],
                 "sample_count": 1, "confidence": face["score"],
                 "tracking_complete": False,
@@ -160,6 +163,51 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval,
         active = next_active
 
     finished.extend(active)
+
+    # The first/last detector samples are centered inside the trimmed clip.
+    # Extend a face track to the trim boundary ONLY when the face was
+    # detected at that edge sample, and optical flow follows all the way.
+    # Never extend an interrupted track or a track with no edge detection.
+    for tr in finished:
+        if tr["first_sample_index"] == 0 and tr["start"] > 0:
+            try:
+                first = dict(tr["keyframes"][0])
+                backward = track_region(
+                    path, clip_start, clip_end, first, tr["start"], 0.,
+                    every_frame=True, reverse=True,
+                )
+            except (RuntimeError, ValueError) as exc:
+                backward = {"complete": False, "warning": str(exc)}
+            if backward.get("complete") and backward.get("keyframes"):
+                earlier = [dict(point) for point in backward["keyframes"]
+                           if point["t"] < tr["start"] - 1e-5]
+                if len(earlier) + len(tr["keyframes"]) <= 20000:
+                    tr["keyframes"] = earlier + tr["keyframes"]
+                    tr["start"] = 0.
+                    tr["leading_extended"] = True
+            else:
+                tr["leading_warning"] = "Could not track face back to the clip start."
+        if tr["last_sample_index"] == len(detections)-1 and tr["last_t"] < duration:
+            try:
+                last_box = {"x": tr["keyframes"][-1]["x"],
+                            "y": tr["keyframes"][-1]["y"],
+                            "w": tr["box"]["w"], "h": tr["box"]["h"]}
+                forward = track_region(
+                    path, clip_start, clip_end, last_box, tr["last_t"], duration,
+                    every_frame=True,
+                )
+            except (RuntimeError, ValueError) as exc:
+                forward = {"complete": False, "warning": str(exc)}
+            if forward.get("complete") and forward.get("keyframes"):
+                later = [dict(point) for point in forward["keyframes"]
+                         if point["t"] > tr["last_t"] + 1e-5]
+                if len(tr["keyframes"]) + len(later) <= 20000:
+                    tr["keyframes"].extend(later)
+                    tr["last_t"] = duration
+                    tr["trailing_extended"] = True
+            else:
+                tr["trailing_warning"] = "Could not track face to the clip end."
+
     proposals = []
     for tr in finished:
         points = tr["keyframes"]
@@ -185,6 +233,11 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval,
             ),
             "confidence": round(float(tr["confidence"]), 3),
             "sample_count": tr["sample_count"], "kind": "face",
+            "leading_extended": bool(tr.get("leading_extended")),
+            "trailing_extended": bool(tr.get("trailing_extended")),
+            "edge_warning": " ".join(filter(None, (
+                tr.get("leading_warning"), tr.get("trailing_warning")
+            ))),
             "interrupted": bool(tr.get("interrupted", False)),
         })
     if progress:
