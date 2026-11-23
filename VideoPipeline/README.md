@@ -42,53 +42,23 @@ report is not a substitute for manual review or a validated synchronization
 pipeline. This feature does **not** automatically alter masks, trim clips,
 claim that frames were dropped, or block export based on ambiguous evidence.
 
-## Two complementary video gap checks
+## Dropped-time detector (single video)
 
-This branch now has two independent checks under **Video > Process Video**:
+In **Video > Process Video**, choose a clip and click **Detect time gaps**.
+CoCANoT examines consecutive presentation timestamps within that video, flags
+unusually large timing jumps and video decoding problems, and shows a timing
+chart, raw measurements, and clickable intervals for review.
 
-1. **Check continuity (within one clip)** checks frame presentation timestamps
-   and FFmpeg decoding. It detects test video `02_dropped_frames.mp4` when
-   missing frames leave a timestamp gap, but does not detect the equivalent
-   removal in `03_hidden_dropped_frames.mp4` when timestamps are rewritten.
-2. **Check session gaps (across video files)** measures periods with no video
-   segment on a shared acquisition-clock timeline. The user provides the
-   actual acquisition start time for each video segment (from a checked Natus
-   log or another independent recording reference); the file duration and
-   trims determine its end. An optional neural session start/end shows missing
-   coverage before the first and after the last video segment. Overlapping
-   video segments are merged so their overlap is not counted twice.
+- `02_dropped_frames.mp4` (frames removed but original timestamps retained):
+  the 15-frame removal leaves a detectable gap near 3 seconds.
+- `03_hidden_dropped_frames.mp4` (same removal with timestamps rewritten):
+  no large timestamp interval remains, so the detector cannot infer the loss.
 
-**Important:** MP4 `creation_time` is not assumed to be an acquisition start
-time. An **Inspect embedded dates** button displays candidate metadata tags,
-but does not automatically fill or trust them; export/transcode dates can be
-misleading. All session coverage is labeled as based on user-supplied
-acquisition timestamps, not verified automatically by CoCANoT. If some clips
-have no acquisition time, the report is explicitly **inconclusive**.
-
-Times entered in the UI use the machine's local timezone and are stored as
-UTC timestamps, alongside their input strings, in the video workspace session.
-Comparisons are performed on UTC values. For real Natus datasets, check
-timezone offsets and camera/neural clock alignment before interpreting the
-intervals. Neither check validates synchronization automatically.
-
-Example controlled multi-file coverage test:
-
-- Neural recording: 10:00:00 to 11:00:00
-- Segment A: starts 10:00:00, duration 25 minutes
-- Segment B: starts 10:28:00, duration 17 minutes
-- Segment C: starts 10:45:00, duration 15 minutes
-- Expected: **10:25:00–10:28:00**, 180 seconds with no video coverage.
-
-The session check reports these uncovered periods independently of the
-within-file frame discontinuities. A continuous timestamp sequence within
-each segment does not imply that the overall recording session has full video
-coverage.
-
-Tests:
-
-```bash
-~/Library/cocanot-pipelines/bin/python -m unittest VideoPipeline.tests.test_continuity VideoPipeline.tests.test_session_coverage
-```
+No neural recording start/end fields, multi-file acquisition-time comparisons,
+filesystem creation-date inference, or face-motion guessing are used. The
+source file is never modified. Clean timestamps cannot guarantee complete
+video, and unusually large timestamps can be caused by legitimate pauses or
+variable-frame-rate footage.
 
 ## Evidence dashboard and reproducible benchmark (experimental)
 
