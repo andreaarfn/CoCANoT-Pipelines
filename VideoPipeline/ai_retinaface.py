@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 
-from VideoPipeline.ai_faces import MAX_SAMPLES, _assemble
+from VideoPipeline.ai_faces import MAX_SAMPLES
 
 # A detection score is not a probability of successful de-identification.
 DETECTION_THRESHOLD = 0.5
@@ -53,6 +53,138 @@ def normalize_detections(results, width: int, height: int):
         if box and math.isfinite(confidence) and confidence >= DETECTION_THRESHOLD:
             faces.append({"box": box, "score": confidence})
     return faces
+
+
+
+def _center_distance(a, b):
+    ax, ay = a["x"] + a["w"] / 2, a["y"] + a["h"] / 2
+    bx, by = b["x"] + b["w"] / 2, b["y"] + b["h"] / 2
+    return math.hypot(ax - bx, ay - by)
+
+
+def _matchable(a, b):
+    # Conservative gating limits identity swaps when people cross.
+    return _center_distance(a, b) <= max(
+        .055, .65 * max(a["w"], a["h"], b["w"], b["h"])
+    )
+
+
+def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval):
+    """Associate face detections with frame-by-frame optical-flow positions.
+
+    Uncorroborated motion and tracking failures terminate a proposal, rather
+    than silently claiming that a face remains covered.
+    """
+    from VideoPipeline.advanced import track_region
+
+    duration = clip_end - clip_start
+    finished, active = [], []
+    for _, at, faces in detections:
+        predictions = []
+        for tr in active:
+            try:
+                motion = track_region(
+                    path, clip_start, clip_end, tr["box"],
+                    tr["last_t"], at, every_frame=True,
+                )
+            except (RuntimeError, ValueError) as exc:
+                motion = {"complete": False, "warning": str(exc)}
+            if not motion.get("complete") or not motion.get("keyframes"):
+                tr["message"] = (
+                    "Tracking stopped before the next detector sample. "
+                    + str(motion.get("warning", ""))
+                )
+                tr["tracking_complete"] = False
+                finished.append(tr)
+                continue
+            points = motion["keyframes"]
+            if len(tr["keyframes"]) + len(points) > 20000:
+                tr["tracking_complete"] = False
+                tr["message"] = "Maximum tracking keyframes reached; review remaining video."
+                finished.append(tr)
+                continue
+            predicted = {
+                "x": float(points[-1]["x"]), "y": float(points[-1]["y"]),
+                "w": tr["box"]["w"], "h": tr["box"]["h"]
+            }
+            predictions.append((tr, points, predicted))
+
+        candidates = sorted(
+            (_center_distance(pred, face["box"]), i, j)
+            for i, (_, _, pred) in enumerate(predictions)
+            for j, face in enumerate(faces)
+            if _matchable(pred, face["box"])
+        )
+        used_tracks, used_faces, matches = set(), set(), {}
+        for _, i, j in candidates:
+            if i not in used_tracks and j not in used_faces:
+                used_tracks.add(i)
+                used_faces.add(j)
+                matches[i] = j
+
+        next_active = []
+        for i, (tr, points, predicted) in enumerate(predictions):
+            if i not in matches:
+                tr["tracking_complete"] = False
+                tr["message"] = (
+                    "Face was not confirmed at the next detection sample. "
+                    "Review the uncovered interval and manually extend the mask if necessary."
+                )
+                finished.append(tr)
+                continue
+            face = faces[matches[i]]
+            last_t = tr["last_t"]
+            tr["keyframes"].extend(
+                dict(point) for point in points if point["t"] > last_t + 1e-5
+            )
+            tr["box"] = predicted
+            tr["last_t"] = at
+            tr["sample_count"] += 1
+            tr["confidence"] = min(tr["confidence"], face["score"])
+            tr["tracking_complete"] = True
+            next_active.append(tr)
+
+        for j, face in enumerate(faces):
+            if j in used_faces:
+                continue
+            box = dict(face["box"])
+            next_active.append({
+                "box": box, "start": at, "last_t": at,
+                "keyframes": [{"t": round(at, 4), **box}],
+                "sample_count": 1, "confidence": face["score"],
+                "tracking_complete": False,
+                "message": "Only one sampled face detection; continuous motion is unverified.",
+            })
+        active = next_active
+
+    finished.extend(active)
+    proposals = []
+    for tr in finished:
+        points = tr["keyframes"]
+        start, end = max(0., float(tr["start"])), float(tr["last_t"])
+        motion_complete = tr["tracking_complete"] and len(points) > 1 and end > start
+        if end <= start:
+            # Single detection: allow review of a static box, not a track.
+            end = min(duration, start + max(.05, interval / 2))
+        if end <= start:
+            continue
+        first_box = points[0]
+        proposals.append({
+            "start": round(start, 4), "end": round(end, 4),
+            "x": first_box["x"], "y": first_box["y"],
+            "w": tr["box"]["w"], "h": tr["box"]["h"],
+            "sampled_positions": points,
+            "tracked_keyframes": points if motion_complete else [],
+            "tracking_complete": motion_complete,
+            "tracking_message": (
+                "Optical flow linked detections frame by frame. Review for drift, "
+                "occlusion, changes in face size and missed frames."
+                if motion_complete else tr["message"]
+            ),
+            "confidence": round(float(tr["confidence"]), 3),
+            "sample_count": tr["sample_count"], "kind": "face",
+        })
+    return sorted(proposals, key=lambda item: (item["start"], item["x"]))
 
 
 def scan_faces(path: str, clip_start: float, clip_end: float) -> dict:
@@ -112,10 +244,12 @@ def scan_faces(path: str, clip_start: float, clip_end: float) -> dict:
         cap.release()
 
     return {
-        "suggestions": _assemble(detections, duration / sample_count, duration),
+        "suggestions": _suggestions_with_tracking(
+            detections, path, clip_start, clip_end, duration / sample_count
+        ),
         "sampled_frames": sample_count, "unreadable_frames": unreadable,
         "sample_interval": round(duration / sample_count, 3),
         "detector": "RetinaFace",
-        "warning": "RetinaFace checks sampled frames only; missed or obscured faces remain possible. "
-                   "Inspect every recording, track and correct accepted censor boxes, and verify final export."
+        "warning": "RetinaFace samples detection frames and optical flow follows matched faces between samples. "
+                   "A tracker failure ends that proposal. Review all footage for drift, gaps and missed faces."
     }
