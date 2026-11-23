@@ -670,6 +670,29 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         {Number.isFinite(suggestionSampleTime) && <> Nearest sampled position: {seconds(suggestionSampleTime)}s.</>}
         <button type="button" onClick={()=>setPreviewSuggestion(null)}>Hide preview</button>
       </div>}
+      {continuityReport?.interval_chart?.length>0 && <div className="video-continuity-chart-card">
+        <div className="video-panel-title">Frame timing evidence <small>Measured intervals · selected clip</small></div>
+        <svg role="img" aria-label="Frame presentation interval plot, with amber bars for gaps above the threshold" viewBox="0 0 600 144" preserveAspectRatio="none" className="video-continuity-chart">
+          <line x1="25" x2="591" y1="118" y2="118" stroke="currentColor" strokeOpacity=".35" />
+          {continuityReport.threshold_ms>0 && <line x1="25" x2="591"
+            y1={118-102*Math.min(1,continuityReport.threshold_ms/Math.max(continuityReport.max_interval_ms||1,continuityReport.threshold_ms))}
+            y2={118-102*Math.min(1,continuityReport.threshold_ms/Math.max(continuityReport.max_interval_ms||1,continuityReport.threshold_ms))}
+            stroke="#c07b35" strokeDasharray="4 4" strokeWidth="1"/>}
+          {continuityReport.interval_chart.map((point,i)=>{
+            const maxMs=Math.max(1,continuityReport.max_interval_ms||1,continuityReport.threshold_ms||1);
+            const h=102*Math.min(1,Math.abs(point.ms)/maxMs);
+            const x=25+564*clamp(point.t/(duration||1),0,1);
+            const flagged=continuityReport.threshold_ms!=null && point.ms>continuityReport.threshold_ms;
+            return <line key={i} x1={x} x2={x} y1={118} y2={118-h}
+              stroke={flagged?"#b56f27":"#3e82a6"} strokeWidth={flagged?2.4:1.5}>
+              <title>{seconds(point.t)}s · {point.ms.toFixed(2)}ms</title>
+            </line>;
+          })}
+          <text x="25" y="137" fontSize="11" fill="currentColor">0s</text>
+          <text x="590" y="137" fontSize="11" fill="currentColor" textAnchor="end">{seconds(duration)}s</text>
+        </svg>
+        <p className="video-continuity-chart-note">Blue: frame-to-frame timestamp interval. Amber: exceeds screening threshold. Each displayed point represents the largest interval in its time bin; no evidence is interpolated.</p>
+      </div>}
       <div className="video-scrub"><button type="button" aria-label={isPlaying?"Pause video":"Play video"} onClick={toggleClipPlayback} disabled={!clip || busy || maskMode}>{isPlaying?<Pause size={16}/>:<Play size={16}/>} {isPlaying?"Pause":"Play"}</button><input type="range" aria-label="Video playhead, also used for Split at playhead" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip || busy} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
       
       
@@ -700,16 +723,33 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           <small>{continuityReport.frame_count} timestamped frames inspected
             {continuityReport.typical_interval != null && <> · typical interval {seconds(continuityReport.typical_interval)}s</>}
           </small>
+          <div className="video-continuity-metrics">
+            <div><strong>{continuityReport.median_interval_ms==null?"—":continuityReport.median_interval_ms.toFixed(1)}</strong><small>Median ms</small></div>
+            <div><strong>{continuityReport.p95_interval_ms==null?"—":continuityReport.p95_interval_ms.toFixed(1)}</strong><small>95th % ms</small></div>
+            <div><strong>{continuityReport.max_interval_ms==null?"—":continuityReport.max_interval_ms.toFixed(1)}</strong><small>Max ms</small></div>
+          </div>
           <p>{continuityReport.note}</p>
+          <small>Rule: {continuityReport.threshold_rule} · threshold {continuityReport.threshold_ms==null?"unknown":continuityReport.threshold_ms.toFixed(1)+"ms"} · decode: {continuityReport.decode_status==="warning"?"warning":"no errors observed"}</small>
+          {continuityReport.raw_intervals?.length>0 && <details className="video-continuity-raw">
+            <summary>Inspect raw frame intervals ({continuityReport.interval_count} measured)</summary>
+            <p>First 40 measurements, in decode order. The chart retains the maximum interval in each display bin. {continuityReport.raw_intervals_truncated && "Raw measurements are limited to 20,000 rows in the dashboard response."}</p>
+            <div className="video-continuity-table-wrap"><table>
+              <thead><tr><th>Frame interval</th><th>From (s)</th><th>To (s)</th><th>Δ (ms)</th></tr></thead>
+              <tbody>{continuityReport.raw_intervals.slice(0,40).map((sample,i)=><tr key={i}>
+                <td>{i+1}</td><td>{sample.from.toFixed(3)}</td><td>{sample.to.toFixed(3)}</td><td>{sample.delta_ms.toFixed(2)}</td>
+              </tr>)}</tbody>
+            </table></div>
+          </details>}
           {continuityReport.events.map((event,i)=><div key={i} className="video-continuity-event">
             <div><strong>{event.kind === "timestamp_gap" ? "Timestamp gap" : "Video decode warning"}</strong>
               {Number.isFinite(event.start) && <> · {seconds(event.start)}–{seconds(event.end)}s</>}
               {event.gap_seconds != null && <> · {seconds(event.gap_seconds)}s gap</>}
+              {event.estimated_missing_intervals != null && <small> · approximately {event.estimated_missing_intervals} frame intervals beyond expected (not confirmed missing frames)</small>}
             </div>
             <p>{event.detail}</p>
             {Number.isFinite(event.start) && <button type="button" onClick={()=>viewContinuityEvent(event)}>View interval</button>}
           </div>)}
-          {continuityReport.truncated && <p>More anomalies may exist. Only the first 200 are displayed.</p>}
+          {continuityReport.truncated && <p>Showing first 200 of {continuityReport.event_count} flagged events.</p>}
           <small>{continuityReport.limitations}</small>
         </div>}
       </div>
