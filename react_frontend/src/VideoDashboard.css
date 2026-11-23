@@ -234,3 +234,14 @@
 .video-ai-scan-error p{margin:0;overflow-wrap:anywhere}
 
 .video-ai-track-edge{margin:6px 0 0;color:#287654;font-size:12px;font-weight:600}
+
+/* Independent, non-destructive dropped-video timestamp/decode review. */
+.video-continuity-panel{margin:14px 0;padding:15px 14px;border:1px solid #bdd4e2;background:#f7fbfd;border-radius:13px;color:#213a53}
+.video-continuity-header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.video-continuity-header strong{font-size:14px}
+.video-continuity-panel p{margin:10px 0;font-size:13px;line-height:1.5;color:#4e6681}
+.video-continuity-results{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-top:12px;padding:12px;background:#fff;border:1px solid #d4e3ed;border-radius:10px}
+.video-continuity-results>small{color:#66798c;line-height:1.5}
+.video-continuity-event{width:100%;padding:10px;border:1px solid #f0d0a6;background:#fffaf3;border-radius:8px;font-size:12px;box-sizing:border-box}
+.video-continuity-event p{margin:7px 0;font-size:12px}
+.video-continuity-event button{padding:7px 10px;font-size:12px}
