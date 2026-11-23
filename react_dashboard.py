@@ -610,6 +610,9 @@ class CoCANoTAPI:
         self._reporting_session_token = ""
         self._pending_metadata_documents: dict[str, dict[str, Any]] = {}
         self._pending_sql_batch: dict[str, Any] = {}
+        self._video_scan_lock = threading.Lock()
+        self._video_scan_job: dict[str, Any] | None = None
+        self._video_scan_process: subprocess.Popen[str] | None = None
 
         self.store = LocalMetadataStore()
         self.repository = MetadataRepository()
@@ -804,48 +807,134 @@ class CoCANoTAPI:
             end,
         )
 
-    def video_scan_faces(self, clip: dict[str, Any]) -> dict[str, Any]:
-        """Run RetinaFace in a subprocess to isolate native OpenMP runtimes."""
+    def video_scan_faces_start(self, clip: dict[str, Any]) -> dict[str, Any]:
+        """Start local RetinaFace/optical-flow scan without blocking the UI."""
         from VideoPipeline.processing import validate_project
 
+        with self._video_scan_lock:
+            if self._video_scan_job and self._video_scan_job.get("state") == "running":
+                raise RuntimeError("A RetinaFace scan is already running. Cancel or finish it first.")
         validated = validate_project({"clips": [{
             **clip, "path": self._video_current_path(clip.get("path", "")), "masks": []
         }]})[0]
         payload = {
             "path": str(validated["media"]["path"]),
-            "start": validated["start"],
-            "end": validated["end"],
+            "start": validated["start"], "end": validated["end"],
         }
-        # No shell, no video upload: only a validated local file path is passed
-        # to the worker over stdin. The worker emits JSON suggestions only.
+        token = uuid.uuid4().hex
+        job = {"id": token, "state": "running", "stage": "Starting RetinaFace worker",
+               "current": 0, "total": 0}
+        with self._video_scan_lock:
+            self._video_scan_job = job
+            self._video_scan_process = None
+        threading.Thread(
+            target=self._run_video_scan_worker,
+            args=(token, payload), daemon=True, name="cocanot-retinaface-scan",
+        ).start()
+        return {"job_id": token}
+
+    def _run_video_scan_worker(self, token: str, payload: dict[str, Any]) -> None:
+        import tempfile
+
+        result = None
+        worker_error = None
         try:
-            proc = subprocess.run(
-                [sys.executable, "-m", "VideoPipeline.retinaface_worker"],
-                input=json.dumps(payload), text=True, capture_output=True,
-                cwd=str(ROOT), timeout=900, check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(
-                "RetinaFace scan timed out. No AI censor boxes were approved."
-            ) from exc
-        try:
-            output = json.loads(proc.stdout)
-        except (ValueError, TypeError) as exc:
-            raise RuntimeError(
-                "RetinaFace worker exited unexpectedly. If macOS reports "
-                "OMP Error #15, RetinaFace's installed PyTorch/OpenCV libraries "
-                "may still conflict inside the worker. Check the terminal log; "
-                "the CoCANoT dashboard should remain open."
-            ) from exc
-        if proc.returncode != 0 or not output.get("ok"):
-            # Do not expose raw stderr, which may contain private file paths.
-            raise RuntimeError(
-                "RetinaFace scan failed: " + str(output.get("error", "Worker error"))
-            )
-        result = output.get("result")
-        if not isinstance(result, dict) or not isinstance(result.get("suggestions"), list):
-            raise RuntimeError("RetinaFace worker returned an invalid detection result.")
-        return result
+            # stderr is spooled to disk instead of a pipe, so verbose native
+            # library diagnostics cannot deadlock stdout progress streaming.
+            with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as errors:
+                proc = subprocess.Popen(
+                    [sys.executable, "-m", "VideoPipeline.retinaface_worker"],
+                    cwd=str(ROOT), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=errors, text=True, bufsize=1,
+                )
+                with self._video_scan_lock:
+                    if self._video_scan_job is not None and self._video_scan_job.get("id") == token:
+                        self._video_scan_process = proc
+                    else:
+                        proc.terminate()
+                try:
+                    if proc.stdin is None or proc.stdout is None:
+                        raise RuntimeError("Failed to connect to RetinaFace worker.")
+                    proc.stdin.write(json.dumps(payload) + "\n")
+                    proc.stdin.close()
+                    # Native library initialization may take some time. Show
+                    # the stage immediately and update as JSON lines arrive.
+                    for line in proc.stdout:
+                        try:
+                            item = json.loads(line)
+                        except ValueError:
+                            continue
+                        with self._video_scan_lock:
+                            if not self._video_scan_job or self._video_scan_job.get("id") != token:
+                                break
+                            if self._video_scan_job.get("state") == "cancelled":
+                                break
+                            if item.get("event") == "progress":
+                                self._video_scan_job.update(
+                                    stage=str(item.get("stage", "Scanning")),
+                                    current=int(item.get("current", 0)),
+                                    total=int(item.get("total", 0)),
+                                )
+                            elif item.get("event") == "result":
+                                result = item.get("result")
+                            elif item.get("event") == "error":
+                                worker_error = str(item.get("error", "RetinaFace scan failed"))
+                    proc.wait()
+                finally:
+                    if proc.poll() is None:
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            proc.wait()
+                errors.seek(0)
+                diagnostics = errors.read()[-12000:]
+                if proc.returncode and not worker_error:
+                    if "OMP: Error #15" in diagnostics:
+                        worker_error = (
+                            "OpenMP native runtime conflict in the RetinaFace worker "
+                            "(PyTorch/OpenCV). No AI censor boxes were approved."
+                        )
+                    elif "No module named" in diagnostics:
+                        worker_error = "RetinaFace worker is missing a Python dependency."
+                    else:
+                        worker_error = "RetinaFace worker exited unexpectedly (see terminal diagnostics)."
+        except Exception as exc:
+            worker_error = str(exc) or type(exc).__name__
+
+        with self._video_scan_lock:
+            if not self._video_scan_job or self._video_scan_job.get("id") != token:
+                return
+            self._video_scan_process = None
+            if self._video_scan_job.get("state") == "cancelled":
+                return
+            if worker_error:
+                self._video_scan_job.update(state="error", error=worker_error, stage="Failed")
+            elif not isinstance(result, dict) or not isinstance(result.get("suggestions"), list):
+                self._video_scan_job.update(state="error", error="RetinaFace returned no valid scan result.", stage="Failed")
+            else:
+                self._video_scan_job.update(state="complete", result=result, stage="Complete")
+
+    def video_scan_faces_status(self, job_id: str) -> dict[str, Any]:
+        """Read the latest local scan stage without exposing source file paths."""
+        with self._video_scan_lock:
+            if not self._video_scan_job or self._video_scan_job.get("id") != job_id:
+                raise ValueError("RetinaFace scan no longer exists.")
+            return dict(self._video_scan_job)
+
+    def video_scan_faces_cancel(self, job_id: str) -> dict[str, Any]:
+        """Stop a scan; never approve partial censoring results."""
+        with self._video_scan_lock:
+            if not self._video_scan_job or self._video_scan_job.get("id") != job_id:
+                raise ValueError("RetinaFace scan no longer exists.")
+            if self._video_scan_job.get("state") != "running":
+                return {"state": self._video_scan_job["state"]}
+            self._video_scan_job.update(state="cancelled", stage="Cancelled")
+            proc = self._video_scan_process
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+        return {"state": "cancelled"}
 
     def video_get_session(self) -> dict[str, Any]:
         """Restore the current site's Video editing workspace from pipeline settings."""
