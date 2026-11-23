@@ -277,3 +277,9 @@
 .video-coverage-segment-fill{position:absolute;top:0;bottom:0;background:#478e9b}
 .video-coverage-axis{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#6a7b89;margin-top:5px}
 .video-coverage-results .video-continuity-event{margin:0}
+
+.video-coverage-candidates{flex:1 1 100%;width:100%;padding:9px 10px;background:#f4f7f9;border:1px dashed #bdcdd6;border-radius:8px;font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+.video-coverage-candidates>div{padding:4px 0;border-bottom:1px solid #dae2e7}
+.video-coverage-candidates small{color:#5b7181}
+.video-coverage-candidates p{font-size:11px;margin:5px 0}
+.video-coverage-segments button{white-space:normal;font-size:11px;padding:7px 9px}
