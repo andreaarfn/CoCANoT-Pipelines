@@ -805,11 +805,47 @@ class CoCANoTAPI:
         )
 
     def video_scan_faces(self, clip: dict[str, Any]) -> dict[str, Any]:
-        """Return unapproved local RetinaFace suggestions for a trimmed video clip."""
+        """Run RetinaFace in a subprocess to isolate native OpenMP runtimes."""
         from VideoPipeline.processing import validate_project
-        from VideoPipeline.ai_retinaface import scan_faces
-        validated = validate_project({"clips": [{**clip, "path": self._video_current_path(clip.get("path", "")), "masks": []}]})[0]
-        return scan_faces(validated["media"]["path"], validated["start"], validated["end"])
+
+        validated = validate_project({"clips": [{
+            **clip, "path": self._video_current_path(clip.get("path", "")), "masks": []
+        }]})[0]
+        payload = {
+            "path": str(validated["media"]["path"]),
+            "start": validated["start"],
+            "end": validated["end"],
+        }
+        # No shell, no video upload: only a validated local file path is passed
+        # to the worker over stdin. The worker emits JSON suggestions only.
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "VideoPipeline.retinaface_worker"],
+                input=json.dumps(payload), text=True, capture_output=True,
+                cwd=str(ROOT), timeout=900, check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "RetinaFace scan timed out. No AI censor boxes were approved."
+            ) from exc
+        try:
+            output = json.loads(proc.stdout)
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError(
+                "RetinaFace worker exited unexpectedly. If macOS reports "
+                "OMP Error #15, RetinaFace's installed PyTorch/OpenCV libraries "
+                "may still conflict inside the worker. Check the terminal log; "
+                "the CoCANoT dashboard should remain open."
+            ) from exc
+        if proc.returncode != 0 or not output.get("ok"):
+            # Do not expose raw stderr, which may contain private file paths.
+            raise RuntimeError(
+                "RetinaFace scan failed: " + str(output.get("error", "Worker error"))
+            )
+        result = output.get("result")
+        if not isinstance(result, dict) or not isinstance(result.get("suggestions"), list):
+            raise RuntimeError("RetinaFace worker returned an invalid detection result.")
+        return result
 
     def video_get_session(self) -> dict[str, Any]:
         """Restore the current site's Video editing workspace from pipeline settings."""
