@@ -262,6 +262,12 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     try {
       const job = await bridge().video_scan_faces_start(clip);
       if (!job?.job_id) throw new Error("Desktop did not start a scan job.");
+      if (aiScanCancelRequested.current) {
+        await bridge().video_scan_faces_cancel(job.job_id);
+        setAiScan({state:"cancelled",stage:"Scan cancelled"});
+        setNotice("RetinaFace scan cancelled. No new AI suggestions were added.");
+        return;
+      }
       setAiScan({state:"running",stage:"Loading RetinaFace model",current:0,total:0,jobId:job.job_id});
       let status;
       while (!aiScanCancelRequested.current) {
