@@ -69,7 +69,7 @@ def _matchable(a, b):
     )
 
 
-def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval):
+def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval, progress=None):
     """Associate face detections with frame-by-frame optical-flow positions.
 
     Uncorroborated motion and tracking failures terminate a proposal, rather
@@ -79,7 +79,9 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval)
 
     duration = clip_end - clip_start
     finished, active = [], []
-    for _, at, faces in detections:
+    for sample_no, (_, at, faces) in enumerate(detections):
+        if progress:
+            progress("Linking faces with optical flow", sample_no, len(detections))
         predictions = []
         for tr in active:
             try:
@@ -185,10 +187,12 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval)
             "sample_count": tr["sample_count"], "kind": "face",
             "interrupted": bool(tr.get("interrupted", False)),
         })
+    if progress:
+        progress("Linking faces with optical flow", len(detections), len(detections))
     return sorted(proposals, key=lambda item: (item["start"], item["x"]))
 
 
-def scan_faces(path: str, clip_start: float, clip_end: float) -> dict:
+def scan_faces(path: str, clip_start: float, clip_end: float, progress=None) -> dict:
     """Run locally on sampled video frames, returning only unapproved suggestions."""
     try:
         import cv2
@@ -222,7 +226,11 @@ def scan_faces(path: str, clip_start: float, clip_end: float) -> dict:
                 "RetinaFace model could not load. Verify the backend and preload "
                 "model weights on a non-sensitive test before scanning recordings."
             ) from exc
+        if progress:
+            progress("Detecting faces", 0, sample_count)
         for index in range(sample_count):
+            if progress:
+                progress("Detecting faces", index, sample_count)
             t = min(duration - .0001, (index + .5) * duration / sample_count)
             cap.set(cv2.CAP_PROP_POS_MSEC, (clip_start + t) * 1000)
             ok, frame = cap.read()
@@ -244,9 +252,11 @@ def scan_faces(path: str, clip_start: float, clip_end: float) -> dict:
     finally:
         cap.release()
 
+    if progress:
+        progress("Detecting faces", sample_count, sample_count)
     return {
         "suggestions": _suggestions_with_tracking(
-            detections, path, clip_start, clip_end, duration / sample_count
+            detections, path, clip_start, clip_end, duration / sample_count, progress
         ),
         "sampled_frames": sample_count, "unreadable_frames": unreadable,
         "sample_interval": round(duration / sample_count, 3),
