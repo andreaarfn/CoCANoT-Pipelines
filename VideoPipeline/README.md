@@ -42,6 +42,46 @@ report is not a substitute for manual review or a validated synchronization
 pipeline. This feature does **not** automatically alter masks, trim clips,
 claim that frames were dropped, or block export based on ambiguous evidence.
 
+## Evidence dashboard and reproducible benchmark (experimental)
+
+**Check continuity** in Process Video now measures and displays:
+
+- Every positive, duplicate, or reversed *presentation timestamp interval*
+  within the selected trim; the first **20,000 raw intervals** are available
+  in the returned report (the interface previews the first 40).
+- Median interval, 95th percentile, maximum interval, and the precise
+  current flagging rule: > max(120 ms, 2.5 × median positive interval).
+- A timestamp-interval chart: for long recordings it retains the **largest
+  absolute interval** in each plotted time bin (up to 360 points), so a large
+  anomaly is not lost through average downsampling.
+- Individual candidate events with start/end timestamps, observed gap,
+  and an **approximate** number of extra frame intervals (not verified missing
+  frames); click **View interval** to inspect the recording.
+- Independent FFmpeg decoding warnings. A clean decode does not establish
+  absence of dropped footage.
+
+**Run synthetic benchmark** in the same panel to score this *timestamp
+screening algorithm* on deterministic positive and negative controls:
+1-, 2-, 5-, 10-, and 30-frame removals with PTS preserved; a 30-frame removal
+with timestamps rewritten; constant and variable frame rates; a clock jump
+without removal; and a repeated timestamp. Reported recall, precision, false
+alarms, and localization are **synthetic-array metrics only**. They are *not*
+clinical validation or performance estimates for real Natus recordings.
+
+Reproduce outside the app (no patient data or third-party model required):
+
+```bash
+~/Library/cocanot-pipelines/bin/python -m unittest VideoPipeline.tests.test_continuity
+~/Library/cocanot-pipelines/bin/python -m VideoPipeline.benchmark_continuity
+```
+
+These tests establish that the implementation responds to controlled PTS
+changes; they **do not** cover content-only freezes, compressed-stream timing
+quirks, or missing footage with plausible reconstructed timestamps. A proper
+field validation must introduce known defects into real encoded synthetic
+videos, establish receiver operating characteristics on representative Natus
+recordings, and independently compare with neural time reference signals.
+
 ## Requirements
 
 - FFmpeg / FFprobe on PATH (macOS: `brew install ffmpeg`)
