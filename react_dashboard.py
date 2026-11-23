@@ -807,6 +807,11 @@ class CoCANoTAPI:
             end,
         )
 
+    def video_continuity_benchmark(self) -> dict[str, Any]:
+        """Run deterministic, non-patient synthetic timestamp benchmark."""
+        from VideoPipeline.benchmark_continuity import evaluate
+        return evaluate()
+
     def video_check_continuity(self, clip: dict[str, Any]) -> dict[str, Any]:
         """Inspect a validated local clip for suspicious timestamp/decode gaps."""
         from VideoPipeline.processing import validate_project
