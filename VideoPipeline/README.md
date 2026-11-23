@@ -32,7 +32,7 @@ threshold values across detectors does not mean their scores are calibrated.
 On macOS, from the CoCANoT repository root:
 
 ```bash
-~/Library/cocanot-pipelines/bin/python -m pip install --upgrade "retina-face>=0.0.19" onnxruntime opencv-python
+~/Library/cocanot-pipelines/bin/python -m pip install --upgrade "retina-face>=0.0.19" onnxruntime
 ```
 
 **Mac OpenMP fix:** RetinaFace's automatic backend selection can choose
