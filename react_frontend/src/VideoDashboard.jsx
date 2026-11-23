@@ -263,7 +263,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             sampled_frames:result.sampled_frames,unreadable_frames:result.unreadable_frames,
             sample_interval:result.sample_interval}} : c)}));
       setReviewed(false);
-      setNotice(`AI sampled ${result.sampled_frames} frames; ${pending.length} unapproved face suggestions. ${result.warning || "Review the entire recording."}`);
+      setNotice(`AI detected faces in ${result.sampled_frames} sampled frames; ${pending.length} proposed face tracks/boxes await review. ${result.warning || "Review the entire recording."}`);
     } catch (error) {
       setNotice("Face scan unavailable: " + (error.message || error));
     } finally {
@@ -278,11 +278,17 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       masks:accept ? [...c.masks,{
         id:id(),type:"solid",x:suggestion.x,y:suggestion.y,
         w:suggestion.w,h:suggestion.h,start:suggestion.start,end:suggestion.end,
-        source:"retinaface-reviewed", keyframes:[],
+        source:"retinaface-reviewed",
+        keyframes:suggestion.tracking_complete ? (suggestion.tracked_keyframes || []) : [],
+        tracked_until:suggestion.tracking_complete ? suggestion.end : null,
+        tracking_complete:Boolean(suggestion.tracking_complete),
+        tracking_size_mode:"fixed",
+        tracking_message:suggestion.tracking_message || "Manually inspect the entire interval.",
+
       }] : c.masks
     }));
     setNotice(accept
-      ? "Suggestion added as an editable censor box. Its position is only a sampled estimate: track the interval and inspect the complete recording."
+      ? (suggestion.tracking_complete ? "AI-proposed motion track added. Verify every frame, especially occlusions and face-size changes; approval does not certify de-identification." : "Single detection added as a static box. Track and manually inspect the interval before export.")
       : "AI suggestion dismissed. Inspect the recording to ensure no identifier was missed.");
   }
 
@@ -592,29 +598,31 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         <div className="video-trim-result">Kept: {seconds(duration)}s of {seconds(clip.duration)}s</div>
       </div>
       <div className="video-ai-panel">
-        <div className="video-ai-heading"><strong>AI first pass · RetinaFace face detection</strong>
+        <div className="video-ai-heading"><strong>AI first pass · RetinaFace + motion tracking</strong>
           <button type="button" className="video-primary" disabled={busy || clip.unavailable} onClick={scanFaces}>Scan faces (AI)</button>
         </div>
-        <p>Runs locally on sampled frames. Suggestions are never added to the final video until you accept them. AI can miss faces and other identifying details.</p>
+        <p>RetinaFace finds faces on sampled frames; optical flow follows matching faces between samples. One proposal represents a connected face track. Tracking failures or unmatched faces create separate suggestions. Nothing is approved automatically.</p>
         {clip.ai_scan_summary && <p role="status">Scanned {clip.ai_scan_summary.sampled_frames} frames (every ~{seconds(clip.ai_scan_summary.sample_interval)}s).
           {clip.ai_scan_summary.unreadable_frames > 0 && <> {clip.ai_scan_summary.unreadable_frames} frames could not be read.</>}
         </p>}
         {suggestions.length>0 && <div className="video-ai-suggestions">
-          <strong>{suggestions.length} suggestions awaiting review</strong>
+          <strong>{suggestions.length} face tracks / boxes awaiting review</strong>
           {suggestions.map(s=><div className="video-ai-suggestion" key={s.id}>
-            <div><strong>Possible face</strong> · {seconds(s.start)}–{seconds(s.end)}s
-              <small> · {s.sample_count} sampled detection(s) · lowest detector score {Math.round(s.confidence*100)}%</small>
+            <div><strong>{s.tracking_complete ? "Proposed face track" : "Untracked face box"}</strong> · {seconds(s.start)}–{seconds(s.end)}s
+              <small> · {s.sample_count} detector observation(s) · {s.tracked_keyframes?.length || 0} motion positions</small>
+              {s.interrupted && <p className="video-ai-track-warning" role="status">Track ended early · review continuation manually</p>}
+              {!s.tracking_complete && <p className="video-ai-track-warning" role="status">Motion not established · use manual tracking</p>}
             </div>
             <div className="video-ai-buttons">
               <button type="button" aria-pressed={activeSuggestion?.id===s.id} onClick={()=>{
                 player.current?.pause();
                 setMaskMode(false);
                 setPreviewSuggestion({clipId:clip.id,id:s.id});
-                const sampleTime = s.sampled_positions?.[0]?.t ?? (s.start+s.end)/2;
+                const sampleTime = s.sampled_positions?.[0]?.t ?? s.start;
                 setCursor(sampleTime);
                 if(player.current)player.current.currentTime=clip.start+sampleTime;
-              }}>{activeSuggestion?.id===s.id?"Viewing":"View box"}</button>
-              <button type="button" onClick={()=>resolveSuggestion(s,true)}>Accept box</button>
+              }}>{activeSuggestion?.id===s.id?"Viewing":"View track"}</button>
+              <button type="button" onClick={()=>resolveSuggestion(s,true)}>{s.tracking_complete?"Accept track":"Accept box"}</button>
               <button type="button" onClick={()=>resolveSuggestion(s,false)}>Reject</button>
             </div>
           </div>)}
