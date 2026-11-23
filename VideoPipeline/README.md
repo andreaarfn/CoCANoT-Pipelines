@@ -100,6 +100,16 @@ rather than an independent suggestion for each detection.
   censor region; it does **not** mean the whole video or face was successfully
   de-identified. Carefully check the movement, box size, frame boundaries and
   final rendered video.
+- **Clip-edge tracking:** sample times fall inside a clip (for example,
+  0.25–2.25s in a 2.50s recording). When a linked face is detected at
+  the first/last sample, the system now tries to follow the face **backward
+  to 0.00s** and **forward to the actual clip end**. The preceding/following
+  motion is generated from decoded frames rather than stretching a stationary
+  rectangle. If this fails, the proposed interval is not extended, and a
+  warning tells the reviewer which edge is unverified.
+- A face that first enters mid-clip or leaves before the end is **not**
+  automatically stretched to the clip boundaries. A single, uncorroborated
+  detection is also not expanded into a claimed continuous motion track.
 - A detection with no successful linked motion remains an **untracked box**
   and must be manually tracked/corrected if it is accepted.
 - If optical flow loses the face or the next sampled face detection does not
