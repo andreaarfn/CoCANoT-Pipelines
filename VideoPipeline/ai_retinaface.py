@@ -99,7 +99,7 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval)
                 continue
             points = motion["keyframes"]
             if len(tr["keyframes"]) + len(points) > 20000:
-                tr["tracking_complete"] = False
+                tr["interrupted"] = True
                 tr["message"] = "Maximum tracking keyframes reached; review remaining video."
                 finished.append(tr)
                 continue
@@ -125,7 +125,7 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval)
         next_active = []
         for i, (tr, points, predicted) in enumerate(predictions):
             if i not in matches:
-                tr["tracking_complete"] = False
+                tr["interrupted"] = True
                 tr["message"] = (
                     "Face was not confirmed at the next detection sample. "
                     "Review the uncovered interval and manually extend the mask if necessary."
@@ -177,12 +177,13 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval)
             "tracked_keyframes": points if motion_complete else [],
             "tracking_complete": motion_complete,
             "tracking_message": (
-                "Optical flow linked detections frame by frame. Review for drift, "
-                "occlusion, changes in face size and missed frames."
+                (tr.get("message", "Optical flow linked detections frame by frame. Review for drift, occlusion, changes in face size and missed frames.")
+                 if tr.get("interrupted") else "Optical flow linked detections frame by frame. Review for drift, occlusion, changes in face size and missed frames.")
                 if motion_complete else tr["message"]
             ),
             "confidence": round(float(tr["confidence"]), 3),
             "sample_count": tr["sample_count"], "kind": "face",
+            "interrupted": bool(tr.get("interrupted", False)),
         })
     return sorted(proposals, key=lambda item: (item["start"], item["x"]))
 
