@@ -28,6 +28,10 @@ def main() -> int:
         progress("Loading RetinaFace model", 0, 0)
         # Model and OpenCV may emit diagnostic messages; keep protocol clean.
         with contextlib.redirect_stdout(sys.stderr):
+            from retinaface.commons import backend_utils
+            if backend_utils.get_backend_engine() != "onnx":
+                raise RuntimeError("RetinaFace worker must use ONNX Runtime, not PyTorch or TensorFlow. Upgrade retina-face to 0.0.19.")
+            import onnxruntime  # noqa: F401 - assert backend is present
             from VideoPipeline.ai_retinaface import scan_faces
             result = scan_faces(
                 str(request["path"]), float(request["start"]),
