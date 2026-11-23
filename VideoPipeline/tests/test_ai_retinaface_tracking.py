@@ -48,6 +48,17 @@ class OpticalFlowLinkTests(unittest.TestCase):
         self.assertTrue(proposals[0]["interrupted"])
         self.assertFalse(proposals[0]["tracking_complete"])
 
+    @patch("VideoPipeline.advanced.track_region", side_effect=motion)
+    def test_valid_prefix_kept_when_later_sample_has_no_detection(self, _tracker):
+        detections = [(0, .25, [face(.2)]), (1, .75, [face(.22)]),
+                      (2, 1.25, [])]
+        proposals = _suggestions_with_tracking(detections, "synthetic.mp4", 0, 2, .5)
+        self.assertEqual(len(proposals), 1)
+        self.assertTrue(proposals[0]["interrupted"])
+        self.assertTrue(proposals[0]["tracking_complete"])
+        self.assertAlmostEqual(proposals[0]["end"], .75)
+        self.assertGreater(len(proposals[0]["tracked_keyframes"]), 1)
+
     @patch("VideoPipeline.advanced.track_region")
     def test_failed_tracking_does_not_merge_detections(self, tracker):
         tracker.return_value = {"complete": False, "warning": "lost features"}
