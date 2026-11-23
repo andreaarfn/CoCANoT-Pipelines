@@ -65,7 +65,7 @@ def _interpolate(region, time):
 
 
 def track_region(path: str, clip_start: float, clip_end: float, region: dict,
-                 from_time: float, until_time: float) -> dict:
+                 from_time: float, until_time: float, *, every_frame: bool = False) -> dict:
     """Fixed-size translation tracking over an explicit censor interval.
 
     Motion uses robust inlier translations; estimated scaling is ignored. Template matching can recover
@@ -114,7 +114,7 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict,
                    "w":w/1280, "h":h/720}]
         index = start_frame
         # Smaller gaps reduce feature loss between consecutive optical-flow steps.
-        stride = max(1, round(fps / 15))
+        stride = 1 if every_frame else max(1, round(fps / 15))
         warning = ""
         fallback_frames = 0
         fixed_width, fixed_height = w, h
