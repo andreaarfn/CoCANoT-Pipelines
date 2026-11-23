@@ -73,11 +73,18 @@ Reproduce outside the app (no patient data or third-party model required):
 ```bash
 ~/Library/cocanot-pipelines/bin/python -m unittest VideoPipeline.tests.test_continuity
 ~/Library/cocanot-pipelines/bin/python -m VideoPipeline.benchmark_continuity
+~/Library/cocanot-pipelines/bin/python -m VideoPipeline.benchmark_media_continuity
 ```
 
+The encoded-video benchmark uses FFmpeg to generate three temporary, non-sensitive
+MP4 recordings (normal, 15 removed frames with PTS preserved, and the same
+removal with PTS rewritten). It checks the actual file-probing and decode
+pipeline but covers only one synthetic encoder, not real Natus files.
+
 These tests establish that the implementation responds to controlled PTS
-changes; they **do not** cover content-only freezes, compressed-stream timing
-quirks, or missing footage with plausible reconstructed timestamps. A proper
+changes; they **do not** cover content-only freezes, a representative range of
+compressed-stream timing quirks, or missing footage with plausible
+reconstructed timestamps. A proper
 field validation must introduce known defects into real encoded synthetic
 videos, establish receiver operating characteristics on representative Natus
 recordings, and independently compare with neural time reference signals.
