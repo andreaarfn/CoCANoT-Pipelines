@@ -701,7 +701,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             const maxMs=Math.max(1,continuityReport.max_interval_ms||1,continuityReport.threshold_ms||1);
             const h=102*Math.min(1,Math.abs(point.ms)/maxMs);
             const x=25+564*clamp(point.t/(duration||1),0,1);
-            const flagged=continuityReport.threshold_ms!=null && point.ms>continuityReport.threshold_ms;
+            const flagged=point.ms<=0 || (continuityReport.threshold_ms!=null && point.ms>continuityReport.threshold_ms);
             return <line key={i} x1={x} x2={x} y1={118} y2={118-h}
               stroke={flagged?"#b56f27":"#3e82a6"} strokeWidth={flagged?2.4:1.5}>
               <title>{seconds(point.t)}s · {point.ms.toFixed(2)}ms</title>
@@ -710,7 +710,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           <text x="25" y="137" fontSize="11" fill="currentColor">0s</text>
           <text x="590" y="137" fontSize="11" fill="currentColor" textAnchor="end">{seconds(duration)}s</text>
         </svg>
-        <p className="video-continuity-chart-note">Blue: frame-to-frame timestamp interval. Amber: exceeds screening threshold. Each displayed point represents the largest interval in its time bin; no evidence is interpolated.</p>
+        <p className="video-continuity-chart-note">Blue: frame-to-frame timestamp interval. Amber: exceeds screening threshold or non-increasing timestamp. Each displayed point represents the largest interval in its time bin; no evidence is interpolated.</p>
       </div>}
       <div className="video-scrub"><button type="button" aria-label={isPlaying?"Pause video":"Play video"} onClick={toggleClipPlayback} disabled={!clip || busy || maskMode}>{isPlaying?<Pause size={16}/>:<Play size={16}/>} {isPlaying?"Pause":"Play"}</button><input type="range" aria-label="Video playhead, also used for Split at playhead" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip || busy} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
       
@@ -783,7 +783,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             </table></div>
           </details>}
           {continuityReport.events.map((event,i)=><div key={i} className="video-continuity-event">
-            <div><strong>{event.kind === "timestamp_gap" ? "Timestamp gap" : "Video decode warning"}</strong>
+            <div><strong>{event.kind === "timestamp_gap" ? "Timestamp gap" : event.kind === "nonincreasing_timestamp" ? "Repeated/reversed timestamp" : "Video decode warning"}</strong>
               {Number.isFinite(event.start) && <> · {seconds(event.start)}–{seconds(event.end)}s</>}
               {event.gap_seconds != null && <> · {seconds(event.gap_seconds)}s gap</>}
               {event.estimated_missing_intervals != null && <small> · approximately {event.estimated_missing_intervals} frame intervals beyond expected (not confirmed missing frames)</small>}
