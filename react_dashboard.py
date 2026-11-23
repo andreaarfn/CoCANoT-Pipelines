@@ -812,6 +812,33 @@ class CoCANoTAPI:
         from VideoPipeline.benchmark_continuity import evaluate
         return evaluate()
 
+    def video_check_session_coverage(self, project: dict[str, Any]) -> dict[str, Any]:
+        """Compare manually referenced acquisition intervals across source clips.
+
+        We intentionally do not infer acquisition time from MP4 creation_time
+        or filesystem metadata, since exports may rewrite those values.
+        """
+        from VideoPipeline.session_coverage import analyze_session_coverage
+        from VideoPipeline.processing import validate_project
+
+        if not isinstance(project, dict):
+            raise ValueError("Invalid video project.")
+        validated = validate_project({"clips": [
+            {**clip, "path": self._video_current_path(clip.get("path", "")), "masks": []}
+            for clip in project.get("clips", [])
+        ]})
+        segments = [{
+            "id": clip.get("id"), "name": row["media"]["name"],
+            "duration": row["media"]["duration"],
+            "trim_start": row["start"], "trim_end": row["end"],
+            "recording_start": clip.get("recording_start_utc"),
+        } for clip, row in zip(project["clips"], validated)]
+        return analyze_session_coverage(
+            segments,
+            expected_start=project.get("reference_start_utc"),
+            expected_end=project.get("reference_end_utc"),
+        )
+
     def video_check_continuity(self, clip: dict[str, Any]) -> dict[str, Any]:
         """Inspect a validated local clip for suspicious timestamp/decode gaps."""
         from VideoPipeline.processing import validate_project
