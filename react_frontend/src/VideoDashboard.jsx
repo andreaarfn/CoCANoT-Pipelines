@@ -25,6 +25,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const [continuityBenchmark, setContinuityBenchmark] = useState(null);
   const [coverageReport, setCoverageReport] = useState(null);
   const [coverageChecking, setCoverageChecking] = useState(false);
+  const [timeCandidates, setTimeCandidates] = useState({});
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
   const [aiScan, setAiScan] = useState(null);
   const aiScanCancelRequested = useRef(false);
@@ -288,6 +289,20 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       [field+"_local"]:localTime,
       [field+"_utc"]:acquisitionISO(localTime)}));
     setCoverageReport(null);
+  }
+  async function inspectTimeCandidates(item) {
+    if (!bridge()?.video_time_metadata_candidates) {
+      setNotice("Embedded timestamp inspection requires the latest CoCANoT desktop build.");
+      return;
+    }
+    setTimeCandidates(current=>({...current,[item.id]:{path:item.path,loading:true}}));
+    try {
+      const list = await bridge().video_time_metadata_candidates(item);
+      setTimeCandidates(current=>({...current,[item.id]:{path:item.path,
+        values:Array.isArray(list)?list:[],loading:false}}));
+    } catch(error) {
+      setTimeCandidates(current=>({...current,[item.id]:{path:item.path,loading:false,error:String(error?.message||error)}}));
+    }
   }
   async function checkSessionCoverage() {
     if (!bridge()?.video_check_session_coverage) {
@@ -861,6 +876,17 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             <input type="datetime-local" aria-label={`Acquisition start for ${item.name}`}
               value={item.recording_start_local||""}
               onChange={e=>updateAcquisitionTime(item.id,e.target.value)} />
+            <button type="button" onClick={()=>inspectTimeCandidates(item)} disabled={timeCandidates[item.id]?.loading}>
+              {timeCandidates[item.id]?.loading?"Inspecting...":"Inspect embedded dates"}
+            </button>
+            {timeCandidates[item.id]?.path===item.path && <div className="video-coverage-candidates">
+              <small>Unverified metadata: these may be export times, not Natus acquisition times. Confirm against recording logs before entering an acquisition start.</small>
+              {timeCandidates[item.id].error && <p role="alert">{timeCandidates[item.id].error}</p>}
+              {timeCandidates[item.id].values?.length===0 && <p>No embedded date/time tags found.</p>}
+              {timeCandidates[item.id].values?.map((candidate,j)=><div key={j}>
+                <strong>{candidate.tag}</strong> · {candidate.value} <small>({candidate.location})</small>
+              </div>)}
+            </div>}
           </label>)}
         </div>
         {coverageReport && <div className="video-coverage-results" role="status">
