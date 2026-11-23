@@ -9,6 +9,39 @@ blur masks have been removed from this branch for now.** Older saved projects
 may contain `background_blur` settings. These settings are ignored during
 processing and stripped when loading or saving a project.
 
+## Dropped video / recording continuity experiment
+
+This branch is a copy of `feat/video-retinaface-experiment`, with the
+additional **Video continuity · dropped-frame check** panel in **Process Video**.
+The existing RetinaFace face detection, optical-flow tracking, manual review
+and export flows are retained.
+
+Select a clip and click **Check continuity**. CoCANoT:
+
+1. Uses `ffprobe` to examine **presentation timestamps** for every
+   decodable video frame in the selected trim.
+2. Compares neighboring frame times against the median observed frame
+   interval and highlights unusually large jumps.
+3. Attempts a full `ffmpeg` video decode to flag corrupted streams or
+   decoding errors.
+4. Shows timestamp intervals and **View interval** buttons that seek the
+   preview to flagged positions.
+
+The check is read-only; results are retained in the current editing session,
+and are invalidated if the clip path or trim is changed. A clean result is
+**not proof** of uninterrupted footage. For example, video recorded with
+variable frame rate, paused acquisition, irregular timestamps, or a missing
+segment with rewritten timestamps can appear unusual or entirely normal.
+Missing footage before the first or after the last frame cannot be inferred
+from this file alone. Full verification requires independent reference
+timestamps, recording logs, or synchronized Natus neural data.
+
+Large files can take time to inspect. Initial thresholds are exploratory
+(more than 2.5 times the median frame interval **and** over 120 ms). The
+report is not a substitute for manual review or a validated synchronization
+pipeline. This feature does **not** automatically alter masks, trim clips,
+claim that frames were dropped, or block export based on ambiguous evidence.
+
 ## Requirements
 
 - FFmpeg / FFprobe on PATH (macOS: `brew install ffmpeg`)
