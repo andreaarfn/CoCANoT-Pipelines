@@ -8,7 +8,7 @@ import sys
 
 def emit(item: dict) -> None:
     sys.stdout.write(json.dumps(item) + "\n")
-    sys.stdout.flush()
+    sys.__stdout__.flush()
 
 
 def main() -> int:
