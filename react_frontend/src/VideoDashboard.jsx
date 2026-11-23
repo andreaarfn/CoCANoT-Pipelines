@@ -870,7 +870,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           </label>
         </div>
         <div className="video-coverage-segments">
-          {project.clips.map((item,i)=><label key={item.id}>
+          {project.clips.map((item,i)=><div key={item.id} className="video-coverage-row">
             <span><strong>{i+1}. {item.name}</strong><small> · {seconds(item.end-item.start)}s selected</small></span>
             <span>Acquisition start</span>
             <input type="datetime-local" aria-label={`Acquisition start for ${item.name}`}
@@ -887,7 +887,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
                 <strong>{candidate.tag}</strong> · {candidate.value} <small>({candidate.location})</small>
               </div>)}
             </div>}
-          </label>)}
+          </div>)}
         </div>
         {coverageReport && <div className="video-coverage-results" role="status">
           <strong>{coverageReport.status==="inconclusive"?"Incomplete acquisition timing":
