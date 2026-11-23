@@ -20,6 +20,8 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const dragAnchor = useRef(null);
   const draggedClip = useRef(null);
   const [busy, setBusy] = useState(false);
+  const [continuityChecking, setContinuityChecking] = useState(false);
+  const [continuityReports, setContinuityReports] = useState({});
   const [aiScan, setAiScan] = useState(null);
   const aiScanCancelRequested = useRef(false);
   const [notice, setNotice] = useState("");
@@ -185,6 +187,9 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const masks = clip?.masks || [];
   const suggestions = clip?.ai_suggestions || [];
   const totalPending = project.clips.reduce((n,c)=>n+(c.ai_suggestions || []).length,0);
+  const continuityKey = clip ? JSON.stringify([clip.path, clip.start, clip.end]) : "";
+  const continuityRecord = clip ? continuityReports[clip.id] : null;
+  const continuityReport = continuityRecord?.key === continuityKey ? continuityRecord.result : null;
   const activeSuggestion = previewSuggestion?.clipId === clip?.id
     ? suggestions.find(s=>s.id===previewSuggestion.id) : null;
   const suggestionPosition = activeSuggestion?.sampled_positions?.length
@@ -244,6 +249,40 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     } finally {
       setBusy(false);
     }
+  }
+
+  async function checkContinuity() {
+    if (!clip || !bridge()?.video_check_continuity) {
+      setNotice("Video continuity analysis is not available in this desktop build.");
+      return;
+    }
+    const clipId = clip.id;
+    const key = JSON.stringify([clip.path, clip.start, clip.end]);
+    try {
+      setContinuityChecking(true);
+      setNotice("");
+      player.current?.pause();
+      const result = await bridge().video_check_continuity(clip);
+      if (!result || !Array.isArray(result.events)) throw new Error("Invalid continuity results.");
+      setContinuityReports(previous=>({...previous,[clipId]:{key,result}}));
+      setNotice(result.status==="attention"
+        ? `Continuity check found ${result.events.length} potential issue(s). Review the highlighted intervals; these are not proof of missing footage.`
+        : result.status==="inconclusive"
+          ? "Not enough usable timestamps to assess continuity."
+          : "No timing gaps or decoding errors were flagged. This does not prove all footage is present.");
+    } catch (error) {
+      setNotice("Continuity check failed: " + (error?.message || String(error)));
+    } finally {
+      setContinuityChecking(false);
+    }
+  }
+
+  function viewContinuityEvent(item) {
+    if (!Number.isFinite(item.start)) return;
+    const t = clamp(item.start, 0, duration);
+    setCursor(t);
+    player.current?.pause();
+    if (player.current) player.current.currentTime = clip.start + t;
   }
 
   async function scanFaces() {
@@ -644,6 +683,35 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         <label>Start <strong>{seconds(clip.start)}s</strong><input aria-label="Trim clip start" type="range" min="0" max={Math.max(0,clip.end-.1)} step=".05" value={clip.start} disabled={busy} onChange={e=>trimClip("start",e.target.value)}/></label>
         <label>End <strong>{seconds(clip.end)}s</strong><input aria-label="Trim clip end" type="range" min={Math.min(clip.duration,clip.start+.1)} max={clip.duration} step=".05" value={clip.end} disabled={busy} onChange={e=>trimClip("end",e.target.value)}/></label>
         <div className="video-trim-result">Kept: {seconds(duration)}s of {seconds(clip.duration)}s</div>
+      </div>
+      <div className="video-continuity-panel">
+        <div className="video-continuity-header">
+          <strong>Video continuity · dropped-frame check</strong>
+          <button type="button" onClick={checkContinuity} disabled={busy || continuityChecking || clip.unavailable}>
+            {continuityChecking ? "Checking video..." : "Check continuity"}
+          </button>
+        </div>
+        <p>Checks decoded frame timestamps and FFmpeg errors for possible missing frames or recording gaps. Nothing is modified.</p>
+        {continuityChecking && <p role="status">Inspecting frame timestamps and decoding the recording. Longer recordings may take time.</p>}
+        {continuityReport && <div className="video-continuity-results" role="status">
+          <strong>{continuityReport.status === "attention" ? "Potential continuity issues found"
+            : continuityReport.status === "inconclusive" ? "Unable to assess reliably"
+            : "No anomalies flagged"}</strong>
+          <small>{continuityReport.frame_count} timestamped frames inspected
+            {continuityReport.typical_interval != null && <> · typical interval {seconds(continuityReport.typical_interval)}s</>}
+          </small>
+          <p>{continuityReport.note}</p>
+          {continuityReport.events.map((event,i)=><div key={i} className="video-continuity-event">
+            <div><strong>{event.kind === "timestamp_gap" ? "Timestamp gap" : "Video decode warning"}</strong>
+              {Number.isFinite(event.start) && <> · {seconds(event.start)}–{seconds(event.end)}s</>}
+              {event.gap_seconds != null && <> · {seconds(event.gap_seconds)}s gap</>}
+            </div>
+            <p>{event.detail}</p>
+            {Number.isFinite(event.start) && <button type="button" onClick={()=>viewContinuityEvent(event)}>View interval</button>}
+          </div>)}
+          {continuityReport.truncated && <p>More anomalies may exist. Only the first 200 are displayed.</p>}
+          <small>{continuityReport.limitations}</small>
+        </div>}
       </div>
       <div className="video-ai-panel">
         <div className="video-ai-heading"><strong>AI first pass · RetinaFace + motion tracking</strong>
