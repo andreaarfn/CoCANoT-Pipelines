@@ -807,6 +807,19 @@ class CoCANoTAPI:
             end,
         )
 
+    def video_check_continuity(self, clip: dict[str, Any]) -> dict[str, Any]:
+        """Inspect a validated local clip for suspicious timestamp/decode gaps."""
+        from VideoPipeline.processing import validate_project
+        from VideoPipeline.continuity import check_video_continuity
+
+        validated = validate_project({"clips": [{
+            **clip, "path": self._video_current_path(clip.get("path", "")),
+            "masks": []
+        }]})[0]
+        return check_video_continuity(
+            validated["media"]["path"], validated["start"], validated["end"]
+        )
+
     def video_scan_faces_start(self, clip: dict[str, Any]) -> dict[str, Any]:
         """Start local RetinaFace/optical-flow scan without blocking the UI."""
         from VideoPipeline.processing import validate_project
