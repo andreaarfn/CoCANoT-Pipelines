@@ -52,17 +52,45 @@ preinstall and verify the weights before use; do not run the first scan
 on identifiable recordings. Avoid automatically bundling third-party model
 weights until their redistribution terms have been checked.
 
+### Motion-linked face tracks (this experiment)
+
+The scanner first samples RetinaFace detections at approximately **2 fps**,
+as on the other detector branches. It then uses CoCANoT's existing
+**Lucas–Kanade optical-flow tracker on every decoded frame** between nearby
+samples. When optical-flow motion and the next RetinaFace detection agree, they
+are combined into **one suggested face track** with time-stamped positions,
+rather than an independent suggestion for each detection.
+
+- **View track** previews the linked moving box.
+- **Accept track** carries the proposed motion keyframes into an editable
+  censor region; it does **not** mean the whole video or face was successfully
+  de-identified. Carefully check the movement, box size, frame boundaries and
+  final rendered video.
+- A detection with no successful linked motion remains an **untracked box**
+  and must be manually tracked/corrected if it is accepted.
+- If optical flow loses the face or the next sampled face detection does not
+  corroborate it, the suggested track **ends**. Later detections may begin new
+  suggestions. This intentionally does not invent uninterrupted face coverage
+  across gaps or occlusions.
+- Neither optical flow nor detector matching establishes a person's identity;
+  crossing faces can still cause drift or identity switches. **Every face
+  and every gap requires human inspection.**
+
+**Performance:** tracking every frame is more expensive than the original
+2-fps-only detector. Start with a short non-sensitive clip before attempting
+long clinical recordings. The code is experimental and has not been validated
+against clinical de-identification standards.
+
 ### Review workflow
 
 1. Select the same short test clip and trim interval as on the other branches.
-2. Click **Scan faces (AI)** in **Process Video**.
-3. Choose **View box** to see the dashed, unapproved suggestion overlay.
-4. Use **Accept box** to make an editable censor box or **Reject** to dismiss.
+2. Click **Scan faces (AI)** in **Process Video**. RetinaFace detects sampled frames, then optical flow tracks between them.
+3. Choose **View track** to see the dashed, unapproved moving suggestion overlay.
+4. Use **Accept track** for a linked motion proposal, **Accept box** for an untracked detection, or **Reject** to dismiss.
 5. If accepted, **Track censor interval**, manually correct failures, and
    review the entire source and final output. Pending suggestions block export.
 
-An accepted suggestion starts as a stationary box; sampled positions are
-only visual hints and are **not validated motion tracks**. Detection is
+An accepted linked face track includes proposed per-frame motion positions, but those positions are **not validated for privacy coverage**; single detections remain stationary boxes. Detection is
 not identity recognition and does not detect text or all PHI. Any detection
 can miss faces, including profiles, small/obscured faces, and frames
 between samples. A scan with zero detections is not proof of de-identification.
