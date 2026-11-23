@@ -32,8 +32,27 @@ threshold values across detectors does not mean their scores are calibrated.
 On macOS, from the CoCANoT repository root:
 
 ```bash
-~/Library/cocanot-pipelines/bin/python -m pip install "retina-face" "opencv-python"
+~/Library/cocanot-pipelines/bin/python -m pip install --upgrade "retina-face>=0.0.19" onnxruntime opencv-python
 ```
+
+**Mac OpenMP fix:** RetinaFace's automatic backend selection can choose
+PyTorch when that package is installed, causing duplicate `libomp.dylib`
+runtime initialization alongside OpenCV. The dedicated worker now forces
+`DEEPFACE_BACKEND_ENGINE=onnx` **before any RetinaFace imports** and checks
+that ONNX Runtime was actually selected. The main dashboard and the MediaPipe
+and YuNet branches are not changed. Do not use
+`KMP_DUPLICATE_LIB_OK=TRUE`.
+
+You can check the selected backend without loading PyTorch:
+
+```bash
+DEEPFACE_BACKEND_ENGINE=onnx ~/Library/cocanot-pipelines/bin/python -c "from retinaface.commons.backend_utils import get_backend_engine; print(get_backend_engine())"
+```
+
+Expected output: `onnx`. Install the packages above first. The first ONNX
+model initialization may download pretrained weights. Initialize only with a
+non-sensitive test on an approved network and verify offline behavior before
+scanning patient videos.
 
 This uses the serengil/retinaface Python implementation. The current project
 documents an ONNX Runtime default backend, but some versions require
