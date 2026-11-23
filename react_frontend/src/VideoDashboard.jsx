@@ -23,6 +23,8 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const [continuityChecking, setContinuityChecking] = useState(false);
   const [continuityReports, setContinuityReports] = useState({});
   const [continuityBenchmark, setContinuityBenchmark] = useState(null);
+  const [coverageReport, setCoverageReport] = useState(null);
+  const [coverageChecking, setCoverageChecking] = useState(false);
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
   const [aiScan, setAiScan] = useState(null);
   const aiScanCancelRequested = useRef(false);
@@ -267,6 +269,45 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       setNotice("Synthetic benchmark failed: " + (error?.message || String(error)));
     } finally {
       setBenchmarkBusy(false);
+    }
+  }
+
+  const acquisitionISO = value => {
+    if (!value) return "";
+    const timestamp = new Date(value);
+    return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : "";
+  };
+  function updateAcquisitionTime(clipId, localTime) {
+    setProject(current=>({...current, clips:current.clips.map(item=>item.id===clipId
+      ? {...item,recording_start_local:localTime,recording_start_utc:acquisitionISO(localTime)}
+      : item)}));
+    setCoverageReport(null);
+  }
+  function updateReferenceWindow(field, localTime) {
+    setProject(current=>({...current,
+      [field+"_local"]:localTime,
+      [field+"_utc"]:acquisitionISO(localTime)}));
+    setCoverageReport(null);
+  }
+  async function checkSessionCoverage() {
+    if (!bridge()?.video_check_session_coverage) {
+      setNotice("Recording coverage analysis is unavailable in this desktop build.");
+      return;
+    }
+    setCoverageChecking(true);
+    try {
+      const report = await bridge().video_check_session_coverage(project);
+      setCoverageReport(report);
+      setNotice(report.status==="attention"
+        ? `Session coverage: ${report.events.length} uncovered time interval(s) detected.`
+        : report.status==="inconclusive"
+          ? "Session coverage incomplete: add verified start timestamps for missing segments."
+          : "No uncovered periods found between supplied recording timestamps. This does not verify the clocks.");
+    } catch(error) {
+      setCoverageReport(null);
+      setNotice("Session coverage check failed: " + (error?.message || error));
+    } finally {
+      setCoverageChecking(false);
     }
   }
 
@@ -793,6 +834,66 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           </div>)}
           {continuityReport.truncated && <p>Showing first 200 of {continuityReport.event_count} flagged events.</p>}
           <small>{continuityReport.limitations}</small>
+        </div>}
+      </div>
+      <div className="video-coverage-panel">
+        <div className="video-continuity-header"><strong>Recording session coverage · gaps between video files</strong>
+          <button type="button" disabled={busy || coverageChecking || !project.clips.length} onClick={checkSessionCoverage}>
+            {coverageChecking?"Comparing times...":"Check session gaps"}
+          </button>
+        </div>
+        <p>Compare each video segment's acquisition start time against the other segments. Use the timestamp from an independent Natus recording log or other trustworthy reference, not the date the MP4 was exported.</p>
+        <small>Times entered below use your Mac's local timezone and are converted to UTC for comparison. Each original recording start is combined with the current clip trim to calculate coverage.</small>
+        <div className="video-coverage-fields">
+          <label>Neural/session start (optional)
+            <input type="datetime-local" value={project.reference_start_local||""}
+              onChange={e=>updateReferenceWindow("reference_start",e.target.value)} />
+          </label>
+          <label>Neural/session end (optional)
+            <input type="datetime-local" value={project.reference_end_local||""}
+              onChange={e=>updateReferenceWindow("reference_end",e.target.value)} />
+          </label>
+        </div>
+        <div className="video-coverage-segments">
+          {project.clips.map((item,i)=><label key={item.id}>
+            <span><strong>{i+1}. {item.name}</strong><small> · {seconds(item.end-item.start)}s selected</small></span>
+            <span>Acquisition start</span>
+            <input type="datetime-local" aria-label={`Acquisition start for ${item.name}`}
+              value={item.recording_start_local||""}
+              onChange={e=>updateAcquisitionTime(item.id,e.target.value)} />
+          </label>)}
+        </div>
+        {coverageReport && <div className="video-coverage-results" role="status">
+          <strong>{coverageReport.status==="inconclusive"?"Incomplete acquisition timing":
+            coverageReport.events.length ? "Uncovered video intervals detected":"No gaps between supplied segment times"}</strong>
+          {coverageReport.coverage_percent!=null && <div className="video-continuity-metrics">
+            <div><strong>{coverageReport.coverage_percent.toFixed(1)}%</strong><small>Covered time</small></div>
+            <div><strong>{seconds(coverageReport.covered_seconds)}s</strong><small>Video covered</small></div>
+            <div><strong>{seconds(coverageReport.uncovered_seconds)}s</strong><small>Uncovered</small></div>
+          </div>}
+          {coverageReport.reference_start && <div className="video-coverage-bar">
+            <div className="video-coverage-track">
+              {coverageReport.segments.map(segment=>{
+                const a=new Date(coverageReport.reference_start).getTime(), b=new Date(coverageReport.reference_end).getTime();
+                const lo=Math.max(a,new Date(segment.start).getTime()), hi=Math.min(b,new Date(segment.end).getTime());
+                return hi>lo&&b>a?<div key={segment.id} className="video-coverage-segment-fill"
+                  style={{left:`${100*(lo-a)/(b-a)}%`,width:`${100*(hi-lo)/(b-a)}%`}}
+                  title={segment.name} />:null;
+              })}
+            </div>
+            <div className="video-coverage-axis"><small>{new Date(coverageReport.reference_start).toLocaleString()}</small>
+              <small>{new Date(coverageReport.reference_end).toLocaleString()}</small></div>
+          </div>}
+          {coverageReport.events.map((event,i)=><div key={i} className="video-continuity-event">
+            <strong>Uncovered interval · {seconds(event.duration_seconds)} seconds</strong>
+            <p>{new Date(event.start).toLocaleString()} – {new Date(event.end).toLocaleString()}</p>
+            <small>{event.location.replaceAll("_"," ")}</small>
+          </div>)}
+          {coverageReport.unreferenced.length>0 && <p role="alert">
+            Missing acquisition timestamps for: {coverageReport.unreferenced.map(item=>item.name).join(", ")}.
+            The result is incomplete until these are supplied.
+          </p>}
+          <small>{coverageReport.note} {coverageReport.limitations}</small>
         </div>}
       </div>
       <div className="video-ai-panel">
