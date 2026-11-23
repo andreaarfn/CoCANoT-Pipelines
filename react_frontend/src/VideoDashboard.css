@@ -245,3 +245,16 @@
 .video-continuity-event{width:100%;padding:10px;border:1px solid #f0d0a6;background:#fffaf3;border-radius:8px;font-size:12px;box-sizing:border-box}
 .video-continuity-event p{margin:7px 0;font-size:12px}
 .video-continuity-event button{padding:7px 10px;font-size:12px}
+
+.video-continuity-chart-card{margin:14px 0 8px;padding:14px;border:1px solid #d3e1eb;border-radius:12px;background:#fff}
+.video-continuity-chart{width:100%;height:170px;display:block}
+.video-continuity-chart-note{margin:5px 0 0;font-size:12px;line-height:1.5;color:#536a80}
+.video-continuity-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;width:100%}
+.video-continuity-metrics>div{display:flex;flex-direction:column;gap:3px;background:#f0f5f8;border-radius:7px;padding:8px 5px;min-width:0;text-align:center}
+.video-continuity-metrics strong{font-size:14px;font-variant-numeric:tabular-nums}
+.video-continuity-metrics small{font-size:10px;color:#617789}
+.video-continuity-raw{width:100%;font-size:12px}
+.video-continuity-raw summary{cursor:pointer;font-weight:600;padding:5px 0}
+.video-continuity-table-wrap{overflow:auto;max-height:185px;width:100%}
+.video-continuity-table-wrap table{width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums}
+.video-continuity-table-wrap td,.video-continuity-table-wrap th{padding:5px;border-bottom:1px solid #e5ebf0;text-align:right}
