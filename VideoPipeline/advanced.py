@@ -65,7 +65,8 @@ def _interpolate(region, time):
 
 
 def track_region(path: str, clip_start: float, clip_end: float, region: dict,
-                 from_time: float, until_time: float, *, every_frame: bool = False) -> dict:
+                 from_time: float, until_time: float, *, every_frame: bool = False,
+                 reverse: bool = False) -> dict:
     """Fixed-size translation tracking over an explicit censor interval.
 
     Motion uses robust inlier translations; estimated scaling is ignored. Template matching can recover
@@ -82,12 +83,16 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict,
         if not math.isfinite(fps) or fps <= 0:
             fps = 30.0
         duration = clip_end - clip_start
-        if not (0 <= from_time < until_time <= duration + 1e-6):
+        if not (0 <= min(from_time, until_time) and
+                max(from_time, until_time) <= duration + 1e-6 and
+                ((from_time > until_time) if reverse else (from_time < until_time))):
             raise ValueError("Tracking start/end are outside the clip.")
         start_frame = max(0, round((clip_start + from_time) * fps))
         end_frame = max(start_frame, min(
             round((clip_start + until_time) * fps),
             max(0, round(clip_end * fps) - 1)))
+        if reverse:
+            end_frame = max(0, round((clip_start + until_time) * fps))
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
         ok, image = cap.read()
         if not ok:
@@ -119,19 +124,30 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict,
         fallback_frames = 0
         fixed_width, fixed_height = w, h
 
-        while index < end_frame:
-            step = min(stride, end_frame - index)
-            for _ in range(step - 1):
-                if not cap.grab():
-                    warning = "Video decoding stopped unexpectedly."
+        while (index > end_frame if reverse else index < end_frame):
+            step = min(stride, abs(end_frame-index))
+            if reverse:
+                # OpenCV cannot decode backwards; seek and decode the requested
+                # prior frame. Reverse tracking is only used near the first
+                # detection, and no frames are skipped in every_frame mode.
+                cap.set(cv2.CAP_PROP_POS_FRAMES, index-step)
+                ok, image = cap.read()
+                if not ok:
+                    warning = "Unable to decode a preceding video frame."
                     break
-            if warning:
-                break
-            ok, image = cap.read()
-            if not ok:
-                warning = "Unable to decode a video frame."
-                break
-            index += step
+                index -= step
+            else:
+                for _ in range(step - 1):
+                    if not cap.grab():
+                        warning = "Video decoding stopped unexpectedly."
+                        break
+                if warning:
+                    break
+                ok, image = cap.read()
+                if not ok:
+                    warning = "Unable to decode a video frame."
+                    break
+                index += step
             current = cv2.cvtColor(_canvas(image, cv2), cv2.COLOR_BGR2GRAY)
             bounds = None
             if points is not None and len(points) >= 5:
@@ -207,14 +223,16 @@ def track_region(path: str, clip_start: float, clip_end: float, region: dict,
             time = round(index/fps - clip_start, 4)
             frames.append({"t":time,"x":x/1280,"y":y/720,"w":w/1280,"h":h/720})
 
-        complete = not warning and index >= end_frame
+        complete = not warning and (index <= end_frame if reverse else index >= end_frame)
         if complete:
             # Position from the final decoded frame holds until the requested
             # end timestamp, which might fall between physical video frames.
             final_time = round(float(until_time), 4)
-            if final_time > frames[-1]["t"]:
+            if ((final_time < frames[-1]["t"]) if reverse else (final_time > frames[-1]["t"])):
                 frames.append({**frames[-1], "t":final_time})
-        last = frames[-1]["t"]
+        # Consumers of validated tracks expect chronological keyframes.
+        frames.sort(key=lambda point: point["t"])
+        last = frames[0]["t"] if reverse else frames[-1]["t"]
         if not complete and not warning:
             warning = "Tracking did not reach the requested end."
         return {
