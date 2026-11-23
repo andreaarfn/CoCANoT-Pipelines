@@ -18,7 +18,11 @@ processing and stripped when loading or saving a project.
 ## Experimental RetinaFace-only AI first pass
 
 This branch uses the **RetinaFace** detector, independently of YuNet and
-MediaPipe. It preserves the same sampling cadence (approximately two
+MediaPipe. The detector runs in a separate local Python worker process so its
+PyTorch/OpenMP libraries do not load into the CoCANoT desktop process. This
+isolation does not eliminate possible conflicts between dependencies within
+the worker itself; if the scan reports an OpenMP error, its dependency stack
+must still be repaired. No unsafe duplicate-OpenMP workaround is used. It preserves the same sampling cadence (approximately two
 frames/second, up to 1,200 frames), 20% extra bounding-box padding, suggestion
 grouping, review controls, manual tracking, and export safeguards. Matching
 threshold values across detectors does not mean their scores are calibrated.
