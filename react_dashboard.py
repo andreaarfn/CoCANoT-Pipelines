@@ -812,6 +812,16 @@ class CoCANoTAPI:
         from VideoPipeline.benchmark_continuity import evaluate
         return evaluate()
 
+    def video_time_metadata_candidates(self, clip: dict[str, Any]) -> list[dict[str, Any]]:
+        """Read unverified acquisition-time candidate tags from local video."""
+        from VideoPipeline.session_coverage import inspect_time_metadata
+        from VideoPipeline.processing import validate_project
+        validated = validate_project({"clips": [{
+            **clip, "path": self._video_current_path(clip.get("path", "")),
+            "masks": [],
+        }]})[0]
+        return inspect_time_metadata(validated["media"]["path"])
+
     def video_check_session_coverage(self, project: dict[str, Any]) -> dict[str, Any]:
         """Compare manually referenced acquisition intervals across source clips.
 
