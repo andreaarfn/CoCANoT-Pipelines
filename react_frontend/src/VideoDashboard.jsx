@@ -22,6 +22,8 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const [busy, setBusy] = useState(false);
   const [continuityChecking, setContinuityChecking] = useState(false);
   const [continuityReports, setContinuityReports] = useState({});
+  const [continuityBenchmark, setContinuityBenchmark] = useState(null);
+  const [benchmarkBusy, setBenchmarkBusy] = useState(false);
   const [aiScan, setAiScan] = useState(null);
   const aiScanCancelRequested = useRef(false);
   const [notice, setNotice] = useState("");
@@ -248,6 +250,23 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       setNotice("Tracking failed: " + (error.message || error));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function runContinuityBenchmark() {
+    if (!bridge()?.video_continuity_benchmark) {
+      setNotice("Synthetic continuity benchmark is unavailable. Rebuild and relaunch CoCANoT.");
+      return;
+    }
+    setBenchmarkBusy(true);
+    try {
+      const result = await bridge().video_continuity_benchmark();
+      if (!Array.isArray(result?.cases)) throw new Error("Invalid benchmark response.");
+      setContinuityBenchmark(result);
+    } catch (error) {
+      setNotice("Synthetic benchmark failed: " + (error?.message || String(error)));
+    } finally {
+      setBenchmarkBusy(false);
     }
   }
 
@@ -714,7 +733,30 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             {continuityChecking ? "Checking video..." : "Check continuity"}
           </button>
         </div>
-        <p>Checks decoded frame timestamps and FFmpeg errors for possible missing frames or recording gaps. Nothing is modified.</p>
+        <p>Measures presentation timestamp intervals and decode errors. Timing anomalies do not prove footage was dropped.</p>
+        <button type="button" disabled={benchmarkBusy || busy} onClick={runContinuityBenchmark}>
+          {benchmarkBusy ? "Running benchmark..." : "Run synthetic benchmark"}
+        </button>
+        {continuityBenchmark && <div className="video-continuity-benchmark">
+          <strong>Controlled timestamp benchmark</strong>
+          <p>This tests synthetic timestamp arrays, NOT a collection of real recordings. Missing footage with rewritten timestamps is expected to escape detection.</p>
+          <div className="video-continuity-metrics">
+            <div><strong>{continuityBenchmark.sensitivity==null?"—":Math.round(100*continuityBenchmark.sensitivity)+"%"}</strong><small>Recall</small></div>
+            <div><strong>{continuityBenchmark.precision==null?"—":Math.round(100*continuityBenchmark.precision)+"%"}</strong><small>Precision</small></div>
+            <div><strong>{continuityBenchmark.false_positive_cases}</strong><small>False alarms</small></div>
+          </div>
+          <details className="video-continuity-raw"><summary>View all {continuityBenchmark.cases.length} controlled scenarios</summary>
+            <div className="video-continuity-table-wrap"><table>
+              <thead><tr><th>Scenario</th><th>Actual removal</th><th>Gap flagged</th></tr></thead>
+              <tbody>{continuityBenchmark.cases.map(item=><tr key={item.scenario}>
+                <td>{item.scenario.replaceAll("_"," ")}</td>
+                <td>{item.ground_truth_missing_frames?"Yes":"No"}</td>
+                <td>{item.timestamp_gap_detected?"Yes":"No"}</td>
+              </tr>)}</tbody>
+            </table></div>
+          </details>
+          <small>{continuityBenchmark.limitations}</small>
+        </div>}
         {continuityChecking && <p role="status">Inspecting frame timestamps and decoding the recording. Longer recordings may take time.</p>}
         {continuityReport && <div className="video-continuity-results" role="status">
           <strong>{continuityReport.status === "attention" ? "Potential continuity issues found"
