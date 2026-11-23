@@ -258,3 +258,22 @@
 .video-continuity-table-wrap{overflow:auto;max-height:185px;width:100%}
 .video-continuity-table-wrap table{width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums}
 .video-continuity-table-wrap td,.video-continuity-table-wrap th{padding:5px;border-bottom:1px solid #e5ebf0;text-align:right}
+
+/* Acquisition-clock session coverage is separate from within-file PTS checks. */
+.video-coverage-panel{margin:14px 0;padding:15px 14px;border:1px solid #c4d3dc;border-radius:13px;background:#f7fafc;color:#213a53}
+.video-coverage-panel p{font-size:13px;line-height:1.5;color:#4d6276;margin:9px 0}
+.video-coverage-panel>small,.video-coverage-results>small{font-size:11px;color:#5b6e7e;line-height:1.5;display:block}
+.video-coverage-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:10px;margin:12px 0}
+.video-coverage-fields label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:650}
+.video-coverage-fields input,.video-coverage-segments input{min-width:0;max-width:100%;box-sizing:border-box;font:inherit;padding:7px;border:1px solid #b6c8d4;border-radius:7px;background:white;color:#213a53}
+.video-coverage-segments{display:flex;flex-direction:column;gap:8px}
+.video-coverage-segments label{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:10px;border:1px solid #d9e5ed;border-radius:8px;background:#fff;font-size:12px}
+.video-coverage-segments label span:first-child{flex:1 1 170px;overflow-wrap:anywhere}
+.video-coverage-segments label span:nth-child(2){font-size:11px;color:#647a8b}
+.video-coverage-segments label small{color:#647a8b}
+.video-coverage-results{display:flex;flex-direction:column;gap:9px;margin-top:12px;padding:12px;border:1px solid #d9e5ed;border-radius:9px;background:#fff}
+.video-coverage-bar{width:100%}
+.video-coverage-track{position:relative;height:17px;background:#f0d8b6;border-radius:4px;overflow:hidden}
+.video-coverage-segment-fill{position:absolute;top:0;bottom:0;background:#478e9b}
+.video-coverage-axis{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#6a7b89;margin-top:5px}
+.video-coverage-results .video-continuity-event{margin:0}
