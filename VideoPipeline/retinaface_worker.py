@@ -3,7 +3,12 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import sys
+
+# This must be set before importing retinaface or its backend_utils module.
+# ONNX Runtime avoids the PyTorch OpenMP runtime that aborted this macOS worker.
+os.environ["DEEPFACE_BACKEND_ENGINE"] = "onnx"
 
 
 def emit(item: dict) -> None:
