@@ -667,6 +667,12 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           {suggestions.map(s=><div className="video-ai-suggestion" key={s.id}>
             <div><strong>{s.tracking_complete ? "Proposed face track" : "Untracked face box"}</strong> · {seconds(s.start)}–{seconds(s.end)}s
               <small> · {s.sample_count} detector observation(s) · {s.tracked_keyframes?.length || 0} motion positions</small>
+              {(s.leading_extended || s.trailing_extended) && <p className="video-ai-track-edge" role="status">
+                {s.leading_extended && s.trailing_extended
+                  ? "Motion followed to both clip boundaries"
+                  : s.leading_extended ? "Motion followed back to clip start" : "Motion followed to clip end"}
+              </p>}
+              {s.edge_warning && <p className="video-ai-track-warning" role="status">{s.edge_warning}</p>}
               {s.interrupted && <p className="video-ai-track-warning" role="status">Track ended early · review continuation manually</p>}
               {!s.tracking_complete && <p className="video-ai-track-warning" role="status">Motion not established · use manual tracking</p>}
             </div>
