@@ -232,3 +232,5 @@
 .video-ai-scan-status button{align-self:flex-end}
 .video-ai-scan-error{border:1px solid #d7a2a2;background:rgba(189,64,64,.07)}
 .video-ai-scan-error p{margin:0;overflow-wrap:anywhere}
+
+.video-ai-track-edge{margin:6px 0 0;color:#287654;font-size:12px;font-weight:600}
