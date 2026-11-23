@@ -169,7 +169,7 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval,
     # detected at that edge sample, and optical flow follows all the way.
     # Never extend an interrupted track or a track with no edge detection.
     for tr in finished:
-        if tr["first_sample_index"] == 0 and tr["start"] > 0:
+        if tr["tracking_complete"] and tr["first_sample_index"] == 0 and tr["start"] > 0:
             try:
                 first = dict(tr["keyframes"][0])
                 backward = track_region(
@@ -187,7 +187,7 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval,
                     tr["leading_extended"] = True
             else:
                 tr["leading_warning"] = "Could not track face back to the clip start."
-        if tr["last_sample_index"] == len(detections)-1 and tr["last_t"] < duration:
+        if tr["tracking_complete"] and tr["last_sample_index"] == len(detections)-1 and tr["last_t"] < duration:
             try:
                 last_box = {"x": tr["keyframes"][-1]["x"],
                             "y": tr["keyframes"][-1]["y"],
