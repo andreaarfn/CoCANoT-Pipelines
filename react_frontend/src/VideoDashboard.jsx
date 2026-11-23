@@ -22,11 +22,6 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const [busy, setBusy] = useState(false);
   const [continuityChecking, setContinuityChecking] = useState(false);
   const [continuityReports, setContinuityReports] = useState({});
-  const [continuityBenchmark, setContinuityBenchmark] = useState(null);
-  const [coverageReport, setCoverageReport] = useState(null);
-  const [coverageChecking, setCoverageChecking] = useState(false);
-  const [timeCandidates, setTimeCandidates] = useState({});
-  const [benchmarkBusy, setBenchmarkBusy] = useState(false);
   const [aiScan, setAiScan] = useState(null);
   const aiScanCancelRequested = useRef(false);
   const [notice, setNotice] = useState("");
@@ -256,76 +251,6 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
     }
   }
 
-  async function runContinuityBenchmark() {
-    if (!bridge()?.video_continuity_benchmark) {
-      setNotice("Synthetic continuity benchmark is unavailable. Rebuild and relaunch CoCANoT.");
-      return;
-    }
-    setBenchmarkBusy(true);
-    try {
-      const result = await bridge().video_continuity_benchmark();
-      if (!Array.isArray(result?.cases)) throw new Error("Invalid benchmark response.");
-      setContinuityBenchmark(result);
-    } catch (error) {
-      setNotice("Synthetic benchmark failed: " + (error?.message || String(error)));
-    } finally {
-      setBenchmarkBusy(false);
-    }
-  }
-
-  const acquisitionISO = value => {
-    if (!value) return "";
-    const timestamp = new Date(value);
-    return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : "";
-  };
-  function updateAcquisitionTime(clipId, localTime) {
-    setProject(current=>({...current, clips:current.clips.map(item=>item.id===clipId
-      ? {...item,recording_start_local:localTime,recording_start_utc:acquisitionISO(localTime)}
-      : item)}));
-    setCoverageReport(null);
-  }
-  function updateReferenceWindow(field, localTime) {
-    setProject(current=>({...current,
-      [field+"_local"]:localTime,
-      [field+"_utc"]:acquisitionISO(localTime)}));
-    setCoverageReport(null);
-  }
-  async function inspectTimeCandidates(item) {
-    if (!bridge()?.video_time_metadata_candidates) {
-      setNotice("Embedded timestamp inspection requires the latest CoCANoT desktop build.");
-      return;
-    }
-    setTimeCandidates(current=>({...current,[item.id]:{path:item.path,loading:true}}));
-    try {
-      const list = await bridge().video_time_metadata_candidates(item);
-      setTimeCandidates(current=>({...current,[item.id]:{path:item.path,
-        values:Array.isArray(list)?list:[],loading:false}}));
-    } catch(error) {
-      setTimeCandidates(current=>({...current,[item.id]:{path:item.path,loading:false,error:String(error?.message||error)}}));
-    }
-  }
-  async function checkSessionCoverage() {
-    if (!bridge()?.video_check_session_coverage) {
-      setNotice("Recording coverage analysis is unavailable in this desktop build.");
-      return;
-    }
-    setCoverageChecking(true);
-    try {
-      const report = await bridge().video_check_session_coverage(project);
-      setCoverageReport(report);
-      setNotice(report.status==="attention"
-        ? `Session coverage: ${report.events.length} uncovered time interval(s) detected.`
-        : report.status==="inconclusive"
-          ? "Session coverage incomplete: add verified start timestamps for missing segments."
-          : "No uncovered periods found between supplied recording timestamps. This does not verify the clocks.");
-    } catch(error) {
-      setCoverageReport(null);
-      setNotice("Session coverage check failed: " + (error?.message || error));
-    } finally {
-      setCoverageChecking(false);
-    }
-  }
-
   async function checkContinuity() {
     if (!clip || !bridge()?.video_check_continuity) {
       setNotice("Video continuity analysis is not available in this desktop build.");
@@ -341,7 +266,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       if (!result || !Array.isArray(result.events)) throw new Error("Invalid continuity results.");
       setContinuityReports(previous=>({...previous,[clipId]:{key,result}}));
       setNotice(result.status==="attention"
-        ? `Continuity check found ${result.events.length} potential issue(s). Review the highlighted intervals; these are not proof of missing footage.`
+        ? `Found ${result.event_count ?? result.events.length} timestamp or decoding warning(s). Review the highlighted intervals; these do not prove footage is missing.`
         : result.status==="inconclusive"
           ? "Not enough usable timestamps to assess continuity."
           : "No timing gaps or decoding errors were flagged. This does not prove all footage is present.");
@@ -784,35 +709,12 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       </div>
       <div className="video-continuity-panel">
         <div className="video-continuity-header">
-          <strong>Video continuity · dropped-frame check</strong>
+          <strong>Dropped-time detector · frame timestamp gaps</strong>
           <button type="button" onClick={checkContinuity} disabled={busy || continuityChecking || clip.unavailable}>
-            {continuityChecking ? "Checking video..." : "Check continuity"}
+            {continuityChecking ? "Scanning timestamps..." : "Detect time gaps"}
           </button>
         </div>
-        <p>Measures presentation timestamp intervals and decode errors. Timing anomalies do not prove footage was dropped.</p>
-        <button type="button" disabled={benchmarkBusy || busy} onClick={runContinuityBenchmark}>
-          {benchmarkBusy ? "Running benchmark..." : "Run synthetic benchmark"}
-        </button>
-        {continuityBenchmark && <div className="video-continuity-benchmark">
-          <strong>Controlled timestamp benchmark</strong>
-          <p>This tests synthetic timestamp arrays, NOT a collection of real recordings. Missing footage with rewritten timestamps is expected to escape detection.</p>
-          <div className="video-continuity-metrics">
-            <div><strong>{continuityBenchmark.sensitivity==null?"—":Math.round(100*continuityBenchmark.sensitivity)+"%"}</strong><small>Recall</small></div>
-            <div><strong>{continuityBenchmark.precision==null?"—":Math.round(100*continuityBenchmark.precision)+"%"}</strong><small>Precision</small></div>
-            <div><strong>{continuityBenchmark.false_positive_cases}</strong><small>False alarms</small></div>
-          </div>
-          <details className="video-continuity-raw"><summary>View all {continuityBenchmark.cases.length} controlled scenarios</summary>
-            <div className="video-continuity-table-wrap"><table>
-              <thead><tr><th>Scenario</th><th>Actual removal</th><th>Gap flagged</th></tr></thead>
-              <tbody>{continuityBenchmark.cases.map(item=><tr key={item.scenario}>
-                <td>{item.scenario.replaceAll("_"," ")}</td>
-                <td>{item.ground_truth_missing_frames?"Yes":"No"}</td>
-                <td>{item.timestamp_gap_detected?"Yes":"No"}</td>
-              </tr>)}</tbody>
-            </table></div>
-          </details>
-          <small>{continuityBenchmark.limitations}</small>
-        </div>}
+        <p>Checks for missing time within this video by comparing consecutive frame timestamps. This catches the gap in test video 02, but not video 03 if timestamps were rewritten. Your original file is not modified.</p>
         {continuityChecking && <p role="status">Inspecting frame timestamps and decoding the recording. Longer recordings may take time.</p>}
         {continuityReport && <div className="video-continuity-results" role="status">
           <strong>{continuityReport.status === "attention" ? "Potential continuity issues found"
@@ -849,77 +751,6 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           </div>)}
           {continuityReport.truncated && <p>Showing first 200 of {continuityReport.event_count} flagged events.</p>}
           <small>{continuityReport.limitations}</small>
-        </div>}
-      </div>
-      <div className="video-coverage-panel">
-        <div className="video-continuity-header"><strong>Recording session coverage · gaps between video files</strong>
-          <button type="button" disabled={busy || coverageChecking || !project.clips.length} onClick={checkSessionCoverage}>
-            {coverageChecking?"Comparing times...":"Check session gaps"}
-          </button>
-        </div>
-        <p>Compare each video segment's acquisition start time against the other segments. Use the timestamp from an independent Natus recording log or other trustworthy reference, not the date the MP4 was exported.</p>
-        <small>Times entered below use your Mac's local timezone and are converted to UTC for comparison. Each original recording start is combined with the current clip trim to calculate coverage.</small>
-        <div className="video-coverage-fields">
-          <label>Neural/session start (optional)
-            <input type="datetime-local" value={project.reference_start_local||""}
-              onChange={e=>updateReferenceWindow("reference_start",e.target.value)} />
-          </label>
-          <label>Neural/session end (optional)
-            <input type="datetime-local" value={project.reference_end_local||""}
-              onChange={e=>updateReferenceWindow("reference_end",e.target.value)} />
-          </label>
-        </div>
-        <div className="video-coverage-segments">
-          {project.clips.map((item,i)=><div key={item.id} className="video-coverage-row">
-            <span><strong>{i+1}. {item.name}</strong><small> · {seconds(item.end-item.start)}s selected</small></span>
-            <span>Acquisition start</span>
-            <input type="datetime-local" aria-label={`Acquisition start for ${item.name}`}
-              value={item.recording_start_local||""}
-              onChange={e=>updateAcquisitionTime(item.id,e.target.value)} />
-            <button type="button" onClick={()=>inspectTimeCandidates(item)} disabled={timeCandidates[item.id]?.loading}>
-              {timeCandidates[item.id]?.loading?"Inspecting...":"Inspect embedded dates"}
-            </button>
-            {timeCandidates[item.id]?.path===item.path && <div className="video-coverage-candidates">
-              <small>Unverified metadata: these may be export times, not Natus acquisition times. Confirm against recording logs before entering an acquisition start.</small>
-              {timeCandidates[item.id].error && <p role="alert">{timeCandidates[item.id].error}</p>}
-              {timeCandidates[item.id].values?.length===0 && <p>No embedded date/time tags found.</p>}
-              {timeCandidates[item.id].values?.map((candidate,j)=><div key={j}>
-                <strong>{candidate.tag}</strong> · {candidate.value} <small>({candidate.location})</small>
-              </div>)}
-            </div>}
-          </div>)}
-        </div>
-        {coverageReport && <div className="video-coverage-results" role="status">
-          <strong>{coverageReport.status==="inconclusive"?"Incomplete acquisition timing":
-            coverageReport.events.length ? "Uncovered video intervals detected":"No gaps between supplied segment times"}</strong>
-          {coverageReport.coverage_percent!=null && <div className="video-continuity-metrics">
-            <div><strong>{coverageReport.coverage_percent.toFixed(1)}%</strong><small>Covered time</small></div>
-            <div><strong>{seconds(coverageReport.covered_seconds)}s</strong><small>Video covered</small></div>
-            <div><strong>{seconds(coverageReport.uncovered_seconds)}s</strong><small>Uncovered</small></div>
-          </div>}
-          {coverageReport.reference_start && <div className="video-coverage-bar">
-            <div className="video-coverage-track">
-              {coverageReport.segments.map(segment=>{
-                const a=new Date(coverageReport.reference_start).getTime(), b=new Date(coverageReport.reference_end).getTime();
-                const lo=Math.max(a,new Date(segment.start).getTime()), hi=Math.min(b,new Date(segment.end).getTime());
-                return hi>lo&&b>a?<div key={segment.id} className="video-coverage-segment-fill"
-                  style={{left:`${100*(lo-a)/(b-a)}%`,width:`${100*(hi-lo)/(b-a)}%`}}
-                  title={segment.name} />:null;
-              })}
-            </div>
-            <div className="video-coverage-axis"><small>{new Date(coverageReport.reference_start).toLocaleString()}</small>
-              <small>{new Date(coverageReport.reference_end).toLocaleString()}</small></div>
-          </div>}
-          {coverageReport.events.map((event,i)=><div key={i} className="video-continuity-event">
-            <strong>Uncovered interval · {seconds(event.duration_seconds)} seconds</strong>
-            <p>{new Date(event.start).toLocaleString()} – {new Date(event.end).toLocaleString()}</p>
-            <small>{event.location.replaceAll("_"," ")}</small>
-          </div>)}
-          {coverageReport.unreferenced.length>0 && <p role="alert">
-            Missing acquisition timestamps for: {coverageReport.unreferenced.map(item=>item.name).join(", ")}.
-            The result is incomplete until these are supplied.
-          </p>}
-          <small>{coverageReport.note} {coverageReport.limitations}</small>
         </div>}
       </div>
       <div className="video-ai-panel">
