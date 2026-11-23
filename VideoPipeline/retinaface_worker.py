@@ -1,8 +1,4 @@
-"""Isolated RetinaFace scan worker.
-
-Only receives a JSON request over stdin; never uploads frames or writes video.
-Do not import this module in the CoCANoT GUI process.
-"""
+"""Dedicated RetinaFace worker; JSON-lines progress and final response on stdout."""
 from __future__ import annotations
 
 import contextlib
@@ -10,24 +6,32 @@ import json
 import sys
 
 
+def emit(item: dict) -> None:
+    sys.stdout.write(json.dumps(item) + "\n")
+    sys.stdout.flush()
+
+
 def main() -> int:
     try:
-        payload = json.load(sys.stdin)
-        if not isinstance(payload, dict):
+        request = json.load(sys.stdin)
+        if not isinstance(request, dict):
             raise ValueError("Invalid scanner request.")
-        # Keep third-party diagnostic output away from the JSON protocol.
+        def progress(stage: str, current: int, total: int) -> None:
+            emit({"event": "progress", "stage": stage,
+                  "current": int(current), "total": int(total)})
+
+        progress("Loading RetinaFace model", 0, 0)
+        # Model and OpenCV may emit diagnostic messages; keep protocol clean.
         with contextlib.redirect_stdout(sys.stderr):
             from VideoPipeline.ai_retinaface import scan_faces
             result = scan_faces(
-                str(payload["path"]), float(payload["start"]), float(payload["end"])
+                str(request["path"]), float(request["start"]),
+                float(request["end"]), progress=progress
             )
-        sys.stdout.write(json.dumps({"ok": True, "result": result}) + "\n")
+        emit({"event": "result", "result": result})
         return 0
     except Exception as exc:
-        sys.stdout.write(json.dumps({
-            "ok": False,
-            "error": str(exc) or type(exc).__name__
-        }) + "\n")
+        emit({"event": "error", "error": str(exc) or type(exc).__name__})
         return 1
 
 
