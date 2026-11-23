@@ -20,6 +20,8 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   const dragAnchor = useRef(null);
   const draggedClip = useRef(null);
   const [busy, setBusy] = useState(false);
+  const [aiScan, setAiScan] = useState(null);
+  const aiScanCancelRequested = useRef(false);
   const [notice, setNotice] = useState("");
   const [reviewed, setReviewed] = useState(initialSession?.reviewed || false);
   const [step, setStep] = useState(initialSession?.step || 1);
@@ -245,29 +247,69 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
   }
 
   async function scanFaces() {
-    if (!clip || !bridge()?.video_scan_faces) {
-      setNotice("RetinaFace face scanning is unavailable in this desktop build.");
+    if (!clip || !bridge()?.video_scan_faces_start || !bridge()?.video_scan_faces_status) {
+      setNotice("RetinaFace scanning is unavailable in this desktop build. Rebuild and relaunch CoCANoT.");
       return;
     }
+    if (aiScan?.state === "running") return;
+    const clipId = clip.id;
+    aiScanCancelRequested.current = false;
+    setBusy(true);
+    setAiScan({state:"running",stage:"Starting RetinaFace worker",current:0,total:0});
+    setNotice("");
+    player.current?.pause();
+    setPreviewSuggestion(null);
     try {
-      setBusy(true);
-      setNotice("");
-      player.current?.pause();
-      const clipId = clip.id;
-      setPreviewSuggestion(null);
-      const result = await bridge().video_scan_faces(clip);
-      if (!Array.isArray(result?.suggestions)) throw new Error("Face scan did not return suggestions.");
+      const job = await bridge().video_scan_faces_start(clip);
+      if (!job?.job_id) throw new Error("Desktop did not start a scan job.");
+      setAiScan({state:"running",stage:"Loading RetinaFace model",current:0,total:0,jobId:job.job_id});
+      let status;
+      while (!aiScanCancelRequested.current) {
+        status = await bridge().video_scan_faces_status(job.job_id);
+        setAiScan({state:status.state,stage:status.stage,
+          current:status.current||0,total:status.total||0,
+          error:status.error||"",jobId:job.job_id});
+        if (status.state !== "running") break;
+        await new Promise(resolve=>setTimeout(resolve,450));
+      }
+      if (aiScanCancelRequested.current || status?.state === "cancelled") {
+        setAiScan({state:"cancelled",stage:"Scan cancelled",current:0,total:0});
+        setNotice("RetinaFace scan cancelled. No new AI suggestions were added.");
+        return;
+      }
+      if (status?.state === "error") throw new Error(status.error || "RetinaFace worker failed.");
+      if (status?.state !== "complete" || !Array.isArray(status?.result?.suggestions)) {
+        throw new Error("Scan stopped without returning a valid face detection result.");
+      }
+      const result = status.result;
       const pending = result.suggestions.map(item=>({...item, id:id()}));
       setProject(current=>({...current,clips:current.clips.map(c=>c.id===clipId
         ? {...c,ai_suggestions:pending,ai_scan_summary:{
             sampled_frames:result.sampled_frames,unreadable_frames:result.unreadable_frames,
             sample_interval:result.sample_interval}} : c)}));
       setReviewed(false);
-      setNotice(`AI detected faces in ${result.sampled_frames} sampled frames; ${pending.length} proposed face tracks/boxes await review. ${result.warning || "Review the entire recording."}`);
+      setAiScan({state:"complete",stage:"Scan complete",current:result.sampled_frames,total:result.sampled_frames});
+      setNotice(`RetinaFace analyzed ${result.sampled_frames} sampled frames and proposed ${pending.length} tracks/boxes. Inspect the complete recording; detector/tracking gaps remain possible.`);
     } catch (error) {
-      setNotice("Face scan unavailable: " + (error.message || error));
+      const message = error?.message || String(error);
+      setAiScan({state:"error",stage:"Scan failed",error:message});
+      setNotice("RetinaFace scan failed: " + message);
     } finally {
       setBusy(false);
+    }
+  }
+  async function cancelFaceScan() {
+    if (!aiScan?.jobId || !bridge()?.video_scan_faces_cancel) {
+      aiScanCancelRequested.current = true;
+      setAiScan({state:"running",stage:"Cancelling scan..."});
+      return;
+    }
+    aiScanCancelRequested.current = true;
+    setAiScan({...aiScan,stage:"Cancelling scan..."});
+    try {
+      await bridge().video_scan_faces_cancel(aiScan.jobId);
+    } catch (error) {
+      setNotice("Could not cancel RetinaFace scan: " + (error?.message || error));
     }
   }
   function resolveSuggestion(suggestion, accept) {
@@ -599,8 +641,17 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       </div>
       <div className="video-ai-panel">
         <div className="video-ai-heading"><strong>AI first pass · RetinaFace + motion tracking</strong>
-          <button type="button" className="video-primary" disabled={busy || clip.unavailable} onClick={scanFaces}>Scan faces (AI)</button>
+          <button type="button" className="video-primary" disabled={busy || clip.unavailable} onClick={scanFaces}>{aiScan?.state==="running"?"Scanning...":"Scan faces (AI)"}</button>
         </div>
+        {aiScan?.state==="running" && <div className="video-ai-scan-status" role="status" aria-live="polite">
+          <strong>{aiScan.stage || "Scanning..."}</strong>
+          <span>{aiScan.total>0 ? `${aiScan.current||0} / ${aiScan.total} frames or samples` : "Preparing AI model..."}</span>
+          {aiScan.total>0 && <progress max={aiScan.total} value={aiScan.current||0} />}
+          <button type="button" onClick={cancelFaceScan} disabled={aiScan.stage==="Cancelling scan..."}>Cancel scan</button>
+        </div>}
+        {aiScan?.state==="error" && <div className="video-ai-scan-error" role="alert">
+          <strong>Scan failed</strong><p>{aiScan.error}</p>
+        </div>}
         <p>RetinaFace finds faces on sampled frames; optical flow follows matching faces between samples. One proposal represents a connected face track. Tracking failures or unmatched faces create separate suggestions. Nothing is approved automatically.</p>
         {clip.ai_scan_summary && <p role="status">Scanned {clip.ai_scan_summary.sampled_frames} frames (every ~{seconds(clip.ai_scan_summary.sample_interval)}s).
           {clip.ai_scan_summary.unreadable_frames > 0 && <> {clip.ai_scan_summary.unreadable_frames} frames could not be read.</>}
