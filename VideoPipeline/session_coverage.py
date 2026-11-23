@@ -136,3 +136,47 @@ def analyze_session_coverage(
         "limitations": "No frame-content verification, clock synchronization or automatic Natus timestamp extraction. "
                        "MP4 creation_time and filesystem dates are deliberately not used as acquisition evidence.",
     }
+
+
+def inspect_time_metadata(path: str) -> list[dict]:
+    """List embedded date/time tag candidates only; never infer acquisition clock.
+
+    A metadata value may represent an export or transcode timestamp. No
+    candidate is accepted into the coverage calculation without a reviewer
+    confirming it against the recording system's reference.
+    """
+    import json
+    import subprocess
+    from VideoPipeline.processing import _binary, inspect_video
+
+    video = inspect_video(path)  # establishes file path and supported media type
+    proc = subprocess.run(
+        [_binary("ffprobe"), "-v", "error", "-show_entries",
+         "format_tags:stream_tags", "-of", "json", video["path"]],
+        capture_output=True, text=True, timeout=45, check=False,
+    )
+    if proc.returncode:
+        raise RuntimeError("Unable to read video time metadata.")
+    try:
+        source = json.loads(proc.stdout)
+    except ValueError as exc:
+        raise RuntimeError("Video time metadata is invalid.") from exc
+    candidates = []
+    for section, block in [("container", source.get("format") or {})] + [
+        (f"stream_{i}", entry) for i, entry in enumerate(source.get("streams") or [])
+    ]:
+        tags = block.get("tags") if isinstance(block, dict) else None
+        if not isinstance(tags, dict):
+            continue
+        for tag, value in tags.items():
+            name = str(tag).lower()
+            if any(keyword in name for keyword in ("time", "date", "creation", "record")):
+                candidates.append({
+                    "location": section,
+                    "tag": str(tag)[:100],
+                    "value": str(value)[:160],
+                    "confidence": "unverified_metadata_only",
+                })
+            if len(candidates) >= 30:
+                break
+    return candidates[:30]
