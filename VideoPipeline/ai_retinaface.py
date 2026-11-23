@@ -94,7 +94,7 @@ def _suggestions_with_tracking(detections, path, clip_start, clip_end, interval)
                     "Tracking stopped before the next detector sample. "
                     + str(motion.get("warning", ""))
                 )
-                tr["tracking_complete"] = False
+                tr["interrupted"] = True
                 finished.append(tr)
                 continue
             points = motion["keyframes"]
