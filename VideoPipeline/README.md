@@ -52,6 +52,21 @@ preinstall and verify the weights before use; do not run the first scan
 on identifiable recordings. Avoid automatically bundling third-party model
 weights until their redistribution terms have been checked.
 
+### Scan feedback and diagnostics
+
+**Scan faces (AI)** now starts a nonblocking local worker. The Editing Tools
+panel shows model initialization, the number of sampled frames detected,
+optical-flow linking progress, **Cancel scan**, and any failure messages.
+Model loading may be slow on the first run; it should never look like nothing
+happened. Cancellation discards the new scan rather than approving partial
+results. The desktop remains available if a native AI worker crashes.
+
+If a scan fails with **OpenMP Error #15** (PyTorch/OpenCV), the isolated worker
+cannot resolve that conflicting native runtime by itself. Do not use
+`KMP_DUPLICATE_LIB_OK=TRUE`; inspect installed libraries and consider a
+dedicated RetinaFace environment if needed. This change adds visibility and
+failure containment, not a guaranteed fix for dependency conflicts.
+
 ### Motion-linked face tracks (this experiment)
 
 The scanner first samples RetinaFace detections at approximately **2 fps**,
