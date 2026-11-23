@@ -225,3 +225,10 @@
 .video-ai-suggestion button[aria-pressed="true"]{background:#e6f3fb;border-color:#448eb5;color:#195576}
 
 .video-ai-track-warning{margin:6px 0 0;color:#a76112;font-size:12px;font-weight:600}
+
+.video-ai-scan-status,.video-ai-scan-error{display:flex;flex-direction:column;align-items:flex-start;gap:7px;padding:12px;border-radius:9px;margin:10px 0;font-size:13px}
+.video-ai-scan-status{border:1px solid #a1bdce;background:rgba(80,137,176,.08)}
+.video-ai-scan-status progress{width:100%;height:8px}
+.video-ai-scan-status button{align-self:flex-end}
+.video-ai-scan-error{border:1px solid #d7a2a2;background:rgba(189,64,64,.07)}
+.video-ai-scan-error p{margin:0;overflow-wrap:anywhere}
