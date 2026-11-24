@@ -743,10 +743,21 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
                 ? "Review the flagged interval below."
                 : "No large timestamp jumps were detected."}</span>
           </div>
-          {continuityReport.max_interval_ms != null && <div className="video-continuity-key-value">
-            <span>Longest time between frames</span>
-            <strong>{(continuityReport.max_interval_ms/1000).toFixed(2)}s</strong>
-          </div>}
+          <div className="video-continuity-key-values">
+            {continuityReport.typical_interval != null && <div className="video-continuity-key-value">
+              <span>Typical time between frames</span>
+              <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} ms</strong>
+            </div>}
+            {continuityReport.max_interval_ms != null && <div className="video-continuity-key-value">
+              <span>Longest time between frames</span>
+              <strong>{(continuityReport.max_interval_ms / 1000).toFixed(2)}s</strong>
+            </div>}
+          </div>
+          <details className="video-continuity-result-help">
+            <summary>What is the typical time between frames?</summary>
+            <p>It's the usual amount of time between two consecutive video frames. CoCANoT measures the frame-to-frame intervals and uses their <strong>median</strong> (the middle value) to avoid letting unusually long pauses skew the result.</p>
+            <p>For example, a 30-frame-per-second video typically has about 33.3 milliseconds between frames. A much longer interval may indicate a possible time gap.</p>
+          </details>
           {continuityReport.events.map((event,i)=><div key={i} className="video-continuity-event">
             <div className="video-continuity-event-summary">
               <strong>{event.kind === "timestamp_gap" ? "Possible time gap" : event.kind === "nonincreasing_timestamp" ? "Timestamp issue" : "Video playback issue"}</strong>
