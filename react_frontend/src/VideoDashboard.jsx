@@ -695,16 +695,13 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         <details className="video-continuity-explainer">
           <summary>What counts as a time gap?</summary>
           <div className="video-continuity-explainer-body">
-            <p>A time gap is an unusually long interval between two consecutive video frames.</p>
-            <p><strong>How is typical frame timing calculated?</strong> CoCANoT measures the time between each pair of consecutive frames, then uses the <strong>median</strong> (the middle interval when ordered from shortest to longest) of valid, positive intervals. This keeps one unusually long pause from skewing the typical value.</p>
-            <p>{continuityReport.typical_interval != null
-              ? <>For this video, the typical interval is <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} milliseconds</strong> per frame.</>
-              : "There are not enough usable timestamps to calculate a typical frame interval."} At 30 frames per second, a typical interval is about 33.3 milliseconds.</p>
-            <p><strong>How does CoCANoT decide what counts as a gap?</strong> It multiplies the typical frame interval by 2.5, then compares that number with 120 milliseconds (0.12 seconds). Whichever is larger becomes the cutoff. This allows for some normal timing variation without flagging every small delay.</p>
-            {continuityReport.typical_interval != null && continuityReport.threshold_ms != null &&
-              <p>For this video: <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} ms × 2.5 = {(continuityReport.typical_interval * 2500).toFixed(1)} ms</strong>. Compared with the 120 ms minimum, the cutoff is <strong>{continuityReport.threshold_ms.toFixed(1)} ms</strong>. Any interval <strong>longer</strong> than that is flagged.</p>}
-            <p>These values are initial screening settings, not clinically validated limits for Natus video. Small amounts of missing footage may go undetected.</p>
-            <p>Repeated or backward timestamps are also flagged. A warning may mean missing frames, a recording pause, or irregular timestamps—it does not prove footage was lost.</p>
+            <p><strong>1. Find the usual time between frames.</strong> CoCANoT subtracts each frame's timestamp from the next one, then takes the median (middle value) of positive intervals up to 5 seconds. Using the median reduces the influence of a few unusually long intervals.</p>
+            <p><strong>2. Allow some timing variation.</strong> Multiply that usual interval by 2.5. CoCANoT also sets a fixed lower limit of <strong>120 ms (0.12 seconds)</strong> so very short timing fluctuations are not flagged as gaps.</p>
+            <p><strong>3. Choose one cutoff.</strong> The <strong>120 ms minimum</strong> is the lowest possible cutoff—not an extra amount added to the calculation. The <strong>final detection threshold</strong> is simply whichever is larger: 120 ms or 2.5 times the usual interval.</p>
+            {continuityReport.typical_interval != null && continuityReport.threshold_ms != null
+              ? <p><strong>For this video:</strong> Typical interval = <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} ms</strong>. Multiply by 2.5 = <strong>{(continuityReport.typical_interval * 2500).toFixed(1)} ms</strong>. Compare that with 120 ms. The larger number is <strong>{continuityReport.threshold_ms.toFixed(1)} ms</strong>, so only frame intervals longer than <strong>{continuityReport.threshold_ms.toFixed(1)} ms</strong> are flagged as possible time gaps.</p>
+              : <p>There are not enough valid frame timestamps to calculate a detection threshold for this video.</p>}
+            <p><strong>What does a warning mean?</strong> The timestamps are unusually far apart. This can happen when video frames are missing, recording pauses, or timing is irregular. Repeated or backward timestamps are flagged separately. These cutoff values are exploratory, not clinically validated, and shorter losses or footage with rewritten timestamps may not be detected.</p>
           </div>
         </details>
       </div>}
@@ -757,14 +754,14 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             </div>}
           </div>
           <details className="video-continuity-result-help">
-            <summary>What is the typical time between frames?</summary>
-            <p>CoCANoT measures the time between consecutive video frames and uses the <strong>median</strong> (middle value) of valid, positive intervals up to 5 seconds. This keeps unusually long pauses from distorting the typical time.</p>
-            {continuityReport.typical_interval != null &&
-              <p>For this video, the typical interval is <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} ms</strong>. At 30 frames per second, a typical interval is about 33.3 ms.</p>}
-            <p><strong>How is the gap threshold calculated?</strong> CoCANoT multiplies the typical interval by 2.5, then compares it with a minimum of 120 ms. The larger value becomes the cutoff, allowing for small variations in timing.</p>
-            {continuityReport.typical_interval != null && continuityReport.threshold_ms != null &&
-              <p>For this video: <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} ms × 2.5 = {(continuityReport.typical_interval * 2500).toFixed(1)} ms</strong>. Compared with 120 ms, the cutoff is <strong>{continuityReport.threshold_ms.toFixed(1)} ms</strong>. An interval longer than this is flagged.</p>}
-            <p>These are initial screening settings, not clinically validated limits for Natus recordings. A warning may reflect missing frames, a pause, or irregular timestamps; small losses may not be detected.</p>
+            <summary>How is the time gap cutoff calculated?</summary>
+            <p><strong>1. Find the usual time between frames.</strong> CoCANoT subtracts each frame's timestamp from the next one, then takes the median (middle value) of positive intervals up to 5 seconds. Using the median reduces the influence of a few unusually long intervals.</p>
+            <p><strong>2. Allow some timing variation.</strong> Multiply that usual interval by 2.5. CoCANoT also sets a fixed lower limit of <strong>120 ms (0.12 seconds)</strong> so very short timing fluctuations are not flagged as gaps.</p>
+            <p><strong>3. Choose one cutoff.</strong> The <strong>120 ms minimum</strong> is the lowest possible cutoff—not an extra amount added to the calculation. The <strong>final detection threshold</strong> is simply whichever is larger: 120 ms or 2.5 times the usual interval.</p>
+            {continuityReport.typical_interval != null && continuityReport.threshold_ms != null
+              ? <p><strong>For this video:</strong> Typical interval = <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} ms</strong>. Multiply by 2.5 = <strong>{(continuityReport.typical_interval * 2500).toFixed(1)} ms</strong>. Compare that with 120 ms. The larger number is <strong>{continuityReport.threshold_ms.toFixed(1)} ms</strong>, so only frame intervals longer than <strong>{continuityReport.threshold_ms.toFixed(1)} ms</strong> are flagged as possible time gaps.</p>
+              : <p>There are not enough valid frame timestamps to calculate a detection threshold for this video.</p>}
+            <p><strong>What does a warning mean?</strong> The timestamps are unusually far apart. This can happen when video frames are missing, recording pauses, or timing is irregular. Repeated or backward timestamps are flagged separately. These cutoff values are exploratory, not clinically validated, and shorter losses or footage with rewritten timestamps may not be detected.</p>
           </details>
           {continuityReport.events.map((event,i)=><div key={i} className="video-continuity-event">
             <div className="video-continuity-event-summary">
