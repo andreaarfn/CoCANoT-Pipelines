@@ -759,16 +759,16 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         </div>
         {aiScan?.state==="running" && <div className="video-ai-scan-status" role="status" aria-live="polite">
           <strong>{aiScan.stage || "Scanning..."}</strong>
-          <span>{aiScan.total>0 ? `${aiScan.current||0} / ${aiScan.total} frames or samples` : "Preparing AI model..."}</span>
+          <span>{aiScan.total>0 ? "Looking for faces..." : "Preparing face scan..."}</span>
           {aiScan.total>0 && <progress max={aiScan.total} value={aiScan.current||0} />}
           <button type="button" onClick={cancelFaceScan} disabled={aiScan.stage==="Cancelling scan..."}>Cancel scan</button>
         </div>}
         {aiScan?.state==="error" && <div className="video-ai-scan-error" role="alert">
           <strong>Scan failed</strong><p>{aiScan.error}</p>
         </div>}
-        <p className="video-ai-intro">We’ll look for faces and suggest what to cover. You decide which suggestions to keep.</p>
+        <p className="video-ai-intro">Automatically finds faces and suggests areas to cover. Review suggestions before applying them.</p>
         {clip.ai_scan_summary && <div className="video-ai-complete" role="status">
-          <span>Scan complete · {clip.ai_scan_summary.sampled_frames} frames checked</span>
+          <span>Scan complete</span>
           {clip.ai_scan_summary.unreadable_frames > 0 && <small>{clip.ai_scan_summary.unreadable_frames} frames could not be checked. Review them manually.</small>}
         </div>}
         {suggestions.length>0 && <div className="video-ai-suggestions">
