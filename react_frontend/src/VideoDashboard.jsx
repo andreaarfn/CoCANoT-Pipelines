@@ -839,7 +839,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           </div>
           <div className="video-mask-track-status" role={trackingNeedsReview?"alert":"status"}>
             {hasTracking ? <span className={trackingNeedsReview?"video-mask-needs-review":"video-mask-complete"}>
-              {trackingNeedsReview?"Tracking needs review":"Tracking complete"}
+              {trackingNeedsReview?"Tracking needs review":"Tracked to end · Review before export"}
             </span> : <span className="video-mask-not-tracked">Not tracked</span>}
           </div>
           {trackingNeedsReview && <p className="video-mask-warning">Tracking did not reach the full interval. Check the remaining frames manually.</p>}
