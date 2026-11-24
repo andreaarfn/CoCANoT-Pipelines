@@ -755,8 +755,11 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           </div>
           <details className="video-continuity-result-help">
             <summary>What is the typical time between frames?</summary>
-            <p>It's the usual amount of time between two consecutive video frames. CoCANoT measures the frame-to-frame intervals and uses their <strong>median</strong> (the middle value) to avoid letting unusually long pauses skew the result.</p>
-            <p>For example, a 30-frame-per-second video typically has about 33.3 milliseconds between frames. A much longer interval may indicate a possible time gap.</p>
+            <p>CoCANoT reads the timestamp of each video frame within the selected clip and calculates the elapsed time between consecutive frames. It uses the <strong>median of positive intervals up to 5 seconds</strong> as the typical time between frames. The median represents the middle interval, so one unusually long interval has less influence on the result.</p>
+            <p>For example, video recorded at 30 frames per second normally has about <strong>33.3 ms</strong> between frames. CoCANoT flags a possible time gap when an interval exceeds <strong>both 120 ms and 2.5 times the typical interval</strong>.
+              {continuityReport.threshold_ms != null && <> For this clip, the cutoff is <strong>{(continuityReport.threshold_ms / 1000).toFixed(3)} seconds</strong>.</>}
+            </p>
+            <p>This identifies unusual timestamp jumps—not confirmed missing footage. Recording pauses or variable frame rates can also produce longer intervals.</p>
           </details>
           {continuityReport.events.map((event,i)=><div key={i} className="video-continuity-event">
             <div className="video-continuity-event-summary">
