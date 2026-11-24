@@ -754,7 +754,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         </div>}
       </div>
       <div className="video-ai-panel">
-        <div className="video-ai-heading"><strong>Find faces automatically</strong>
+        <div className="video-ai-heading"><strong>Find faces with AI</strong>
           <button type="button" className="video-primary" disabled={busy || clip.unavailable} onClick={scanFaces}>{aiScan?.state==="running"?"Scanning...":"Scan for faces"}</button>
         </div>
         {aiScan?.state==="running" && <div className="video-ai-scan-status" role="status" aria-live="polite">
@@ -766,7 +766,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         {aiScan?.state==="error" && <div className="video-ai-scan-error" role="alert">
           <strong>Scan failed</strong><p>{aiScan.error}</p>
         </div>}
-        <p className="video-ai-intro">Automatically finds faces and suggests areas to cover. Review suggestions before applying them.</p>
+        <p className="video-ai-intro">RetinaFace finds faces and suggests areas to cover. Review suggestions before applying them.</p>
         {clip.ai_scan_summary && <div className="video-ai-complete" role="status">
           <span>Scan complete</span>
           {clip.ai_scan_summary.unreadable_frames > 0 && <small>{clip.ai_scan_summary.unreadable_frames} frames could not be checked. Review them manually.</small>}
