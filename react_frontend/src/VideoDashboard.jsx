@@ -758,11 +758,13 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           </div>
           <details className="video-continuity-result-help">
             <summary>What is the typical time between frames?</summary>
-            <p>CoCANoT reads the timestamp of each video frame within the selected clip and calculates the elapsed time between consecutive frames. It uses the <strong>median of positive intervals up to 5 seconds</strong> as the typical time between frames. The median represents the middle interval, so one unusually long interval has less influence on the result.</p>
-            <p>For example, video recorded at 30 frames per second normally has about <strong>33.3 ms</strong> between frames. CoCANoT flags a possible time gap when an interval exceeds <strong>both 120 ms and 2.5 times the typical interval</strong>.
-              {continuityReport.threshold_ms != null && <> For this clip, the cutoff is <strong>{(continuityReport.threshold_ms / 1000).toFixed(3)} seconds</strong>.</>}
-            </p>
-            <p>This identifies unusual timestamp jumps—not confirmed missing footage. Recording pauses or variable frame rates can also produce longer intervals.</p>
+            <p>CoCANoT measures the time between consecutive video frames and uses the <strong>median</strong> (middle value) of valid, positive intervals up to 5 seconds. This keeps unusually long pauses from distorting the typical time.</p>
+            {continuityReport.typical_interval != null &&
+              <p>For this video, the typical interval is <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} ms</strong>. At 30 frames per second, a typical interval is about 33.3 ms.</p>}
+            <p><strong>How is the gap threshold calculated?</strong> CoCANoT multiplies the typical interval by 2.5, then compares it with a minimum of 120 ms. The larger value becomes the cutoff, allowing for small variations in timing.</p>
+            {continuityReport.typical_interval != null && continuityReport.threshold_ms != null &&
+              <p>For this video: <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} ms × 2.5 = {(continuityReport.typical_interval * 2500).toFixed(1)} ms</strong>. Compared with 120 ms, the cutoff is <strong>{continuityReport.threshold_ms.toFixed(1)} ms</strong>. An interval longer than this is flagged.</p>}
+            <p>These are initial screening settings, not clinically validated limits for Natus recordings. A warning may reflect missing frames, a pause, or irregular timestamps; small losses may not be detected.</p>
           </details>
           {continuityReport.events.map((event,i)=><div key={i} className="video-continuity-event">
             <div className="video-continuity-event-summary">
