@@ -826,16 +826,38 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       </div>
       <div className="video-edit-action"><strong>Censor boxes</strong><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
       <h3>Censor regions ({masks.length})</h3>
-      {masks.map((m,i)=><div className="video-mask-settings" key={m.id}><div><strong>Region {i+1}</strong><button aria-label="Remove mask" onClick={()=>mutateClip(c=>({...c,masks:c.masks.filter(x=>x.id!==m.id)}))}><Trash2 size={15}/></button></div>
-        <div className="video-actions"><button disabled={busy} onClick={()=>trackMask(m)}>Track censor interval</button></div>
-        {m.keyframes?.length>0 && <p role="status">
-          <strong>{m.tracking_complete === false || Number(m.tracked_until) < m.end - 0.05 ? "Tracking incomplete" : "Tracking reached the end"}</strong>
-          {" · "}{seconds(m.start)}–{seconds(m.tracked_until)}s of {seconds(m.end)}s · {m.keyframes.length} positions · fixed box size.
-          {m.tracking_message && <> {m.tracking_message}</>}
-        </p>}
-        <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>{k.toUpperCase()} (%)<input type="number" min="0" max="100" step="1" value={Math.round(m[k]*100)} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,tracking_complete:null,tracking_message:"",[k]:clamp(Number(e.target.value)/100,0,k==="x"?1-m.w:k==="y"?1-m.h:k==="w"?1-m.x:1-m.y)}:x)}))}/></label>)}</div>
-        <div className="video-fields">{["start","end"].map(k=><label key={k}>{k} (s)<input type="number" step="0.01" min="0" max={duration} value={seconds(m[k])} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value),0,duration)}:x)}))}/></label>)}</div>
-      </div>)}
+      {masks.map((m,i)=>{
+        const hasTracking = Boolean(m.keyframes?.length);
+        const trackingNeedsReview = hasTracking && (m.tracking_complete === false || Number(m.tracked_until) < m.end - 0.05);
+        return <div className="video-mask-settings" key={m.id}>
+          <div className="video-mask-summary">
+            <div className="video-mask-summary-text">
+              <strong>Region {i+1}</strong>
+              <span>{seconds(m.start)}–{seconds(m.end)}s</span>
+            </div>
+            <button type="button" className="video-mask-remove" aria-label={`Remove region ${i+1}`} title="Remove region" onClick={()=>mutateClip(c=>({...c,masks:c.masks.filter(x=>x.id!==m.id)}))}><Trash2 size={15}/></button>
+          </div>
+          <div className="video-mask-track-status" role={trackingNeedsReview?"alert":"status"}>
+            {hasTracking ? <span className={trackingNeedsReview?"video-mask-needs-review":"video-mask-complete"}>
+              {trackingNeedsReview?"Tracking needs review":"Tracking complete"}
+            </span> : <span className="video-mask-not-tracked">Not tracked</span>}
+          </div>
+          {trackingNeedsReview && <p className="video-mask-warning">Tracking did not reach the full interval. Check the remaining frames manually.</p>}
+          <div className="video-mask-actions">
+            <button type="button" disabled={busy} onClick={()=>trackMask(m)}>{hasTracking?"Track again":"Track region"}</button>
+          </div>
+          <details className="video-mask-details">
+            <summary>Adjust region and timing</summary>
+            <div className="video-mask-details-content">
+              <div className="video-fields">{["x","y","w","h"].map(k=><label key={k}>{{x:"Left",y:"Top",w:"Width",h:"Height"}[k]} (%)<input type="number" min="0" max="100" step="1" value={Math.round(m[k]*100)} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,tracking_complete:null,tracking_message:"",[k]:clamp(Number(e.target.value)/100,0,k==="x"?1-m.w:k==="y"?1-m.h:k==="w"?1-m.x:1-m.y)}:x)}))}/></label>)}</div>
+              <div className="video-fields">{["start","end"].map(k=><label key={k}>{k==="start"?"Start":"End"} (s)<input type="number" step="0.01" min="0" max={duration} value={seconds(m[k])} onChange={e=>mutateClip(c=>({...c,masks:c.masks.map(x=>x.id===m.id?{...x,keyframes:[],tracked_until:null,[k]:clamp(Number(e.target.value),0,duration)}:x)}))}/></label>)}</div>
+              {hasTracking && <p className="video-mask-track-details">Tracked to {seconds(m.tracked_until)}s of {seconds(m.end)}s.
+                {m.tracking_message && <> {m.tracking_message}</>}
+              </p>}
+            </div>
+          </details>
+        </div>;
+      })}
       </> : <p>Select a clip to inspect and edit.</p>}</aside>}</div>}
     {step===2 && <section className="video-panel video-timeline">
       <div className="video-panel-title">Timeline <small>{project.clips.length} clips · {seconds(combinedDuration)} seconds</small></div>
