@@ -208,9 +208,15 @@
 .video-metadata-fields > div{max-width:100%}
 
 /* Optional local AI first-pass suggestions, always subject to researcher review. */
-.video-ai-panel{border:1px solid #bdd7e7;background:#f3f9fd;border-radius:12px;padding:12px;margin:16px 0}
+.video-ai-panel{border:1px solid #d3e1ea;background:#f7fafc;border-radius:12px;padding:14px;margin:16px 0}
 .video-ai-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
 .video-ai-panel p{margin:8px 0;color:#506d85;font-size:12px;line-height:1.5}
+.video-ai-heading strong{font-size:14px;line-height:1.35;color:#213a53}
+.video-ai-intro{max-width:36ch}
+.video-ai-complete{display:flex;flex-direction:column;gap:4px;margin-top:10px;padding:8px 10px;border-radius:8px;background:#e8f4ef;color:#29654c;font-size:12px;font-weight:600;line-height:1.4}
+.video-ai-complete small{font-size:11px;font-weight:400;color:#745321}
+.video-ai-panel .video-ai-done{font-size:12px;margin-top:8px}
+
 .video-ai-suggestions{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow:auto;margin-top:12px}
 .video-ai-suggestion{background:white;border:1px solid #d5e4ed;border-radius:9px;padding:9px;font-size:12px}
 .video-ai-suggestion small{color:#62768a}
