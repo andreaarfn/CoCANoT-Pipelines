@@ -754,8 +754,8 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         </div>}
       </div>
       <div className="video-ai-panel">
-        <div className="video-ai-heading"><strong>AI first pass · RetinaFace + motion tracking</strong>
-          <button type="button" className="video-primary" disabled={busy || clip.unavailable} onClick={scanFaces}>{aiScan?.state==="running"?"Scanning...":"Scan faces (AI)"}</button>
+        <div className="video-ai-heading"><strong>Find faces automatically</strong>
+          <button type="button" className="video-primary" disabled={busy || clip.unavailable} onClick={scanFaces}>{aiScan?.state==="running"?"Scanning...":"Scan for faces"}</button>
         </div>
         {aiScan?.state==="running" && <div className="video-ai-scan-status" role="status" aria-live="polite">
           <strong>{aiScan.stage || "Scanning..."}</strong>
@@ -766,12 +766,13 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         {aiScan?.state==="error" && <div className="video-ai-scan-error" role="alert">
           <strong>Scan failed</strong><p>{aiScan.error}</p>
         </div>}
-        <p>RetinaFace finds faces on sampled frames; optical flow follows matching faces between samples. One proposal represents a connected face track. Tracking failures or unmatched faces create separate suggestions. Nothing is approved automatically.</p>
-        {clip.ai_scan_summary && <p role="status">Scanned {clip.ai_scan_summary.sampled_frames} frames (every ~{seconds(clip.ai_scan_summary.sample_interval)}s).
-          {clip.ai_scan_summary.unreadable_frames > 0 && <> {clip.ai_scan_summary.unreadable_frames} frames could not be read.</>}
-        </p>}
+        <p className="video-ai-intro">We’ll look for faces and suggest what to cover. You decide which suggestions to keep.</p>
+        {clip.ai_scan_summary && <div className="video-ai-complete" role="status">
+          <span>Scan complete · {clip.ai_scan_summary.sampled_frames} frames checked</span>
+          {clip.ai_scan_summary.unreadable_frames > 0 && <small>{clip.ai_scan_summary.unreadable_frames} frames could not be checked. Review them manually.</small>}
+        </div>}
         {suggestions.length>0 && <div className="video-ai-suggestions">
-          <strong>{suggestions.length} face tracks / boxes awaiting review</strong>
+          <strong>{suggestions.length} face suggestion{suggestions.length===1?"":"s"} to review</strong>
           {suggestions.map(s=><div className="video-ai-suggestion" key={s.id}>
             <div><strong>{s.tracking_complete ? "Proposed face track" : "Untracked face box"}</strong> · {seconds(s.start)}–{seconds(s.end)}s
               <small> · {s.sample_count} detector observation(s) · {s.tracked_keyframes?.length || 0} motion positions</small>
@@ -798,7 +799,7 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             </div>
           </div>)}
         </div>}
-        {clip.ai_scan_summary && suggestions.length===0 && <p>All suggestions reviewed. Continue with manual inspection and corrections; this scan does not certify de-identification.</p>}
+        {clip.ai_scan_summary && suggestions.length===0 && <p className="video-ai-done">No suggestions left to review. Check the full video before export.</p>}
       </div>
       <div className="video-edit-action"><strong>Censor boxes</strong><button disabled={!clip || busy} className={maskMode?"video-primary":""} onClick={()=>{player.current?.pause();setMaskMode(v=>!v);}}><ShieldCheck size={16}/> {maskMode?"Drag to draw censor box":"Add censor box"}</button></div>
       <h3>Censor regions ({masks.length})</h3>
