@@ -741,28 +741,19 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             <div><strong>{continuityReport.max_interval_ms==null?"—":continuityReport.max_interval_ms.toFixed(1)}</strong><small>Max ms</small></div>
           </div>
           <p>{continuityReport.note}</p>
-          <small>Rule: {continuityReport.threshold_rule} · threshold {continuityReport.threshold_ms==null?"unknown":continuityReport.threshold_ms.toFixed(1)+"ms"} · decode: {continuityReport.decode_status==="warning"?"warning":"no errors observed"}</small>
-          {continuityReport.raw_intervals?.length>0 && <details className="video-continuity-raw">
-            <summary>Inspect raw frame intervals ({continuityReport.interval_count} measured)</summary>
-            <p>First 40 measurements, in decode order. The chart retains the maximum interval in each display bin. {continuityReport.raw_intervals_truncated && "Raw measurements are limited to 20,000 rows in the dashboard response."}</p>
-            <div className="video-continuity-table-wrap"><table>
-              <thead><tr><th>Frame interval</th><th>From (s)</th><th>To (s)</th><th>Δ (ms)</th></tr></thead>
-              <tbody>{continuityReport.raw_intervals.slice(0,40).map((sample,i)=><tr key={i}>
-                <td>{i+1}</td><td>{sample.from.toFixed(3)}</td><td>{sample.to.toFixed(3)}</td><td>{sample.delta_ms.toFixed(2)}</td>
-              </tr>)}</tbody>
-            </table></div>
-          </details>}
           {continuityReport.events.map((event,i)=><div key={i} className="video-continuity-event">
-            <div><strong>{event.kind === "timestamp_gap" ? "Timestamp gap" : event.kind === "nonincreasing_timestamp" ? "Repeated/reversed timestamp" : "Video decode warning"}</strong>
-              {Number.isFinite(event.start) && <> · {seconds(event.start)}–{seconds(event.end)}s</>}
-              {event.gap_seconds != null && <> · {seconds(event.gap_seconds)}s gap</>}
-              {event.estimated_missing_intervals != null && <small> · approximately {event.estimated_missing_intervals} frame intervals beyond expected (not confirmed missing frames)</small>}
+            <div className="video-continuity-event-summary">
+              <strong>{event.kind === "timestamp_gap" ? "Possible time gap" : event.kind === "nonincreasing_timestamp" ? "Timestamp issue" : "Video playback issue"}</strong>
+              {Number.isFinite(event.start) && <span>{seconds(event.start)}–{seconds(event.end)}s</span>}
             </div>
-            <p>{event.detail}</p>
+            {event.kind === "timestamp_gap" && event.gap_seconds != null
+              ? <p>{seconds(event.gap_seconds)} seconds between frames</p>
+              : event.kind === "nonincreasing_timestamp"
+                ? <p>Frame timestamps repeated or moved backward.</p>
+                : <p>Some frames may not have decoded correctly.</p>}
             {Number.isFinite(event.start) && <button type="button" onClick={()=>viewContinuityEvent(event)}>View interval</button>}
           </div>)}
           {continuityReport.truncated && <p>Showing first 200 of {continuityReport.event_count} flagged events.</p>}
-          <small>{continuityReport.limitations}</small>
         </div>}
       </div>
       <div className="video-ai-panel">
