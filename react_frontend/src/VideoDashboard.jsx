@@ -700,7 +700,10 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
             <p>{continuityReport.typical_interval != null
               ? <>For this video, the typical interval is <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} milliseconds</strong> per frame.</>
               : "There are not enough usable timestamps to calculate a typical frame interval."} At 30 frames per second, a typical interval is about 33.3 milliseconds.</p>
-            <p>For this video, intervals longer than <strong>{continuityReport.threshold_ms != null ? (continuityReport.threshold_ms / 1000).toFixed(3) + " seconds" : "the screening threshold"}</strong> are flagged. The threshold is the greater of 0.12 seconds or 2.5 times the typical frame interval.</p>
+            <p><strong>How does CoCANoT decide what counts as a gap?</strong> It multiplies the typical frame interval by 2.5, then compares that number with 120 milliseconds (0.12 seconds). Whichever is larger becomes the cutoff. This allows for some normal timing variation without flagging every small delay.</p>
+            {continuityReport.typical_interval != null && continuityReport.threshold_ms != null &&
+              <p>For this video: <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} ms × 2.5 = {(continuityReport.typical_interval * 2500).toFixed(1)} ms</strong>. Compared with the 120 ms minimum, the cutoff is <strong>{continuityReport.threshold_ms.toFixed(1)} ms</strong>. Any interval <strong>longer</strong> than that is flagged.</p>}
+            <p>These values are initial screening settings, not clinically validated limits for Natus video. Small amounts of missing footage may go undetected.</p>
             <p>Repeated or backward timestamps are also flagged. A warning may mean missing frames, a recording pause, or irregular timestamps—it does not prove footage was lost.</p>
           </div>
         </details>
