@@ -255,6 +255,14 @@
 .video-continuity-chart-card{margin:14px 0 8px;padding:14px;border:1px solid #d3e1eb;border-radius:12px;background:#fff}
 .video-continuity-chart{width:100%;height:170px;display:block}
 .video-continuity-chart-note{margin:5px 0 0;font-size:12px;line-height:1.5;color:#536a80}
+.video-continuity-explainer{margin-top:10px;border-top:1px solid #e3eaf0;padding-top:9px;font-size:12px}
+.video-continuity-explainer summary{display:inline-flex;align-items:center;cursor:pointer;color:#23678b;font-size:12px;font-weight:650;line-height:1.5;border-radius:5px;padding:3px 0}
+.video-continuity-explainer summary:hover{color:#144d6c;text-decoration:underline}
+.video-continuity-explainer summary:focus-visible{outline:2px solid #337ea4;outline-offset:3px}
+.video-continuity-explainer-body{margin-top:8px;padding:10px 12px;border-radius:8px;background:#f3f7fa;color:#40596d;line-height:1.5}
+.video-continuity-explainer-body p{margin:0 0 8px;font-size:12px}
+.video-continuity-explainer-body p:last-child{margin-bottom:0}
+
 .video-continuity-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;width:100%}
 .video-continuity-metrics>div{display:flex;flex-direction:column;gap:3px;background:#f0f5f8;border-radius:7px;padding:8px 5px;min-width:0;text-align:center}
 .video-continuity-metrics strong{font-size:14px;font-variant-numeric:tabular-nums}
