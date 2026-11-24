@@ -691,7 +691,15 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           <text x="25" y="137" fontSize="11" fill="currentColor">0s</text>
           <text x="590" y="137" fontSize="11" fill="currentColor" textAnchor="end">{seconds(duration)}s</text>
         </svg>
-        <p className="video-continuity-chart-note">Blue: frame-to-frame timestamp interval. Amber: exceeds screening threshold or non-increasing timestamp. Each displayed point represents the largest interval in its time bin; no evidence is interpolated.</p>
+        <p className="video-continuity-chart-note">Blue shows typical frame timing. Orange highlights a possible time gap or timestamp issue.</p>
+        <details className="video-continuity-explainer">
+          <summary>What counts as a time gap?</summary>
+          <div className="video-continuity-explainer-body">
+            <p>A time gap is an unusually long interval between two consecutive video frames.</p>
+            <p>For this video, intervals longer than <strong>{continuityReport.threshold_ms != null ? (continuityReport.threshold_ms / 1000).toFixed(3) + " seconds" : "the screening threshold"}</strong> are flagged. The threshold is the greater of 0.12 seconds or 2.5 times the typical frame interval.</p>
+            <p>Repeated or backward timestamps are also flagged. A warning may mean missing frames, a recording pause, or irregular timestamps—it does not prove footage was lost.</p>
+          </div>
+        </details>
       </div>}
       <div className="video-scrub"><button type="button" aria-label={isPlaying?"Pause video":"Play video"} onClick={toggleClipPlayback} disabled={!clip || busy || maskMode}>{isPlaying?<Pause size={16}/>:<Play size={16}/>} {isPlaying?"Pause":"Play"}</button><input type="range" aria-label="Video playhead, also used for Split at playhead" min="0" max={duration||1} step="0.033" value={cursor} disabled={!clip || busy} onChange={e=>{const time=Number(e.target.value);setCursor(time);if(player.current)player.current.currentTime=clip.start+time;}}/><span>{seconds(cursor)} / {seconds(duration)} s</span></div>
       
