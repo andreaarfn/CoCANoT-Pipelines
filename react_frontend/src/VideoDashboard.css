@@ -31,6 +31,28 @@
 .video-mask-settings{background:#f6f9fc;border:1px solid #dbe6ef;border-radius:9px;padding:10px;margin-bottom:10px}
 .video-mask-settings>div:first-child{display:flex;align-items:center;justify-content:space-between}
 .video-mask-settings button{padding:5px}
+/* Compact censor-region summary; editing fields are available on demand. */
+.video-mask-settings{padding:11px 12px;background:#f8fafc;border-color:#d9e4ec}
+.video-mask-settings .video-mask-summary{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.video-mask-summary-text{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 9px}
+.video-mask-summary-text strong{font-size:13px;color:#213a53}
+.video-mask-summary-text span{font-size:12px;color:#637a8d;font-variant-numeric:tabular-nums}
+.video-mask-settings .video-mask-remove{padding:5px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.video-mask-track-status{margin-top:7px;font-size:11px;font-weight:650}
+.video-mask-complete{color:#287654}
+.video-mask-needs-review{color:#a66425}
+.video-mask-not-tracked{color:#667b8d}
+.video-mask-settings .video-mask-warning{margin:5px 0 0;font-size:11px;color:#98631d;line-height:1.45}
+.video-mask-actions{display:flex;gap:8px;margin-top:9px}
+.video-mask-settings .video-mask-actions button{padding:6px 10px;font-size:12px}
+.video-mask-details{margin-top:10px;padding-top:9px;border-top:1px solid #e0e8ee}
+.video-mask-details summary{cursor:pointer;font-size:12px;color:#23678b;font-weight:650;line-height:1.5}
+.video-mask-details summary:focus-visible{outline:2px solid #337ea4;outline-offset:3px;border-radius:3px}
+.video-mask-details-content{padding-top:4px}
+.video-mask-details-content .video-fields{gap:0 9px}
+.video-mask-details-content label{margin:8px 0}
+.video-mask-details-content .video-mask-track-details{margin:8px 0 2px;color:#617789;font-size:11px;line-height:1.45}
+
 .video-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 10px}
 .video-timeline .video-clips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 8px}
 .video-clip{min-width:205px;max-width:280px;flex:1;background:#eef4f8;border:2px solid transparent;border-radius:9px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:7px}
