@@ -709,13 +709,13 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
       </div>
       <div className="video-continuity-panel">
         <div className="video-continuity-header">
-          <strong>Dropped-time detector · frame timestamp gaps</strong>
+          <strong>Find time gaps</strong>
           <button type="button" onClick={checkContinuity} disabled={busy || continuityChecking || clip.unavailable}>
             {continuityChecking ? "Scanning timestamps..." : "Detect time gaps"}
           </button>
         </div>
-        <p>Checks for missing time within this video by comparing consecutive frame timestamps. This catches the gap in test video 02, but not video 03 if timestamps were rewritten. Your original file is not modified.</p>
-        {continuityChecking && <p role="status">Inspecting frame timestamps and decoding the recording. Longer recordings may take time.</p>}
+        <p>Checks video timestamps for possible recording gaps. Review any flagged intervals before continuing.</p>
+        {continuityChecking && <p role="status">Checking video timing. Longer recordings may take a little longer.</p>}
         {continuityReport && <div className="video-continuity-results" role="status">
           <strong>{continuityReport.status === "attention" ? "Potential continuity issues found"
             : continuityReport.status === "inconclusive" ? "Unable to assess reliably"
