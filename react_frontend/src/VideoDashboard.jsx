@@ -729,18 +729,24 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
         <p>Checks video timestamps for possible recording gaps. Review any flagged intervals before continuing.</p>
         {continuityChecking && <p role="status">Checking video timing. Longer recordings may take a little longer.</p>}
         {continuityReport && <div className="video-continuity-results" role="status">
-          <strong>{continuityReport.status === "attention" ? "Potential continuity issues found"
-            : continuityReport.status === "inconclusive" ? "Unable to assess reliably"
-            : "No anomalies flagged"}</strong>
-          <small>{continuityReport.frame_count} timestamped frames inspected
-            {continuityReport.typical_interval != null && <> · typical interval {seconds(continuityReport.typical_interval)}s</>}
-          </small>
-          <div className="video-continuity-metrics">
-            <div><strong>{continuityReport.median_interval_ms==null?"—":continuityReport.median_interval_ms.toFixed(1)}</strong><small>Median ms</small></div>
-            <div><strong>{continuityReport.p95_interval_ms==null?"—":continuityReport.p95_interval_ms.toFixed(1)}</strong><small>95th % ms</small></div>
-            <div><strong>{continuityReport.max_interval_ms==null?"—":continuityReport.max_interval_ms.toFixed(1)}</strong><small>Max ms</small></div>
+          <div className="video-continuity-result-heading">
+            <strong>{continuityReport.status === "inconclusive"
+              ? "Unable to check video timing"
+              : continuityReport.events.some(event=>event.kind==="timestamp_gap")
+                ? "Possible time gap found"
+                : continuityReport.events.length
+                  ? "Video timing needs review"
+                  : "No unusual time gaps found"}</strong>
+            <span>{continuityReport.status==="inconclusive"
+              ? "Not enough timing information."
+              : continuityReport.events.length
+                ? "Review the flagged interval below."
+                : "No large timestamp jumps were detected."}</span>
           </div>
-          <p>{continuityReport.note}</p>
+          {continuityReport.max_interval_ms != null && <div className="video-continuity-key-value">
+            <span>Longest time between frames</span>
+            <strong>{(continuityReport.max_interval_ms/1000).toFixed(2)}s</strong>
+          </div>}
           {continuityReport.events.map((event,i)=><div key={i} className="video-continuity-event">
             <div className="video-continuity-event-summary">
               <strong>{event.kind === "timestamp_gap" ? "Possible time gap" : event.kind === "nonincreasing_timestamp" ? "Timestamp issue" : "Video playback issue"}</strong>
