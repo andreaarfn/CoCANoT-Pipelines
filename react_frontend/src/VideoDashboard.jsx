@@ -696,6 +696,10 @@ export default function VideoDashboard({ initialSession = null, onCreateClinical
           <summary>What counts as a time gap?</summary>
           <div className="video-continuity-explainer-body">
             <p>A time gap is an unusually long interval between two consecutive video frames.</p>
+            <p><strong>How is typical frame timing calculated?</strong> CoCANoT measures the time between each pair of consecutive frames, then uses the <strong>median</strong> (the middle interval when ordered from shortest to longest) of valid, positive intervals. This keeps one unusually long pause from skewing the typical value.</p>
+            <p>{continuityReport.typical_interval != null
+              ? <>For this video, the typical interval is <strong>{(continuityReport.typical_interval * 1000).toFixed(1)} milliseconds</strong> per frame.</>
+              : "There are not enough usable timestamps to calculate a typical frame interval."} At 30 frames per second, a typical interval is about 33.3 milliseconds.</p>
             <p>For this video, intervals longer than <strong>{continuityReport.threshold_ms != null ? (continuityReport.threshold_ms / 1000).toFixed(3) + " seconds" : "the screening threshold"}</strong> are flagged. The threshold is the greater of 0.12 seconds or 2.5 times the typical frame interval.</p>
             <p>Repeated or backward timestamps are also flagged. A warning may mean missing frames, a recording pause, or irregular timestamps—it does not prove footage was lost.</p>
           </div>
